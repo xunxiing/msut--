@@ -1,0 +1,19 @@
+{
+  "name": "msut-full-stack",
+  "version": "1.0.0",
+  "description": "MSUT全栈认证系统",
+  "scripts": {
+    "dev:client": "npm run dev --prefix ./melon-tech-web",
+    "dev:server": "npm run dev --prefix ./server",
+    "dev:all": "concurrently -k \"npm:dev:client\" \"npm:dev:server\""
+  },
+  "devDependencies": {
+    "@types/multer": "^2.0.0",
+    "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "multer": "^2.0.2",
+    "nanoid": "^5.1.5",
+    "slugify": "^1.6.6"
+  }
+}

@@ -1,0 +1,124 @@
+# MSUT全栈认证系统 - 多阶段构建（国内镜像源版）
+
+# 构建参数
+ARG NODE_VERSION=20.18.0
+ARG ALPINE_VERSION=3.20
+ARG NGINX_VERSION=1.27.2
+
+# 后端构建阶段 - 使用国内镜像源
+FROM registry.cn-hangzhou.aliyuncs.com/docker-hub-proxy/node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS backend-builder
+
+# 设置国内镜像源
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories && \
+    apk add --no-cache python3 make g++ sqlite-dev
+
+WORKDIR /app/server
+
+# 复制依赖文件
+COPY server/package*.json ./
+COPY server/tsconfig.json ./
+
+# 使用国内npm镜像源
+RUN npm config set registry https://registry.npmmirror.com && \
+    npm ci && npm cache clean --force
+
+# 复制源码并构建
+COPY server/src ./src
+RUN npx tsc -p tsconfig.json
+
+# 清理开发依赖
+RUN npm prune --production && npm cache clean --force
+
+# 前端构建阶段 - 使用国内镜像源
+FROM registry.cn-hangzhou.aliyuncs.com/docker-hub-proxy/node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS frontend-builder
+
+WORKDIR /app/web
+
+# 设置国内npm镜像源
+RUN npm config set registry https://registry.npmmirror.com
+
+# 复制前端依赖文件
+COPY melon-tech-web/package*.json ./
+COPY melon-tech-web/tsconfig*.json ./
+
+# 安装依赖
+RUN npm ci && npm cache clean --force
+
+# 复制前端源码并构建
+COPY melon-tech-web/ ./
+RUN npm run build
+
+# 最终运行阶段 - 使用国内镜像源
+FROM registry.cn-hangzhou.aliyuncs.com/docker-hub-proxy/nginx:${NGINX_VERSION}-alpine${ALPINE_VERSION}
+
+# 设置国内镜像源并安装运行时依赖
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories && \
+    apk add --no-cache \
+    nodejs \
+    npm \
+    sqlite \
+    curl \
+    && rm -rf /var/cache/apk/*
+
+# 创建非root用户
+RUN addgroup -g 10001 -S appgroup && \
+    adduser -u 10001 -S appuser -G appgroup
+
+# 复制nginx配置
+COPY melon-tech-web/nginx.conf /etc/nginx/nginx.conf
+
+# 复制前端构建产物
+COPY --from=frontend-builder /app/web/dist /usr/share/nginx/html
+
+# 创建后端应用目录
+WORKDIR /app/server
+
+# 复制后端构建产物和依赖
+COPY --from=backend-builder /app/server/node_modules ./node_modules
+COPY --from=backend-builder /app/server/dist ./dist
+COPY --from=backend-builder /app/server/package.json ./
+
+# 创建启动脚本（在root用户下创建）
+RUN echo '#!/bin/sh' > /app/start.sh && \
+    echo 'set -e' >> /app/start.sh && \
+    echo '' >> /app/start.sh && \
+    echo '# 启动后端服务' >> /app/start.sh && \
+    echo 'node /app/server/dist/index.js &' >> /app/start.sh && \
+    echo '' >> /app/start.sh && \
+    echo '# 启动nginx' >> /app/start.sh && \
+    echo 'nginx -g "daemon off;" &' >> /app/start.sh && \
+    echo 'wait' >> /app/start.sh && \
+    chmod +x /app/start.sh
+
+# 创建必要的目录和设置权限
+RUN mkdir -p /app/server/uploads /tmp /var/cache/nginx /var/log/nginx && \
+    chown -R appuser:appgroup /app/server /usr/share/nginx/html /var/cache/nginx /var/log/nginx /etc/nginx/conf.d && \
+    chmod -R 755 /app/server/uploads && \
+    touch /run/nginx.pid && \
+    chown appuser:appgroup /run/nginx.pid
+
+# 切换到非root用户
+USER appuser
+
+# 环境变量（移除敏感的JWT_SECRET）
+ENV NODE_ENV=production \
+    PORT=3000 \
+    PUBLIC_BASE_URL=http://localhost
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:3000/api/auth/me || exit 1
+
+# 暴露端口
+EXPOSE 80 3000
+
+# OCI labels
+LABEL org.opencontainers.image.title="MSUT全栈认证系统" \
+      org.opencontainers.image.description="基于Node.js + Vue.js的全栈认证与资源管理系统" \
+      org.opencontainers.image.version="1.0.0" \
+      org.opencontainers.image.source="https://github.com/your-org/msut-auth-system" \
+      org.opencontainers.image.created="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      org.opencontainers.image.vendor="MSUT" \
+      org.opencontainers.image.licenses="MIT"
+
+ENTRYPOINT ["/app/start.sh"]

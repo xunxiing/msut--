@@ -30,7 +30,7 @@ export function createResource(req: Request, res: Response) {
   if (!title || typeof title !== 'string') return res.status(400).json({ error: '标题必填' })
 
   // 生成唯一 slug
-  const base = slugify(title, { lower: true, strict: true }) || `res-${nanoid()}`
+  const base = (slugify as any)(title, { lower: true, strict: true }) || `res-${nanoid()}`
   let slug = base
   let i = 1
   while (db.prepare(`SELECT 1 FROM resources WHERE slug = ?`).get(slug)) {

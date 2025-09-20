@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import express from 'express'
+import express, { type RequestHandler } from 'express'
 import cookieParser from 'cookie-parser'
 import helmet from 'helmet'
 import path from 'node:path'
@@ -35,7 +35,7 @@ app.post('/api/resources', authGuard, createResource)
 app.get('/api/resources', listResources)
 app.get('/api/resources/:slug', getResource)
 
-app.post('/api/files/upload', authGuard, upload.array('files', 10), uploadToResource)
+app.post('/api/files/upload', authGuard, upload.array('files', 10) as unknown as RequestHandler, uploadToResource)
 app.get('/api/files/:id/download', downloadFile)
 
 const port = Number(process.env.PORT || 3000)

@@ -1,13 +1,11 @@
-import Database from 'better-sqlite3'
-import { resolve } from 'node:path'
-import { existsSync, writeFileSync } from 'node:fs'
-
-const dbFile = resolve(process.cwd(), 'data.sqlite')
-if (!existsSync(dbFile)) writeFileSync(dbFile, '')
-
+import Database from 'better-sqlite3';
+import path from 'node:path';
+import fs from 'node:fs';
+const dbFile = path.resolve(process.cwd(), 'data.sqlite');
+if (!fs.existsSync(dbFile))
+    fs.writeFileSync(dbFile, '');
 // 显式类型注解以避免导出类型命名问题
-export const db: any = new Database(dbFile)
-
+export const db = new Database(dbFile);
 // 初始化表
 db.exec(`
 CREATE TABLE IF NOT EXISTS users (
@@ -46,4 +44,5 @@ CREATE TABLE IF NOT EXISTS resource_files (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY (resource_id) REFERENCES resources(id) ON DELETE CASCADE
 );
-`)
+`);
+//# sourceMappingURL=db.js.map

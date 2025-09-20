@@ -15,7 +15,7 @@ export const useAuth = defineStore('auth', {
       this.error = null
       try {
         const { data } = await http.post('/auth/register', payload)
-        this.user = data
+        this.user = data.user
       } catch (e: any) {
         this.error = e?.response?.data?.error || '注册失败'
         throw e
@@ -26,7 +26,7 @@ export const useAuth = defineStore('auth', {
       this.error = null
       try {
         const { data } = await http.post('/auth/login', payload)
-        this.user = data
+        this.user = data.user
       } catch (e: any) {
         this.error = e?.response?.data?.error || '登录失败'
         throw e

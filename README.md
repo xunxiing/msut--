@@ -1,6 +1,6 @@
 # MSUT全栈认证系统
 
-基于 Node.js + Express + Vue.js + TypeScript 构建的现代化全栈认证与资源管理系统。
+基于 Node.js + Express + Vue.js + TypeScript 构建的现代化全栈认证与资源管理系统！
 
 ## 🚀 技术栈
 

@@ -166,7 +166,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import {
-  Tools, MagicStick, Connection, Compass, Star, Link as LinkIcon, TrendCharts, Setting, Cpu, Right
+  Tools, MagicStick, Connection, Compass, Star, TrendCharts, Setting, Right
 } from '@element-plus/icons-vue'
 
 const stats = ref({

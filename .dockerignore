@@ -50,6 +50,7 @@ jspm_packages/
 .env
 .env.test
 .env.production
+.env.local
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache
@@ -93,3 +94,40 @@ Thumbs.db
 # Build artifacts
 dist/
 build/
+
+# SQLite数据库文件
+*.sqlite
+*.sqlite3
+*.db
+
+# 上传文件
+server/uploads/
+uploads/
+
+# 文档
+README.md
+*.md
+
+# Docker相关
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# 开发工具配置
+.prettierrc
+.eslintrc*
+.prettierignore
+.eslintignore
+
+# 测试文件
+__tests__/
+test/
+tests/
+*.test.js
+*.test.ts
+*.spec.js
+*.spec.ts
+
+# 开发环境文件
+.devcontainer/
+.vscode-server/

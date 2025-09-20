@@ -1,40 +1,36 @@
 version: '3.8'
 
 services:
-  frontend:
+  msut-auth-app:
     build:
-      context: ./melon-tech-web
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: Dockerfile.cn
+    image: msut-auth-system:1.0.0-cn
+    container_name: msut-auth-app
     ports:
       - "80:80"
-    depends_on:
-      - backend
-    networks:
-      - app-network
-    restart: unless-stopped
-
-  backend:
-    build:
-      context: ./server
-      dockerfile: Dockerfile
-    ports:
       - "3000:3000"
     environment:
       - NODE_ENV=production
       - PORT=3000
+      - JWT_SECRET=${JWT_SECRET:-please-change-this-secret-in-production}
+      - PUBLIC_BASE_URL=http://localhost
     volumes:
-      - ./server/uploads:/app/uploads
-      - ./server/data.sqlite:/app/data.sqlite
-    networks:
-      - app-network
+      - msut-uploads:/app/server/uploads
     restart: unless-stopped
-
-networks:
-  app-network:
-    driver: bridge
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/auth/me"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 40s
+    networks:
+      - msut-network
 
 volumes:
-  uploads_data:
+  msut-uploads:
     driver: local
-  database_data:
-    driver: local
+
+networks:
+  msut-network:
+    driver: bridge

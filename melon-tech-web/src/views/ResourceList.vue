@@ -27,7 +27,7 @@
         :page-size="pageSize"
         :current-page="page"
         :total="total"
-        @current-change="p => { page = p; fetch() }"
+        @current-change="(p: number) => { page = p; fetch() }"
       />
     </div>
   </div>
@@ -35,10 +35,10 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { listResources } from '../api/resources'
+import { listResources, type ResourceItem } from '../api/resources'
 
 const q = ref('')
-const items = ref<any[]>([])
+const items = ref<ResourceItem[]>([])
 const page = ref(1)
 const pageSize = ref(12)
 const total = ref(0)

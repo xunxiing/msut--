@@ -7,6 +7,7 @@ on:
     branches: [main, master]
   workflow_dispatch:
 
+# 这里只放“原子”变量，不做任意 ${{ env.* }} 拼接
 env:
   REGISTRY: crpi-75lq6t3o28kvt0hk.cn-heyuan.personal.cr.aliyuncs.com
   IMAGE_NAMESPACE: msut
@@ -21,14 +22,16 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    env:
-      IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.IMAGE_NAME }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Buildx
         uses: docker/setup-buildx-action@v3
+
+      # 运行时拼出 IMAGE 写入环境
+      - name: Compose IMAGE env
+        run: echo "IMAGE=${REGISTRY}/${IMAGE_NAMESPACE}/${IMAGE_NAME}" >> $GITHUB_ENV
 
       - name: Login to Aliyun ACR
         if: ${{ github.event.pull_request.head.repo.fork == false }}
@@ -56,14 +59,15 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    env:
-      IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.IMAGE_NAME }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Compose IMAGE env
+        run: echo "IMAGE=${REGISTRY}/${IMAGE_NAMESPACE}/${IMAGE_NAME}" >> $GITHUB_ENV
 
       - name: Login to Aliyun ACR
         uses: docker/login-action@v3

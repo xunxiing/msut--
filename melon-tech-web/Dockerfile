@@ -14,7 +14,7 @@ RUN npm ci
 
 # 复制源代码
 COPY . .
-
+ENV NODE_OPTIONS=--max-old-space-size=1024
 # 构建应用
 RUN npm run build
 

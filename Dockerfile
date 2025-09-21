@@ -96,7 +96,7 @@ USER appuser
 
 # 环境变量（移除敏感的JWT_SECRET）
 ENV NODE_ENV=production \
-    PORT=3000 \
+    PORT=3400 \
     PUBLIC_BASE_URL=http://localhost
 
 # 健康检查
@@ -104,7 +104,7 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:3000/api/auth/me || exit 1
 
 # 暴露端口
-EXPOSE 80 3000
+EXPOSE 80 3400
 
 # OCI labels
 LABEL org.opencontainers.image.title="MSUT全栈认证系统" \

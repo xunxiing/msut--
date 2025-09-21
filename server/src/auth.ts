@@ -6,13 +6,13 @@ import { z } from 'zod'
 import type { User, JWTPayload } from './types.d.js'
 
 const registerSchema = z.object({
-  email: z.string().email(),
+  username: z.string().min(3).max(32),
   password: z.string().min(6).max(72),
   name: z.string().min(1).max(32)
 })
 
 const loginSchema = z.object({
-  email: z.string().email(),
+  username: z.string().min(3).max(32),
   password: z.string().min(6).max(72)
 })
 
@@ -22,7 +22,7 @@ function isUser(data: unknown): data is User {
     typeof data === 'object' &&
     data !== null &&
     'id' in data && typeof (data as User).id === 'number' &&
-    'email' in data && typeof (data as User).email === 'string' &&
+    'username' in data && typeof (data as User).username === 'string' &&
     'name' in data && typeof (data as User).name === 'string' &&
     'password_hash' in data && typeof (data as User).password_hash === 'string'
   )
@@ -64,15 +64,15 @@ export async function register(req: Request, res: Response) {
         details: parsed.error.errors
       })
     }
-    const { email, password, name } = parsed.data
+    const { username, password, name } = parsed.data
 
-    const exists = db.prepare(`SELECT id FROM users WHERE email = ?`).get(email)
-    if (exists) return res.status(409).json({ error: '邮箱已注册' })
+    const exists = db.prepare(`SELECT id FROM users WHERE username = ?`).get(username)
+    if (exists) return res.status(409).json({ error: '用户名已注册' })
 
     const hash = await bcrypt.hash(password, 12)
     const result = db
-      .prepare(`INSERT INTO users (email, password_hash, name) VALUES (?, ?, ?)`)
-      .run(email, hash, name)
+      .prepare(`INSERT INTO users (username, password_hash, name) VALUES (?, ?, ?)`)
+      .run(username, hash, name)
 
     if (!result.lastInsertRowid) {
       return res.status(500).json({ error: '注册失败' })
@@ -80,7 +80,7 @@ export async function register(req: Request, res: Response) {
 
     const token = jwt.sign({
       uid: Number(result.lastInsertRowid),
-      email,
+      username,
       name
     }, JWT_SECRET, { expiresIn: '7d' })
     
@@ -88,7 +88,7 @@ export async function register(req: Request, res: Response) {
     return res.json({
       user: {
         id: Number(result.lastInsertRowid),
-        email,
+        username,
         name
       }
     })
@@ -107,17 +107,17 @@ export async function login(req: Request, res: Response) {
         details: parsed.error.errors
       })
     }
-    const { email, password } = parsed.data
+    const { username, password } = parsed.data
 
-    const user = db.prepare(`SELECT * FROM users WHERE email = ?`).get(email)
-    if (!user || !isUser(user)) return res.status(401).json({ error: '邮箱或密码错误' })
+    const user = db.prepare(`SELECT * FROM users WHERE username = ?`).get(username)
+    if (!user || !isUser(user)) return res.status(401).json({ error: '用户名或密码错误' })
 
     const ok = await bcrypt.compare(password, user.password_hash)
-    if (!ok) return res.status(401).json({ error: '邮箱或密码错误' })
+    if (!ok) return res.status(401).json({ error: '用户名或密码错误' })
 
     const token = jwt.sign({
       uid: user.id,
-      email: user.email,
+      username: user.username,
       name: user.name
     }, JWT_SECRET, { expiresIn: '7d' })
     
@@ -125,7 +125,7 @@ export async function login(req: Request, res: Response) {
     return res.json({
       user: {
         id: user.id,
-        email: user.email,
+        username: user.username,
         name: user.name
       }
     })
@@ -148,7 +148,7 @@ export function authGuard(req: Request, res: Response, next: NextFunction) {
     const payload = jwt.verify(token, JWT_SECRET) as JWTPayload
     
     // 验证 payload 结构
-    if (!payload.uid || !payload.email || !payload.name) {
+    if (!payload.uid || !payload.username || !payload.name) {
       return res.status(401).json({ error: '无效的令牌' })
     }
     
@@ -168,14 +168,14 @@ export function me(req: Request, res: Response) {
     const payload = jwt.verify(token, JWT_SECRET) as JWTPayload
     
     // 验证 payload 结构
-    if (!payload.uid || !payload.email || !payload.name) {
+    if (!payload.uid || !payload.username || !payload.name) {
       return res.status(200).json({ user: null })
     }
     
     res.json({
       user: {
         id: payload.uid,
-        email: payload.email,
+        username: payload.username,
         name: payload.name
       }
     })

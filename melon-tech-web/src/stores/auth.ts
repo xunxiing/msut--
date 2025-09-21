@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { http } from '../api/http'
 
-type User = { id: number; email: string; name: string } | null
+type User = { id: number; username: string; name: string } | null
 
 export const useAuth = defineStore('auth', {
   state: () => ({ user: null as User, loading: false, error: '' as string | null }),
@@ -10,7 +10,7 @@ export const useAuth = defineStore('auth', {
       const { data } = await http.get('/auth/me')
       this.user = data.user
     },
-    async register(payload: { email: string; password: string; name: string }) {
+    async register(payload: { username: string; password: string; name: string }) {
       this.loading = true
       this.error = null
       try {
@@ -21,7 +21,7 @@ export const useAuth = defineStore('auth', {
         throw e
       } finally { this.loading = false }
     },
-    async login(payload: { email: string; password: string }) {
+    async login(payload: { username: string; password: string }) {
       this.loading = true
       this.error = null
       try {

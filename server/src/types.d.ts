@@ -12,7 +12,7 @@ declare module 'slugify' {
 // 用户接口类型
 export interface User {
   id: number;
-  email: string;
+  username: string;
   name: string;
   password_hash: string;
   created_at?: string;
@@ -21,7 +21,7 @@ export interface User {
 // JWT 载荷接口类型
 export interface JWTPayload {
   uid: number;
-  email: string;
+  username: string;
   name: string;
   iat?: number;
   exp?: number;

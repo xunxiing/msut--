@@ -11,7 +11,7 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - JWT_SECRET=${JWT_SECRET:-please-change-this-secret-in-production}
-      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-http://localhost}
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-http://localhost:1122}
       - HTTPS_ENABLED=${HTTPS_ENABLED:-false}
       - COOKIE_DOMAIN=${COOKIE_DOMAIN:-}
     volumes:

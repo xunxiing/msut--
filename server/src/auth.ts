@@ -29,17 +29,31 @@ function isUser(data: unknown): data is User {
 }
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev'
+
+// 环境变量解析函数
+const fromEnv = (v: any) => String(v ?? "").trim().toLowerCase();
+const parseBool = (v: any, fallback: boolean) => {
+  const s = fromEnv(v);
+  if (["1","true","yes","on","y"].includes(s)) return true;
+  if (["0","false","no","off","n",""].includes(s)) return false;
+  return fallback;
+};
+
 const isProd = process.env.NODE_ENV === 'production'
-const isHttps = process.env.HTTPS_ENABLED === 'true' || isProd
+// 没配 HTTPS_ENABLED 就在 prod 下默认 true，dev 下默认 false
+const httpsEnabled = parseBool(process.env.HTTPS_ENABLED, isProd)
 
 const cookieOpts = {
   httpOnly: true,
-  sameSite: isHttps ? 'none' as const : 'lax' as const,
-  secure: isHttps,
+  sameSite: httpsEnabled ? 'none' as const : 'lax' as const,
+  secure: httpsEnabled,
   maxAge: 7 * 24 * 60 * 60 * 1000,
   domain: process.env.COOKIE_DOMAIN || undefined,
   path: '/'
 }
+
+// 导出 httpsEnabled 供其他模块使用
+export { httpsEnabled }
 
 export async function register(req: Request, res: Response) {
   try {

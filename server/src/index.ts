@@ -3,13 +3,19 @@ import express, { type RequestHandler } from 'express'
 import cookieParser from 'cookie-parser'
 import helmet from 'helmet'
 import path from 'node:path'
-import { register, login, logout, me, authGuard } from './auth.js'
+import { register, login, logout, me, authGuard, httpsEnabled } from './auth.js'
 import {
   createResource, uploadToResource, upload, getResource, listResources, downloadFile
 } from './files.js'
 
 const app = express()
-app.use(helmet({ crossOriginResourcePolicy: false }))
+const helmetOptions: any = { crossOriginResourcePolicy: false }
+if (httpsEnabled) {
+  helmetOptions.hsts = undefined
+} else {
+  helmetOptions.hsts = false
+}
+app.use(helmet(helmetOptions))
 app.use(express.json())
 app.use(cookieParser())
 

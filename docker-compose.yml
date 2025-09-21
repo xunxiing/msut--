@@ -16,6 +16,7 @@ services:
       - COOKIE_DOMAIN=${COOKIE_DOMAIN:-}
     volumes:
       - msut-uploads:/app/server/uploads
+      - msut-data:/app/server/data.sqlite
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/auth/me"]
@@ -28,6 +29,8 @@ services:
 
 volumes:
   msut-uploads:
+    driver: local
+  msut-data:
     driver: local
 
 networks:

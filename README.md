@@ -58,7 +58,7 @@ npm run dev:all
 
 访问地址：
 - 前端: http://localhost:5173
-- 后端 API: http://localhost:3000
+- 后端 API: http://localhost:3400
 
 ### Docker 部署
 
@@ -70,8 +70,8 @@ docker build -t msut-auth-system:1.0.0 .
 # 运行容器
 docker run -d \
   --name msut-auth-app \
-  -p 80:80 \
-  -p 3000:3000 \
+  -p 1122:80 \
+  -p 3400:3400 \
   -e JWT_SECRET=your-super-secret-jwt-key \
   -e NODE_ENV=production \
   -v msut-uploads:/app/server/uploads \
@@ -94,10 +94,10 @@ docker-compose up -d
 docker ps
 
 # 测试前端访问
-curl http://localhost
+curl http://localhost:1122
 
 # 测试后端API
-curl http://localhost:3000/api/auth/me
+curl http://localhost:3400/api/auth/me
 
 # 查看日志
 docker logs msut-auth-app
@@ -132,10 +132,12 @@ msut主站/
 ## 🔧 环境变量
 
 ### 后端环境变量
-- `PORT`: 服务器端口 (默认: 3000)
+- `PORT`: 服务器端口 (默认: 3400)
 - `JWT_SECRET`: JWT 密钥 (生产环境必须修改)
 - `NODE_ENV`: 运行环境 (development/production)
 - `PUBLIC_BASE_URL`: 公共访问地址
+- `HTTPS_ENABLED`: 是否启用HTTPS (默认: false)
+- `COOKIE_DOMAIN`: Cookie域名设置 (可选)
 
 ### 前端环境变量
 - `VITE_PUBLIC_BASE_URL`: API 基础地址
@@ -204,13 +206,16 @@ msut主站/
 ## 🐛 常见问题
 
 ### Q: 容器启动失败怎么办？
-A: 检查端口是否被占用，查看容器日志：`docker logs msut-auth-app`
+A: 检查端口1122和3400是否被占用，查看容器日志：`docker logs msut-auth-app`
 
 ### Q: 前端页面空白怎么办？
 A: 确认构建是否成功，检查浏览器控制台错误信息
 
 ### Q: 文件上传失败怎么办？
 A: 检查上传目录权限和磁盘空间，确认Docker卷挂载正确
+
+### Q: 登录状态无法维持怎么办？
+A: 检查HTTPS_ENABLED环境变量设置，如果使用HTTP设置为false，HTTPS设置为true。同时确认COOKIE_DOMAIN配置是否正确。
 
 ## 📄 许可证
 

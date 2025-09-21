@@ -2,19 +2,18 @@ version: '3.8'
 
 services:
   msut-auth-app:
-    build:
-      context: .
-      dockerfile: Dockerfile.cn
-    image: msut-auth-system:1.0.0-cn
+    image: crpi-75lq6t3o28kvt0hk.cn-heyuan.personal.cr.aliyuncs.com/msut/msut-web:latest
     container_name: msut-auth-app
     ports:
-      - "80:80"
-      - "3000:3000"
+      - "1122:80"
+      - "3400:3400"
     environment:
       - NODE_ENV=production
       - PORT=3000
       - JWT_SECRET=${JWT_SECRET:-please-change-this-secret-in-production}
-      - PUBLIC_BASE_URL=http://localhost
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-http://localhost}
+      - HTTPS_ENABLED=${HTTPS_ENABLED:-false}
+      - COOKIE_DOMAIN=${COOKIE_DOMAIN:-}
     volumes:
       - msut-uploads:/app/server/uploads
     restart: unless-stopped

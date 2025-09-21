@@ -30,11 +30,15 @@ function isUser(data: unknown): data is User {
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev'
 const isProd = process.env.NODE_ENV === 'production'
+const isHttps = process.env.HTTPS_ENABLED === 'true' || isProd
+
 const cookieOpts = {
   httpOnly: true,
-  sameSite: 'lax' as const,
-  secure: isProd,
-  maxAge: 7 * 24 * 60 * 60 * 1000
+  sameSite: isHttps ? 'none' as const : 'lax' as const,
+  secure: isHttps,
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+  domain: process.env.COOKIE_DOMAIN || undefined,
+  path: '/'
 }
 
 export async function register(req: Request, res: Response) {

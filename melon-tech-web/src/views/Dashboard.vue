@@ -6,6 +6,7 @@
         <p>欢迎，{{ auth.user?.name }}</p>
         <el-space>
           <el-button type="primary" @click="ping">测试受保护接口</el-button>
+          <el-button type="success" @click="goManage">管理我的存档</el-button>
           <el-button @click="onLogout">退出登录</el-button>
         </el-space>
         <el-alert v-if="msg" :title="msg" type="success" show-icon style="margin-top:12px" />
@@ -29,6 +30,8 @@ const ping = async () => {
   const { data } = await http.get('/private/ping')
   msg.value = data.pong ? '受保护接口可用' : ''
 }
+
+const goManage = () => router.push('/my/resources')
 
 const onLogout = async () => {
   await auth.logout()

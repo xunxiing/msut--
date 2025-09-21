@@ -5,7 +5,15 @@ import helmet from 'helmet'
 import path from 'node:path'
 import { register, login, logout, me, authGuard, httpsEnabled } from './auth.js'
 import {
-  createResource, uploadToResource, upload, getResource, listResources, downloadFile
+  createResource,
+  uploadToResource,
+  upload,
+  getResource,
+  listResources,
+  listMyResources,
+  updateResource,
+  deleteResource,
+  downloadFile
 } from './files.js'
 
 const app = express()
@@ -39,6 +47,9 @@ app.get('/api/private/ping', authGuard, (_req: any, res: any) => {
 // 资源与文件路由
 app.post('/api/resources', authGuard, createResource)
 app.get('/api/resources', listResources)
+app.get('/api/my/resources', authGuard, listMyResources)
+app.patch('/api/resources/:id', authGuard, updateResource)
+app.delete('/api/resources/:id', authGuard, deleteResource)
 app.get('/api/resources/:slug', getResource)
 
 app.post('/api/files/upload', authGuard, upload.array('files', 10) as unknown as RequestHandler, uploadToResource)

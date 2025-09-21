@@ -5,6 +5,7 @@
       <el-menu-item index="/about">关于</el-menu-item>
       <el-menu-item index="/resources">文件集</el-menu-item>
       <el-menu-item v-if="auth.user" index="/dashboard">控制台</el-menu-item>
+      <el-menu-item v-if="auth.user" index="/my/resources">我的存档</el-menu-item>
       <el-menu-item v-if="auth.user" index="/upload">上传文件</el-menu-item>
       <div style="flex: 1"></div>
       <template v-if="!auth.user">

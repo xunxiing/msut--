@@ -48,8 +48,7 @@
       </el-upload>
 
       <el-space class="mt">
-        <el-button @click="submitUpload">开始上传</el-button>
-        <el-button type="primary" :disabled="!uploaded" @click="goFinish">完成</el-button>
+        <el-button type="primary" @click="submitUpload">开始上传</el-button>
       </el-space>
     </el-card>
 
@@ -105,24 +104,44 @@ async function onCreate() {
 
 function submitUpload() {
   if (!fileList.value.length) return ElMessage.warning('请先选择文件')
+  uploaded.value = false
   uploadRef.value?.submit()
 }
 
-function handleSuccess() {
-  uploaded.value = true
-  ElMessage.success('文件上传成功')
+function handleSuccess(_response: any, _file: UploadUserFile, uploadFiles: UploadUserFile[]) {
+  const finished = uploadFiles.every(item => item.status === 'success')
+  if (finished && !uploaded.value) {
+    uploaded.value = true
+    ElMessage.success('文件上传成功')
+    step.value = 2
+  }
 }
 
 function handleError() {
   ElMessage.error('文件上传失败')
 }
 
-function goFinish() {
-  step.value = 2
-}
-
-function copy(text: string) {
-  navigator.clipboard.writeText(text).then(() => ElMessage.success('已复制'))
+async function copy(text: string) {
+  if (!text) return
+  try {
+    if (typeof navigator !== 'undefined' && navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text)
+    } else {
+      const textarea = document.createElement('textarea')
+      textarea.value = text
+      textarea.style.position = 'fixed'
+      textarea.style.left = '-9999px'
+      document.body.appendChild(textarea)
+      textarea.focus()
+      textarea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textarea)
+    }
+    ElMessage.success('已复制')
+  } catch (error) {
+    console.error(error)
+    ElMessage.error('复制失败，请手动复制')
+  }
 }
 </script>
 

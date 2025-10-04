@@ -47,7 +47,11 @@ COPY --from=frontend-builder /app/web/dist /usr/share/nginx/html
 # 复制后端代码并安装 Python 依赖
 WORKDIR /app/server
 COPY server /app/server
-RUN pip3 install --no-cache-dir -r /app/server/requirements.txt
+# Install build deps for Alpine to compile any wheels if needed (e.g. bcrypt/cffi), then remove them
+RUN apk add --no-cache --virtual .build-deps build-base python3-dev libffi-dev \
+    && python3 -m pip install --no-cache-dir --upgrade pip \
+    && pip3 install --no-cache-dir -r /app/server/requirements.txt \
+    && apk del .build-deps
 
 # 创建启动脚本（在 root 用户下创建）
 RUN echo '#!/bin/sh' > /app/start.sh && \
@@ -55,6 +59,7 @@ RUN echo '#!/bin/sh' > /app/start.sh && \
     echo '' >> /app/start.sh && \
     echo '# 启动后端服务 (FastAPI)' >> /app/start.sh && \
     echo 'PORT="${PORT:-3400}"' >> /app/start.sh && \
+    echo 'cd /app' >> /app/start.sh && \
     echo 'python3 -m uvicorn server.app:app --host 0.0.0.0 --port "$PORT" &' >> /app/start.sh && \
     echo '' >> /app/start.sh && \
     echo '# 启动 nginx' >> /app/start.sh && \
@@ -93,4 +98,3 @@ LABEL org.opencontainers.image.title="MSUT全栈认证系统" \
       org.opencontainers.image.licenses="MIT"
 
 ENTRYPOINT ["/app/start.sh"]
-

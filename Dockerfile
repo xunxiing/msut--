@@ -1,31 +1,9 @@
-# MSUT全栈认证系统 - 多阶段构建
+# MSUT全栈认证系统 - 多阶段构建（Python 后端 + Nginx 前端）
 
 # 构建参数
 ARG NODE_VERSION=20.18.0
 ARG ALPINE_VERSION=3.20
 ARG NGINX_VERSION=1.27.2
-
-# 后端构建阶段
-FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS backend-builder
-
-# 安装构建依赖
-RUN apk add --no-cache python3 make g++ sqlite-dev
-
-WORKDIR /app/server
-
-# 复制依赖文件
-COPY server/package*.json ./
-COPY server/tsconfig.json ./
-
-# 安装依赖
-RUN npm ci && npm cache clean --force
-
-# 复制源码并构建
-COPY server/src ./src
-RUN npx tsc -p tsconfig.json
-
-# 清理开发依赖
-RUN npm prune --production && npm cache clean --force
 
 # 前端构建阶段
 FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS frontend-builder
@@ -43,7 +21,7 @@ RUN npm ci && npm cache clean --force
 COPY melon-tech-web/ ./
 RUN npm run build
 
-# 最终运行阶段
+# 最终运行阶段（Nginx + Python 后端）
 FROM nginx:${NGINX_VERSION}-alpine${ALPINE_VERSION}
 
 # 安装运行时依赖
@@ -52,6 +30,8 @@ RUN apk add --no-cache \
     npm \
     sqlite \
     curl \
+    python3 \
+    py3-pip \
     && rm -rf /var/cache/apk/*
 
 # 创建非root用户
@@ -64,22 +44,20 @@ COPY melon-tech-web/nginx.conf /etc/nginx/nginx.conf
 # 复制前端构建产物
 COPY --from=frontend-builder /app/web/dist /usr/share/nginx/html
 
-# 创建后端应用目录
+# 复制后端代码并安装 Python 依赖
 WORKDIR /app/server
+COPY server /app/server
+RUN pip3 install --no-cache-dir -r /app/server/requirements.txt
 
-# 复制后端构建产物和依赖
-COPY --from=backend-builder /app/server/node_modules ./node_modules
-COPY --from=backend-builder /app/server/dist ./dist
-COPY --from=backend-builder /app/server/package.json ./
-
-# 创建启动脚本（在root用户下创建）
+# 创建启动脚本（在 root 用户下创建）
 RUN echo '#!/bin/sh' > /app/start.sh && \
     echo 'set -e' >> /app/start.sh && \
     echo '' >> /app/start.sh && \
-    echo '# 启动后端服务' >> /app/start.sh && \
-    echo 'node /app/server/dist/index.js &' >> /app/start.sh && \
+    echo '# 启动后端服务 (FastAPI)' >> /app/start.sh && \
+    echo 'PORT="${PORT:-3400}"' >> /app/start.sh && \
+    echo 'python3 -m uvicorn server.app:app --host 0.0.0.0 --port "$PORT" &' >> /app/start.sh && \
     echo '' >> /app/start.sh && \
-    echo '# 启动nginx' >> /app/start.sh && \
+    echo '# 启动 nginx' >> /app/start.sh && \
     echo 'nginx -g "daemon off;" &' >> /app/start.sh && \
     echo 'wait' >> /app/start.sh && \
     chmod +x /app/start.sh
@@ -91,28 +69,28 @@ RUN mkdir -p /app/server/uploads /tmp /var/cache/nginx /var/log/nginx && \
     touch /run/nginx.pid && \
     chown appuser:appgroup /run/nginx.pid
 
-# 切换到非root用户
+# 切换到非 root 用户
 USER appuser
 
-# 环境变量（移除敏感的JWT_SECRET）
+# 环境变量（移除敏感的 JWT_SECRET）
 ENV NODE_ENV=production \
     PORT=3400 \
     PUBLIC_BASE_URL=http://localhost
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:3000/api/auth/me || exit 1
+    CMD curl -f http://localhost:3400/api/auth/me || exit 1
 
 # 暴露端口
 EXPOSE 80 3400
 
 # OCI labels
 LABEL org.opencontainers.image.title="MSUT全栈认证系统" \
-      org.opencontainers.image.description="基于Node.js + Vue.js的全栈认证与资源管理系统" \
+      org.opencontainers.image.description="基于Python + Vue.js的全栈认证与资源管理系统" \
       org.opencontainers.image.version="1.0.0" \
       org.opencontainers.image.source="https://github.com/your-org/msut-auth-system" \
-      org.opencontainers.image.created="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
       org.opencontainers.image.vendor="MSUT" \
       org.opencontainers.image.licenses="MIT"
 
 ENTRYPOINT ["/app/start.sh"]
+

@@ -87,6 +87,9 @@ ENV NODE_ENV=production \
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:3400/api/auth/me || exit 1
 
+# 创建数据卷用于持久化上传文件
+VOLUME ["/app/server/uploads"]
+
 # 暴露端口
 EXPOSE 80 3400
 

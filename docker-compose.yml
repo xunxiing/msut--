@@ -9,7 +9,7 @@ services:
       - "3400:3400"
     environment:
       - NODE_ENV=production
-      - PORT=3000
+      - PORT=3400
       - JWT_SECRET=${JWT_SECRET:-please-change-this-secret-in-production}
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-http://localhost:1122}
       - HTTPS_ENABLED=${HTTPS_ENABLED:-false}
@@ -19,7 +19,7 @@ services:
       - msut-data:/app/server/data.sqlite
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/auth/me"]
+      test: ["CMD", "curl", "-f", "http://localhost:3400/api/auth/me"]
       interval: 30s
       timeout: 3s
       retries: 3

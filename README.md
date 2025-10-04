@@ -1,6 +1,64 @@
 # MSUT全栈认证系统
 
-基于 Node.js + Express + Vue.js + TypeScript 构建的现代化全栈认证与资源管理系统！
+> 重要变更：本项目后端已从 Node.js + Express 重构为 Python + FastAPI，API 与行为保持兼容，前端无需改动即可工作。详情见文末“重要变更：后端已重构为 Python/FastAPI”。
+
+基于 Python + FastAPI + Vue.js + TypeScript 构建的现代化全栈认证与资源管理系统！
+
+## 🧭 重要变更：后端已重构为 Python/FastAPI
+
+本项目的后端已从 Node.js + Express 完整迁移为 Python + FastAPI，API 路径、请求和响应结构保持不变，前端无需改动即可工作。
+
+- 核心要点
+  - 替换原 `server/src/*.ts` 实现，新增 Python 代码于 `server/` 目录。
+  - 行为一致：鉴权、Cookie（SameSite/secure）、分页、错误返回、下载响应头均与原实现对齐。
+  - 静态上传目录仍为 `/uploads`，公开访问、长缓存。
+  - SQLite 结构保持不变，保留从 `email` → `username` 的自动迁移。
+
+- 新后端技术栈
+  - Python 3.11+、FastAPI、Uvicorn
+  - SQLite（`sqlite3`）、PyJWT、bcrypt、python-multipart
+
+- 关键文件（后端）
+  - `server/app.py`：应用入口（挂载路由与静态目录、启动迁移、基础安全头）
+  - `server/auth.py`：认证接口（register/login/logout/me）
+  - `server/files.py`：资源与文件接口（创建/上传/列表/详情/更新/删除/下载）
+  - `server/db.py`：数据库连接、初始化与迁移
+  - `server/utils.py`：工具函数（nanoid、slug、Cookie 选项、布尔解析）
+  - `server/schemas.py`：类型声明（JWT 载荷）
+  - `server/requirements.txt`：后端依赖清单
+  - 数据/文件默认位置：`server/data.sqlite`、`server/uploads/`
+
+- 本地开发
+  - 安装依赖：`python -m pip install -r server/requirements.txt`
+  - 启动后端（开发）：`npm run dev:server`（等价 `python -m uvicorn server.app:app --reload --port 3000`）
+  - 启动前端（开发）：`npm run dev:client`（Vite 代理 `/api` → `http://localhost:3000`）
+
+- Docker 与部署
+  - `Dockerfile` 已更新为 Python 后端 + Nginx 前端；Compose 健康检查指向 `http://localhost:3400/api/auth/me`。
+  - 典型命令：`docker build -t msut-auth-system:py .`，`docker-compose up -d`
+  - 卷与路径：`/app/server/uploads`、`/app/server/data.sqlite`
+
+- 环境变量（与原实现保持一致）
+  - `PORT`：后端端口（开发 3000，Docker 默认 3400）
+  - `JWT_SECRET`：JWT 密钥（生产必配）
+  - `NODE_ENV`：运行环境（`production` 时默认启用 HTTPS 相关行为）
+  - `PUBLIC_BASE_URL`：用于生成资源分享链接
+  - `HTTPS_ENABLED`：是否启用 HTTPS（决定 Cookie SameSite/secure 与 HSTS）
+  - `COOKIE_DOMAIN`：Cookie 域名（可选）
+
+- API 兼容性
+  - 路径与方法保持不变：
+    - `POST /api/auth/register`、`POST /api/auth/login`、`POST /api/auth/logout`、`GET /api/auth/me`
+    - `GET /api/private/ping`（需登录）
+    - `POST /api/resources`（需登录）、`GET /api/resources`、`GET /api/resources/:slug`
+    - `PATCH /api/resources/:id`（需登录）、`DELETE /api/resources/:id`（需登录）
+    - `POST /api/files/upload`（需登录，字段名 `files`，最多 10 个，单文件 50MB）
+    - `GET /api/files/:id/download`
+  - 错误返回 `{ error: string }`；下载使用 `Content-Disposition: attachment; filename*=` UTF-8 百分号编码。
+
+- 备注
+  - 旧的 TypeScript 服务器代码仍在仓库中，但已不再被使用（开发脚本与 Docker 均使用 Python 版本）。
+  - 如需彻底移除旧代码，请提交需求，我们会在清理前再次核对前端依赖与部署流程。
 
 ## 🚀 技术栈
 

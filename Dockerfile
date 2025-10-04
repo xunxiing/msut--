@@ -48,10 +48,10 @@ COPY --from=frontend-builder /app/web/dist /usr/share/nginx/html
 WORKDIR /app/server
 COPY server /app/server
 # Install build deps for Alpine to compile any wheels if needed (e.g. bcrypt/cffi), then remove them
-RUN apk add --no-cache --virtual .build-deps build-base python3-dev libffi-dev \
+RUN apk update && apk add --no-cache --virtual .build-deps build-base python3-dev libffi-dev musl-dev \
     && python3 -m pip install --no-cache-dir --upgrade pip \
     && pip3 install --no-cache-dir -r /app/server/requirements.txt \
-    && apk del .build-deps
+    && apk del .build-deps && rm -rf /var/cache/apk/*
 
 # 创建启动脚本（在 root 用户下创建）
 RUN echo '#!/bin/sh' > /app/start.sh && \

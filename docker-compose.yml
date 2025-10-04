@@ -15,8 +15,8 @@ services:
       - HTTPS_ENABLED=${HTTPS_ENABLED:-false}
       - COOKIE_DOMAIN=${COOKIE_DOMAIN:-}
     volumes:
-      - msut-uploads:/app/server/uploads
-      - msut-data:/app/server/data.sqlite
+      - ./uploads:/app/server/uploads
+      - ./data:/app/server/data.sqlite
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3400/api/auth/me"]

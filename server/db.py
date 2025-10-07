@@ -1,16 +1,22 @@
 import sqlite3
 from pathlib import Path
 from typing import Optional
+import os
 
 
 BASE_DIR = Path(__file__).resolve().parent
-DB_FILE = BASE_DIR / "data.sqlite"
+# 尝试使用环境变量中指定的数据库路径，如果不存在则使用默认路径
+data_dir = Path(os.environ.get("DATA_DIR", BASE_DIR / "data"))
+DB_FILE = data_dir / "data.sqlite"
 
 
 def _ensure_db_file() -> None:
+    # 确保数据目录存在
     DB_FILE.parent.mkdir(parents=True, exist_ok=True)
+    # 确保数据库文件存在
     if not DB_FILE.exists():
         DB_FILE.touch()
+        print(f"Created new database file at {DB_FILE}")
 
 
 def get_connection() -> sqlite3.Connection:
@@ -23,6 +29,7 @@ def get_connection() -> sqlite3.Connection:
 def run_migrations(conn: Optional[sqlite3.Connection] = None) -> None:
     owns = False
     if conn is None:
+        print(f"Running migrations on database: {DB_FILE}")
         conn = get_connection()
         owns = True
     try:

@@ -1,9 +1,8 @@
 services:
   msut-auth-app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: crpi-75lq6t3o28kvt0hk.cn-heyuan.personal.cr.aliyuncs.com/msut/msut-web:latest
     container_name: msut-auth-app
+    user: "0:0"
     ports:
       - "1122:80"
       - "3400:3400"
@@ -14,24 +13,15 @@ services:
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-http://localhost:1122}
       - HTTPS_ENABLED=${HTTPS_ENABLED:-false}
       - COOKIE_DOMAIN=${COOKIE_DOMAIN:-}
+      - DATA_DIR=/app/server/data
     volumes:
       - ./uploads:/app/server/uploads
-      - ./data:/app/server/data.sqlite
+      - ./data/data.sqlite:/app/server/data/data.sqlite
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3400/api/auth/me"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
-      start_period: 40s
     networks:
       - msut-network
 
-volumes:
-  msut-uploads:
-    driver: local
-  msut-data:
-    driver: local
+
 
 networks:
   msut-network:

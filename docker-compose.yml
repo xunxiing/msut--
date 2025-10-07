@@ -3,30 +3,85 @@ services:
     image: crpi-75lq6t3o28kvt0hk.cn-heyuan.personal.cr.aliyuncs.com/msut/msut-web:latest
     container_name: msut-auth-app
     user: "0:0"
+    security_opt:
+      - label=disable
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        umask 000
+        # Ensure mounts exist and are writable by appuser (10001)
+        mkdir -p /app/server/uploads /app/server/data /var/log/nginx /var/cache/nginx /run
+        chown -R 10001:10001 /app/server/uploads /app/server/data || true
+        chmod -R u+rwX,g+rwX /app/server/uploads /app/server/data || true
+        # Ensure nginx paths are writable for logs and pid
+        chown -R 10001:10001 /var/log/nginx /var/cache/nginx /run || true
+        chmod -R 0777 /var/log/nginx || true
+        # Redirect nginx logs to container stdout/stderr to avoid FS perms
+        # Patch nginx.conf directly so nginx doesn't try to open /var/log files
+        if [ -f /etc/nginx/nginx.conf ]; then
+          sed -i 's#^\s*error_log\s\+.*;#    error_log /dev/stderr notice;#' /etc/nginx/nginx.conf || true
+          sed -i 's#^\s*access_log\s\+.*;#    access_log /dev/stdout main;#' /etc/nginx/nginx.conf || true
+          sed -i 's#proxy_pass http://localhost:3400;#proxy_pass http://127.0.0.1:3400;#' /etc/nginx/nginx.conf || true
+        fi
+        touch /run/nginx.pid && chown 10001:10001 /run/nginx.pid || true
+        # Fallback: if appuser still can't write, open perms to 0777
+        su appuser -s /bin/sh -c 'touch /app/server/uploads/.perm_test && rm -f /app/server/uploads/.perm_test' \
+          || chmod -R 0777 /app/server/uploads || true
+        su appuser -s /bin/sh -c 'touch /app/server/data/.perm_test && rm -f /app/server/data/.perm_test' \
+          || chmod -R 0777 /app/server/data || true
+        # Final sanity: print perms
+        echo "[init] perms:" && ls -ld /app/server/uploads /app/server/data || true
+        # Ensure SQLite DB file exists and is writable by appuser
+        # Note: use $$ to escape docker-compose variable interpolation
+        DB_DIR="$${DATA_DIR:-/app/server/data}"
+        DB_FILE="$$DB_DIR/data.sqlite"
+        echo "[init] DB_DIR=$$DB_DIR"
+        echo "[init] DB_FILE=$$DB_FILE"
+        mkdir -p "$$DB_DIR" || true
+        touch "$$DB_FILE" || true
+        chown 10001:10001 "$$DB_FILE" || true
+        chmod 0666 "$$DB_FILE" || true
+        echo "[init] ls -ld $$DB_DIR:" && ls -ld "$$DB_DIR" || true
+        echo "[init] ls -l $$DB_DIR:" && ls -l "$$DB_DIR" || true
+        # Start FastAPI as appuser, keep nginx as root and log to stderr
+        PORT="$${PORT:-3400}"
+        # Ensure Python can import the 'server' package by running from /app
+        su appuser -s /bin/sh -c "cd /app && python3 -m uvicorn server.app:app --host 0.0.0.0 --port $$PORT" &
+        # Ensure nginx access log to stdout and IPv4 upstream
+        if [ -f /etc/nginx/nginx.conf ]; then
+          sed -i 's#proxy_pass http://localhost:3400;#proxy_pass http://127.0.0.1:3400;#' /etc/nginx/nginx.conf || true
+          if ! grep -q "access_log /dev/stdout" /etc/nginx/nginx.conf; then
+            sed -i 's#access_log .*;#access_log /dev/stdout main;#' /etc/nginx/nginx.conf || true
+          else
+            sed -i 's#access_log .*;#access_log /dev/stdout main;#' /etc/nginx/nginx.conf || true
+          fi
+        fi
+        exec nginx -e /dev/stderr -g "daemon off;"
     ports:
       - "1122:80"
       - "3400:3400"
     environment:
       - NODE_ENV=production
       - PORT=3400
+      - PYTHONPATH=/app
       - JWT_SECRET=${JWT_SECRET:-please-change-this-secret-in-production}
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-http://localhost:1122}
       - HTTPS_ENABLED=${HTTPS_ENABLED:-false}
       - COOKIE_DOMAIN=${COOKIE_DOMAIN:-}
       - DATA_DIR=/app/server/data
     volumes:
-      - ./uploads:/app/server/uploads:rw,Z
+      - ./uploads:/app/server/uploads:rw
       # Bind the whole data dir so SQLite can create the DB file inside it.
       # Binding a non-existent host file path (./data/data.sqlite) causes Docker
       # to mount a directory at the file path inside the container, making SQLite
       # fail with "unable to open database file" and uploads appear to succeed
       # but metadata insertions fail.
-      - ./data:/app/server/data:rw,Z
+      - ./data:/app/server/data:rw
     restart: unless-stopped
     networks:
       - msut-network
-
-
 
 networks:
   msut-network:

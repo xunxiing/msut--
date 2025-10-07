@@ -90,6 +90,14 @@ def _save_upload(file: UploadFile, dest_dir: Path) -> Optional[Path]:
                     dest.unlink(missing_ok=True)
                     return None
         return dest
+    except Exception:
+        # Any filesystem error (e.g. PermissionError, disk full) should not crash
+        # the request handler. Return None so caller can respond with { error }.
+        try:
+            dest.unlink(missing_ok=True)
+        except Exception:
+            pass
+        return None
     finally:
         try:
             file.file.close()

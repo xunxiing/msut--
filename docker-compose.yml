@@ -15,13 +15,13 @@ services:
       - COOKIE_DOMAIN=${COOKIE_DOMAIN:-}
       - DATA_DIR=/app/server/data
     volumes:
-      - ./uploads:/app/server/uploads
+      - ./uploads:/app/server/uploads:rw,Z
       # Bind the whole data dir so SQLite can create the DB file inside it.
       # Binding a non-existent host file path (./data/data.sqlite) causes Docker
       # to mount a directory at the file path inside the container, making SQLite
       # fail with "unable to open database file" and uploads appear to succeed
       # but metadata insertions fail.
-      - ./data:/app/server/data
+      - ./data:/app/server/data:rw,Z
     restart: unless-stopped
     networks:
       - msut-network

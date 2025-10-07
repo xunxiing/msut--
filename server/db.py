@@ -1,7 +1,7 @@
+import os
 import sqlite3
 from pathlib import Path
 from typing import Optional
-import os
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -21,7 +21,24 @@ def _ensure_db_file() -> None:
 
 def get_connection() -> sqlite3.Connection:
     _ensure_db_file()
-    conn = sqlite3.connect(DB_FILE, check_same_thread=False)
+    db_path = str(DB_FILE)
+    try:
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
+    except sqlite3.OperationalError as e:
+        # Extra diagnostics to help in containerized deployments
+        try:
+            print(f"[db] connect failed to {db_path}: {e}")
+            print(f"[db] ensuring parent dir exists: {DB_FILE.parent}")
+            DB_FILE.parent.mkdir(parents=True, exist_ok=True)
+        except Exception as _:
+            pass
+        # Attempt to (re)create the file if it doesn't exist
+        try:
+            Path(db_path).touch(exist_ok=True)
+        except Exception as _:
+            pass
+        # Final attempt using URI with rwc (read-write-create)
+        conn = sqlite3.connect(f"file:{db_path}?mode=rwc", uri=True, check_same_thread=False, timeout=30)
     conn.row_factory = sqlite3.Row
     return conn
 

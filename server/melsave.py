@@ -47,6 +47,25 @@ def _copy_tree(src: Path, dst: Path) -> None:
         return ignored
 
     shutil.copytree(src, dst, ignore=_ignore, dirs_exist_ok=True)
+    # Normalize expected filenames for Linux case-sensitivity
+    # The pipeline expects lowercase 'data.json'. If the source ships 'Data.json', rename it.
+    up = dst / "Data.json"
+    low = dst / "data.json"
+    try:
+        if up.exists() and not low.exists():
+            up.rename(low)
+    except Exception:
+        # not fatal; the pipeline will error clearly if missing
+        pass
+
+    # Clear stale artifacts that could confuse runs
+    for name in ("graph.json", "output.json", "data_after_modify.json", "ungraph.json"):
+        try:
+            p = dst / name
+            if p.exists():
+                p.unlink()
+        except Exception:
+            pass
 
 
 def _run_pipeline(temp_dir: Path) -> Path:

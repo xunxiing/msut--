@@ -10,6 +10,7 @@ from starlette.staticfiles import StaticFiles
 from .auth import router as auth_router, get_current_user, is_https_enabled
 from .db import run_migrations
 from .files import router as files_router
+from .melsave import router as melsave_router
 
 
 app = FastAPI()
@@ -41,6 +42,7 @@ app.mount("/uploads", StaticFiles(directory=str(uploads_path), html=False, check
 # Routers
 app.include_router(auth_router)
 app.include_router(files_router)
+app.include_router(melsave_router)
 
 
 @app.get("/api/private/ping")

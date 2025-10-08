@@ -10,6 +10,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/register', name: 'register', component: () => import('../views/Register.vue') },
   { path: '/resources', name: 'resources', component: () => import('../views/ResourceList.vue') },
   { path: '/upload', name: 'upload', meta: { requiresAuth: true }, component: () => import('../views/Upload.vue') },
+  { path: '/dsl', name: 'dsl-tool', component: () => import('../views/DSLTool.vue') },
   { path: '/share/:slug', name: 'resource-detail', component: () => import('../views/ResourceDetail.vue') },
 ]
 

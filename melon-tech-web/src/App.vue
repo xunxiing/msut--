@@ -1,7 +1,7 @@
 <template>
   <div>
-    <el-menu mode="horizontal" :router="true" :default-active="$route.path">
-      <el-menu-item index="/">首页</el-menu-item>
+    <el-menu mode="horizontal" :router="true" :default-active="$route.path" class="topbar">
+      <el-menu-item index="/" class="brand">🍉 甜瓜联合科技</el-menu-item>
       <el-menu-item index="/about">关于</el-menu-item>
       <el-menu-item index="/dsl">DSL 工具</el-menu-item>
       <el-menu-item index="/resources">文件集</el-menu-item>
@@ -33,7 +33,14 @@ const onLogout = async () => {
 </script>
 
 <style scoped>
-.el-menu {
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
   padding: 0 20px;
+  box-shadow: 0 2px 10px rgba(0,0,0,.04);
+}
+.brand {
+  font-weight: 800;
 }
 </style>

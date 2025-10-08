@@ -225,6 +225,24 @@ msut主站/
    - 配置 HTTPS 证书
    - 设置域名解析
 
+## 🧩 DSL 生成器（DSL → .melsave）
+
+本项目已集成“甜瓜游乐场”DSL 到 .melsave 的在线生成工具：
+
+- 前端入口：导航栏中的“DSL 工具”，无需登录即可使用。
+- 后端接口：`POST /api/melsave/generate`
+  - 请求体：`{ "dsl": "..." }`，内容为 input.py 的 DSL 文本。
+  - 响应：`.melsave` 文件字节流；`Content-Disposition` 包含 UTF-8 百分号编码的文件名。
+- 开发调试示例：
+  ```bash
+  curl -X POST http://localhost:3000/api/melsave/generate \
+    -H "Content-Type: application/json" \
+    -d @dsl.json \
+    -o out.melsave
+  ```
+
+实现说明：后端在每次请求时会将生成器目录复制到临时工作目录，写入 DSL 为 `input.py` 并运行流水线，完成后读取生成的 `.melsave` 返回并清理临时目录，避免并发写入冲突。
+
 ## 📋 API 接口
 
 ### 认证接口

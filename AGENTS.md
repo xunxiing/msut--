@@ -5,7 +5,7 @@ Scope: This AGENTS.md applies to the entire repository.
 ## Backend Overview
 - The backend has been fully migrated to Python/FastAPI. Do NOT re-enable the legacy Node/Express implementation under `server/src` or `server/dist`.
 - App entry: `server/app.py`
-- Routes: defined in `server/auth.py` and `server/files.py`
+- Routes: defined in `server/auth.py`, `server/files.py`, and `server/melsave.py`
 - DB/migrations: `server/db.py` (SQLite, file at `server/data.sqlite`)
 - Static uploads: `server/uploads/` mounted at `/uploads`
 - Utilities: `server/utils.py` (cookie options, boolean env parsing, slug/nanoid)
@@ -19,6 +19,9 @@ Scope: This AGENTS.md applies to the entire repository.
 - Error shape must be `{ error: string }` (not `{ detail: ... }`).
 - Cookie name must remain `token`. Use `utils.cookie_kwargs()` to preserve `SameSite`/`Secure` parity with env flags.
 - Download responses must set `Content-Disposition` with UTF-8 filename* percent-encoding.
+
+Additional tool routes (non-breaking additions):
+- DSL generator (anonymous): `POST /api/melsave/generate` with JSON `{ dsl: string }` returns a `.melsave` file stream with UTF‑8 filename header.
 
 ## Environment & Config
 - `PORT` (dev 3000, Docker 3400), `JWT_SECRET`, `NODE_ENV`, `PUBLIC_BASE_URL`, `HTTPS_ENABLED`, `COOKIE_DOMAIN`.
@@ -59,4 +62,3 @@ Scope: This AGENTS.md applies to the entire repository.
 
 ## Questions
 If you’re unsure about API parity or behavior, prefer maintaining the current FastAPI implementation’s behavior and return shapes, and leave a short note in PR/commit messages (or open an issue) before making behavioral changes.
-

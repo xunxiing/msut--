@@ -40,6 +40,16 @@ services:
         echo "[init] DB_DIR=$$DB_DIR"
         echo "[init] DB_FILE=$$DB_FILE"
         mkdir -p "$$DB_DIR" || true
+        # If a directory exists at the DB file path (historical mis-mount), fix it
+        if [ -d "$$DB_FILE" ]; then
+          echo "[init] WARN: $$DB_FILE is a directory; attempting to fix..."
+          if rmdir "$$DB_FILE" 2>/dev/null; then
+            echo "[init] Removed empty directory at DB file path"
+          else
+            mv "$$DB_FILE" "$$DB_FILE.dirbak-$(date +%s)" 2>/dev/null || true
+            echo "[init] Renamed directory to backup: $$DB_FILE.dirbak-*"
+          fi
+        fi
         touch "$$DB_FILE" || true
         chown 10001:10001 "$$DB_FILE" || true
         chmod 0666 "$$DB_FILE" || true

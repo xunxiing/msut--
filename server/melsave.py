@@ -52,10 +52,9 @@ def _copy_tree(src: Path, dst: Path) -> None:
 def _run_pipeline(temp_dir: Path) -> Path:
     # Prefer running in a subprocess to isolate execution of DSL code.
     import subprocess
-    env = {
-        "PYTHONIOENCODING": "utf-8",
-        "PYTHONUNBUFFERED": "1",
-    }
+    env = dict(os.environ)
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUNBUFFERED"] = "1"
     try:
         subprocess.run(
             [sys.executable, "main.py"],
@@ -110,7 +109,7 @@ def generate_melsave(body: dict):
         headers = {
             "Content-Disposition": _encode_filename_header(out_path.name)
         }
-    return Response(content=data, media_type="application/octet-stream", headers=headers)
+        return Response(content=data, media_type="application/octet-stream", headers=headers)
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": f"生成失败: {e}"})
     finally:

@@ -1,7 +1,7 @@
 # MSUT全栈认证系统 - 多阶段构建（Python 后端 + Nginx 前端）
 
 # 构建参数
-ARG NODE_VERSION=20.18.0
+ARG NODE_VERSION=20.19.0
 ARG ALPINE_VERSION=3.20
 ARG NGINX_VERSION=1.27.2
 

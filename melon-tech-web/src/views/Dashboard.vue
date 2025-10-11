@@ -28,7 +28,7 @@ const msg = ref('')
 
 const ping = async () => {
   const { data } = await http.get('/private/ping')
-  msg.value = data.pong ? '受保护接口可用' : ''
+  msg.value = data.pong ? '受保护接口可用' : '未登录或无权限'
 }
 
 const goManage = () => router.push('/my/resources')
@@ -39,3 +39,4 @@ const onLogout = async () => {
   router.replace('/login')
 }
 </script>
+

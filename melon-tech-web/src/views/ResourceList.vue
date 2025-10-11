@@ -1,9 +1,9 @@
-﻿<template>
+<template>
   <div class="container">
     <div class="header">
       <h2>创意工坊</h2>
       <div class="actions">
-        <el-input v-model="q" placeholder="搜索标题或描�? clearable @clear="fetch" @keyup.enter="fetch" style="max-width: 320px" />
+        <el-input v-model="q" placeholder="搜索标题或描述" clearable @clear="fetch" @keyup.enter="fetch" style="max-width: 320px" />
         <el-button type="primary" @click="$router.push('/upload')">上传文件</el-button>
       </div>
     </div>
@@ -12,7 +12,7 @@
       <el-col v-for="r in items" :key="r.slug" :xs="24" :md="12" :lg="8">
         <el-card class="card" shadow="hover" @click="$router.push(`/share/${r.slug}`)" style="cursor:pointer">
           <div class="title">{{ r.title }}</div>
-          <div class="desc">{{ r.description || '暂无简�? }}</div>
+          <div class="desc">{{ r.description || '暂无简介' }}</div>
           <div class="meta">
             <el-tag size="small">{{ r.created_at }}</el-tag>
           </div>
@@ -31,6 +31,7 @@
       />
     </div>
   </div>
+  
 </template>
 
 <script setup lang="ts">

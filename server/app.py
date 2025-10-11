@@ -57,3 +57,4 @@ def private_ping(request: Request):
 @app.get("/")
 def root():
     return {"ok": True}
+

@@ -5,18 +5,21 @@ from typing import Optional, Set
 
 
 BASE_DIR = Path(__file__).resolve().parent
-# 尝试使用环境变量中指定的数据库路径，如果不存在则使用默认路径
+# 优先使用环境变量 DATA_DIR 指定的目录，其次使用默认目录 server/data。
+# 兼容旧版本（数据库位于 server/data.sqlite）：若新路径不存在但旧文件存在，则使用旧文件。
 data_dir = Path(os.environ.get("DATA_DIR", BASE_DIR / "data"))
-DB_FILE = data_dir / "data.sqlite"
+_candidate_db = data_dir / "data.sqlite"
+_legacy_db = BASE_DIR / "data.sqlite"
+DB_FILE = _candidate_db if _candidate_db.exists() or not _legacy_db.exists() else _legacy_db
 
 
 def _ensure_db_file() -> None:
     # 确保数据目录存在
     DB_FILE.parent.mkdir(parents=True, exist_ok=True)
-    # 确保数据库文件存在
-    if not DB_FILE.exists():
-        DB_FILE.touch()
-        print(f"Created new database file at {DB_FILE}")
+    if DB_FILE.exists():
+        return
+    DB_FILE.touch()
+    print(f"Created new database file at {DB_FILE}")
 
 
 def get_connection() -> sqlite3.Connection:
@@ -168,3 +171,4 @@ def run_migrations(conn: Optional[sqlite3.Connection] = None) -> None:
     finally:
         if owns:
             conn.close()
+

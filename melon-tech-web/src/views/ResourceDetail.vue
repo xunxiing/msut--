@@ -1,7 +1,7 @@
 <template>
   <div class="container" v-if="data">
     <el-breadcrumb separator="/">
-      <el-breadcrumb-item @click="$router.push('/resources')" style="cursor:pointer">文件集</el-breadcrumb-item>
+      <el-breadcrumb-item @click="$router.push('/resources')" style="cursor:pointer">创意工坊</el-breadcrumb-item>
       <el-breadcrumb-item>{{ data.title }}</el-breadcrumb-item>
     </el-breadcrumb>
 
@@ -12,6 +12,10 @@
       <div class="share">
         <el-input v-model="data.shareUrl" readonly style="max-width: 520px" />
         <el-button @click="copy(data.shareUrl)">复制链接</el-button>
+        <el-divider direction="vertical" />
+        <el-button :type="stats.liked ? 'success' : 'default'" @click="toggleLike">👍 {{ stats.likes }}</el-button>
+        <el-button :type="stats.favorited ? 'warning' : 'default'" @click="toggleFav">⭐ {{ stats.favorites }}</el-button>
+        <span class="dl">⬇️ {{ stats.downloads }}</span>
       </div>
     </el-card>
 
@@ -46,7 +50,7 @@
       </el-col>
     </el-row>
 
-    <el-alert type="info" show-icon title="未登录也能下载" description="分享给任何人，对方打开此页即可自由下载。" class="mt-16" />
+    <el-alert type="info" show-icon title="未登录也能下载" description="分享给任何人，对方打开此页即可自由下载" class="mt-16" />
   </div>
 
   <el-skeleton v-else animated :rows="6" class="container" />
@@ -54,12 +58,15 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { getResource } from '../api/resources'
+import { getResource, getResourceStats, likeResource, unlikeResource, favoriteResource, unfavoriteResource } from '../api/resources'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { useAuth } from '../stores/auth'
 
 const route = useRoute()
+const auth = useAuth()
 const data = ref<any>(null)
+const stats = ref<{ likes: number; favorites: number; downloads: number; liked?: boolean; favorited?: boolean }>({ likes: 0, favorites: 0, downloads: 0, liked: false, favorited: false })
 
 function prettySize(n: number) {
   if (!n && n !== 0) return ''
@@ -69,15 +76,32 @@ function prettySize(n: number) {
   return `${v.toFixed(1)} ${units[i]}`
 }
 
+function cleanSlug(s: string): string {
+  const m = (s || '').toLowerCase().match(/([a-z0-9\-]+)/)
+  return m ? m[1] : s
+}
+
 async function fetch() {
-  data.value = await getResource(route.params.slug as string)
+  const slug = cleanSlug(route.params.slug as string)
+  data.value = await getResource(slug)
+  try { stats.value = await getResourceStats(data.value.id) } catch {}
 }
 function copy(text: string) {
   navigator.clipboard.writeText(text).then(() => ElMessage.success('链接已复制'))
 }
+function toggleLike() {
+  if (!auth.user) { ElMessage.warning('请先登录'); return }
+  const fn = stats.value.liked ? unlikeResource : likeResource
+  fn(data.value.id).then(async () => { stats.value = await getResourceStats(data.value.id) }).catch(() => ElMessage.error('操作失败'))
+}
+function toggleFav() {
+  if (!auth.user) { ElMessage.warning('请先登录'); return }
+  const fn = stats.value.favorited ? unfavoriteResource : favoriteResource
+  fn(data.value.id).then(async () => { stats.value = await getResourceStats(data.value.id) }).catch(() => ElMessage.error('操作失败'))
+}
 function download(fileId: number) {
-  // 直接打开后端公开下载接口
   window.open(`/api/files/${fileId}/download`, '_blank')
+  if (data.value?.id) { setTimeout(async () => { try { stats.value = await getResourceStats(data.value.id) } catch {} }, 800) }
 }
 onMounted(fetch)
 </script>
@@ -87,10 +111,11 @@ onMounted(fetch)
 .header { margin: 10px 0 16px; border-radius: 14px; }
 .title { margin: 0 0 6px; font-size: 22px; font-weight: 800; }
 .desc { color: var(--el-text-color-secondary); }
-.share { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+.share { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
 .file { border-radius: 12px; }
 .file-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 70%; }
 .meta { color: var(--el-text-color-secondary); font-size: 12px; margin-top: 4px; }
 .mt-16 { margin-top: 16px; }
+.dl { color: var(--el-text-color-secondary); margin-left: 6px; }
 </style>

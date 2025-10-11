@@ -62,3 +62,37 @@ export async function deleteResource(id: number) {
   const { data } = await http.delete(`/resources/${id}`)
   return data as { ok: boolean }
 }
+
+// -------- New: advanced list, stats, like/favorite --------
+export async function advancedListResources(params: { q?: string; page?: number; pageSize?: number; sort?: 'hot' | 'time' | 'likes'; days?: number } = {}) {
+  const { data } = await http.get('/resources/advanced', { params })
+  return data as {
+    items: Array<{ id: number; slug: string; title: string; description: string; created_at: string; likeCount: number; downloadCount: number }>
+    page: number; pageSize: number; total: number
+  }
+}
+
+export async function getResourceStats(id: number, days = 7) {
+  const { data } = await http.get(`/resources/${id}/stats`, { params: { days } })
+  return data as { likes: number; favorites: number; downloads: number; liked?: boolean; favorited?: boolean }
+}
+
+export async function likeResource(id: number) {
+  const { data } = await http.post(`/resources/${id}/like`)
+  return data as { ok: boolean; liked: boolean; likeCount: number }
+}
+
+export async function unlikeResource(id: number) {
+  const { data } = await http.delete(`/resources/${id}/like`)
+  return data as { ok: boolean; liked: boolean; likeCount: number }
+}
+
+export async function favoriteResource(id: number) {
+  const { data } = await http.post(`/resources/${id}/favorite`)
+  return data as { ok: boolean; favorited: boolean; favoriteCount: number }
+}
+
+export async function unfavoriteResource(id: number) {
+  const { data } = await http.delete(`/resources/${id}/favorite`)
+  return data as { ok: boolean; favorited: boolean; favoriteCount: number }
+}

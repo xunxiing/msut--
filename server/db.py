@@ -1,7 +1,7 @@
 import os
 import sqlite3
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Set
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -81,7 +81,7 @@ def run_migrations(conn: Optional[sqlite3.Connection] = None) -> None:
             )
             print("DB migration completed")
 
-        # Initialize schema
+        # Initialize base schema
         cur.executescript(
             """
             CREATE TABLE IF NOT EXISTS users (
@@ -120,8 +120,50 @@ def run_migrations(conn: Optional[sqlite3.Connection] = None) -> None:
               created_at TEXT NOT NULL DEFAULT (datetime('now')),
               FOREIGN KEY (resource_id) REFERENCES resources(id) ON DELETE CASCADE
             );
+
+            -- Per-resource downloads log for hot ranking
+            CREATE TABLE IF NOT EXISTS resource_downloads (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              resource_id INTEGER NOT NULL,
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              FOREIGN KEY (resource_id) REFERENCES resources(id) ON DELETE CASCADE
+            );
+
+            -- Per-user likes
+            CREATE TABLE IF NOT EXISTS likes (
+              user_id INTEGER NOT NULL,
+              resource_id INTEGER NOT NULL,
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              PRIMARY KEY (user_id, resource_id),
+              FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+              FOREIGN KEY (resource_id) REFERENCES resources(id) ON DELETE CASCADE
+            );
+
+            -- Per-user favorites
+            CREATE TABLE IF NOT EXISTS favorites (
+              user_id INTEGER NOT NULL,
+              resource_id INTEGER NOT NULL,
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              PRIMARY KEY (user_id, resource_id),
+              FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+              FOREIGN KEY (resource_id) REFERENCES resources(id) ON DELETE CASCADE
+            );
             """
         )
+        # Incremental alterations for new columns
+        # Add resources.downloads and resource_files.download_count if missing
+        def columns_of(table: str) -> Set[str]:
+            cols = cur.execute(f"PRAGMA table_info('{table}')").fetchall()
+            return {c[1] for c in cols}
+
+        res_cols = columns_of("resources")
+        if "downloads" not in res_cols:
+            cur.execute("ALTER TABLE resources ADD COLUMN downloads INTEGER NOT NULL DEFAULT 0")
+
+        rf_cols = columns_of("resource_files")
+        if "download_count" not in rf_cols:
+            cur.execute("ALTER TABLE resource_files ADD COLUMN download_count INTEGER NOT NULL DEFAULT 0")
+
         conn.commit()
     finally:
         if owns:

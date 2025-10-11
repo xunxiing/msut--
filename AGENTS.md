@@ -22,6 +22,13 @@ Scope: This AGENTS.md applies to the entire repository.
 
 Additional tool routes (non-breaking additions):
 - DSL generator (anonymous): `POST /api/melsave/generate` with JSON `{ dsl: string }` returns a `.melsave` file stream with UTF‑8 filename header.
+ - Workshop features (anonymous unless stated):
+   - `GET /api/resources/advanced` with `q,page,pageSize,sort(days)` for listing with like/download counts and hot sorting.
+   - `GET /api/resources/{id}/stats` returns `{ likes, favorites, downloads, liked?, favorited? }`.
+   - `POST /api/resources/{id}/like` and `DELETE /api/resources/{id}/like` (auth required).
+   - `POST /api/resources/{id}/favorite` and `DELETE /api/resources/{id}/favorite` (auth required).
+
+DB migrations extend schema with `likes`, `favorites`, `resource_downloads` tables, and add `resources.downloads`, `resource_files.download_count` columns. Existing endpoints/shapes remain unchanged.
 
 ## Environment & Config
 - `PORT` (dev 3000, Docker 3400), `JWT_SECRET`, `NODE_ENV`, `PUBLIC_BASE_URL`, `HTTPS_ENABLED`, `COOKIE_DOMAIN`.

@@ -1,8 +1,6 @@
-﻿import os
+import os
 from pathlib import Path
 from typing import List, Optional
-import re
-from datetime import datetime, timedelta
 
 from fastapi import APIRouter, File, Form, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
@@ -10,14 +8,6 @@ from fastapi.responses import FileResponse, JSONResponse
 from .auth import get_current_user
 from .db import get_connection
 from .utils import nanoid, now_ms, slugify_str
-
-# Helpers for stats and slug sanitation
-def _sanitize_slug(slug: str) -> str:
-    m = re.match(r"([a-z0-9\-]+)", (slug or "").lower())
-    return m.group(1) if m else ""
-
-def _now_str(dt: datetime | None = None) -> str:
-    return (dt or datetime.utcnow()).strftime("%Y-%m-%d %H:%M:%S")
 
 
 router = APIRouter()
@@ -57,10 +47,10 @@ async def create_resource(request: Request, title: Optional[str] = Form(None), d
             description = data.get("description")
             usage = data.get("usage")
     if not title or not isinstance(title, str):
-        return JSONResponse(status_code=400, content={"error": "Bad Request"})
+        return JSONResponse(status_code=400, content={"error": "标题必填"})
     uid = _require_user_id(request)
     if uid is None:
-        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+        return JSONResponse(status_code=401, content={"error": "未登�?})
     base = slugify_str(title) or f"res-{nanoid()}"
     slug = base
     conn = get_connection()
@@ -119,21 +109,21 @@ def _save_upload(file: UploadFile, dest_dir: Path) -> Optional[Path]:
 def upload_to_resource(request: Request, resourceId: int = Form(...), files: List[UploadFile] = File(default=[])):
     uid = _require_user_id(request)
     if uid is None:
-        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+        return JSONResponse(status_code=401, content={"error": "未登�?})
     conn = get_connection()
     cur = conn.cursor()
     res = cur.execute("SELECT id, created_by FROM resources WHERE id = ?", (resourceId,)).fetchone()
     if not res:
-        return JSONResponse(status_code=404, content={"error": "Not Found"})
+        return JSONResponse(status_code=404, content={"error": "资源不存�?})
     if int(res["created_by"] or 0) != uid:
-        return JSONResponse(status_code=403, content={"error": "Forbidden"})
+        return JSONResponse(status_code=403, content={"error": "无法操作其他用户的资�?})
     if not files:
-        return JSONResponse(status_code=400, content={"error": "Bad Request"})
+        return JSONResponse(status_code=400, content={"error": "没有文件"})
     saved = []
     for uf in files[:10]:
         dest = _save_upload(uf, UPLOAD_DIR)
         if dest is None:
-            return JSONResponse(status_code=400, content={"error": "Bad Request"})
+            return JSONResponse(status_code=400, content={"error": "上传失败"})
         url_path = f"/uploads/{dest.name}"
         info = cur.execute(
             """
@@ -166,7 +156,7 @@ def upload_to_resource(request: Request, resourceId: int = Form(...), files: Lis
 def list_my_resources(request: Request):
     uid = _require_user_id(request)
     if uid is None:
-        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+        return JSONResponse(status_code=401, content={"error": "未登�?})
     conn = get_connection()
     cur = conn.cursor()
     resources = cur.execute(
@@ -204,14 +194,14 @@ def list_my_resources(request: Request):
 async def update_resource(request: Request, rid: int, description: Optional[str] = Form(None), usage: Optional[str] = Form(None)):
     uid = _require_user_id(request)
     if uid is None:
-        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+        return JSONResponse(status_code=401, content={"error": "未登�?})
     conn = get_connection()
     cur = conn.cursor()
     r = cur.execute("SELECT id, slug, created_by FROM resources WHERE id = ?", (rid,)).fetchone()
     if not r:
-        return JSONResponse(status_code=404, content={"error": "Not Found"})
+        return JSONResponse(status_code=404, content={"error": "资源不存�?})
     if int(r["created_by"] or 0) != uid:
-        return JSONResponse(status_code=403, content={"error": "Forbidden"})
+        return JSONResponse(status_code=403, content={"error": "无法操作其他用户的资�?})
     # Accept JSON body as well as form fields
     if description is None and usage is None:
         try:
@@ -232,7 +222,7 @@ async def update_resource(request: Request, rid: int, description: Optional[str]
         updates.append("usage = ?")
         params.append(usage)
     if not updates:
-        return JSONResponse(status_code=400, content={"error": "Bad Request"})
+        return JSONResponse(status_code=400, content={"error": "没有需要更新的字段"})
     params.append(rid)
     cur.execute(f"UPDATE resources SET {', '.join(updates)} WHERE id = ?", tuple(params))
     conn.commit()
@@ -247,14 +237,14 @@ async def update_resource(request: Request, rid: int, description: Optional[str]
 def delete_resource(request: Request, rid: int):
     uid = _require_user_id(request)
     if uid is None:
-        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+        return JSONResponse(status_code=401, content={"error": "未登�?})
     conn = get_connection()
     cur = conn.cursor()
     r = cur.execute("SELECT id, created_by FROM resources WHERE id = ?", (rid,)).fetchone()
     if not r:
-        return JSONResponse(status_code=404, content={"error": "Not Found"})
+        return JSONResponse(status_code=404, content={"error": "资源不存�?})
     if int(r["created_by"] or 0) != uid:
-        return JSONResponse(status_code=403, content={"error": "Forbidden"})
+        return JSONResponse(status_code=403, content={"error": "无法操作其他用户的资�?})
     files = cur.execute("SELECT stored_name FROM resource_files WHERE resource_id = ?", (rid,)).fetchall()
     # Transaction-like operations
     cur.execute("DELETE FROM resource_files WHERE resource_id = ?", (rid,))
@@ -275,10 +265,9 @@ def delete_resource(request: Request, rid: int):
 def get_resource(slug: str):
     conn = get_connection()
     cur = conn.cursor()
-    s = _sanitize_slug(slug)
-    r = cur.execute("SELECT * FROM resources WHERE slug = ?", (s,)).fetchone()
+    r = cur.execute("SELECT * FROM resources WHERE slug = ?", (slug,)).fetchone()
     if not r:
-        return JSONResponse(status_code=404, content={"error": "Not Found"})
+        return JSONResponse(status_code=404, content={"error": "未找到资�?})
     files = cur.execute(
         "SELECT id, original_name, stored_name, mime, size, url_path, created_at FROM resource_files WHERE resource_id = ? ORDER BY id DESC",
         (r["id"],),
@@ -314,173 +303,17 @@ def list_resources(q: str = Query(default=""), page: int = Query(default=1), pag
 def download_file(fid: int):
     conn = get_connection()
     cur = conn.cursor()
-    row = cur.execute("SELECT resource_id, original_name, stored_name FROM resource_files WHERE id = ?", (fid,)).fetchone()
+    row = cur.execute("SELECT original_name, stored_name FROM resource_files WHERE id = ?", (fid,)).fetchone()
     if not row:
-        return JSONResponse(status_code=404, content={"error": "Not Found"})
+        return JSONResponse(status_code=404, content={"error": "文件不存�?})
     path = UPLOAD_DIR / row["stored_name"]
     if not path.exists():
-        return JSONResponse(status_code=404, content={"error": "Not Found"})
+        return JSONResponse(status_code=404, content={"error": "文件丢了"})
     from urllib.parse import quote
     filename = row["original_name"]
     headers = {
         "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"
     }
-    # Update counters (best-effort)
-    try:
-        rid = int(row["resource_id"]) if row["resource_id"] is not None else None
-        if rid is not None:
-            cur.execute("UPDATE resource_files SET download_count = download_count + 1 WHERE id = ?", (fid,))
-            cur.execute("UPDATE resources SET downloads = downloads + 1 WHERE id = ?", (rid,))
-            cur.execute("INSERT INTO resource_downloads (resource_id, created_at) VALUES (?, ?)", (rid, _now_str()))
-            conn.commit()
-    except Exception:
-        pass
     # FastAPI's FileResponse sets correct headers and content-type
     return FileResponse(path, headers=headers)
-
-
-# --- Additional endpoints: stats, likes, favorites, advanced list ---
-
-@router.get("/api/resources/{rid}/stats")
-def resource_stats(request: Request, rid: int, days: int = Query(default=7)):
-    uid = _require_user_id(request)
-    conn = get_connection()
-    cur = conn.cursor()
-    exists = cur.execute("SELECT 1 FROM resources WHERE id = ?", (rid,)).fetchone()
-    if not exists:
-        return JSONResponse(status_code=404, content={"error": "Not Found"})
-    return _stats_for_resource(cur, rid, days=days, uid=uid)
-
-
-@router.post("/api/resources/{rid}/like")
-def like_resource(request: Request, rid: int):
-    uid = _require_user_id(request)
-    if uid is None:
-        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
-    conn = get_connection()
-    cur = conn.cursor()
-    r = cur.execute("SELECT 1 FROM resources WHERE id = ?", (rid,)).fetchone()
-    if not r:
-        return JSONResponse(status_code=404, content={"error": "Not Found"})
-    try:
-        cur.execute("INSERT OR IGNORE INTO likes (user_id, resource_id, created_at) VALUES (?, ?, ?)", (uid, rid, _now_str()))
-        conn.commit()
-    except Exception:
-        return JSONResponse(status_code=400, content={"error": "Bad Request"})
-    like_count = cur.execute("SELECT COUNT(1) as c FROM likes WHERE resource_id = ?", (rid,)).fetchone()["c"]
-    return {"ok": True, "liked": True, "likeCount": int(like_count)}
-
-
-@router.delete("/api/resources/{rid}/like")
-def unlike_resource(request: Request, rid: int):
-    uid = _require_user_id(request)
-    if uid is None:
-        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("DELETE FROM likes WHERE user_id = ? AND resource_id = ?", (uid, rid))
-    conn.commit()
-    like_count = cur.execute("SELECT COUNT(1) as c FROM likes WHERE resource_id = ?", (rid,)).fetchone()["c"]
-    return {"ok": True, "liked": False, "likeCount": int(like_count)}
-
-
-@router.post("/api/resources/{rid}/favorite")
-def favorite_resource(request: Request, rid: int):
-    uid = _require_user_id(request)
-    if uid is None:
-        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
-    conn = get_connection()
-    cur = conn.cursor()
-    r = cur.execute("SELECT 1 FROM resources WHERE id = ?", (rid,)).fetchone()
-    if not r:
-        return JSONResponse(status_code=404, content={"error": "Not Found"})
-    try:
-        cur.execute("INSERT OR IGNORE INTO favorites (user_id, resource_id, created_at) VALUES (?, ?, ?)", (uid, rid, _now_str()))
-        conn.commit()
-    except Exception:
-        return JSONResponse(status_code=400, content={"error": "Bad Request"})
-    fav_count = cur.execute("SELECT COUNT(1) as c FROM favorites WHERE resource_id = ?", (rid,)).fetchone()["c"]
-    return {"ok": True, "favorited": True, "favoriteCount": int(fav_count)}
-
-
-@router.delete("/api/resources/{rid}/favorite")
-def unfavorite_resource(request: Request, rid: int):
-    uid = _require_user_id(request)
-    if uid is None:
-        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("DELETE FROM favorites WHERE user_id = ? AND resource_id = ?", (uid, rid))
-    conn.commit()
-    fav_count = cur.execute("SELECT COUNT(1) as c FROM favorites WHERE resource_id = ?", (rid,)).fetchone()["c"]
-    return {"ok": True, "favorited": False, "favoriteCount": int(fav_count)}
-
-
-@router.get("/api/resources/advanced")
-def advanced_list_resources(
-    q: str = Query(default=""),
-    page: int = Query(default=1),
-    pageSize: int = Query(default=12),
-    sort: str = Query(default="time"),
-    days: int = Query(default=7),
-):
-    q = (q or "").strip()
-    page = max(1, int(page or 1))
-    page_size = min(50, max(1, int(pageSize or 12)))
-    offset = (page - 1) * page_size
-    conn = get_connection()
-    cur = conn.cursor()
-    where = "WHERE title LIKE ? OR description LIKE ?" if q else ""
-    args: List = [f"%{q}%", f"%{q}%"] if q else []
-    total = cur.execute(f"SELECT COUNT(1) as c FROM resources {where}", tuple(args)).fetchone()["c"]
-
-    threshold = (datetime.utcnow() - timedelta(days=max(1, int(days or 7)))).strftime("%Y-%m-%d %H:%M:%S")
-    base_sql = f"""
-      SELECT
-        r.id,
-        r.slug,
-        r.title,
-        r.description,
-        r.created_at,
-        r.downloads AS download_count,
-        (SELECT COUNT(1) FROM likes l WHERE l.resource_id = r.id) AS like_count,
-        (
-          (SELECT COUNT(1) FROM resource_downloads d WHERE d.resource_id = r.id AND d.created_at >= ?) +
-          2 * (SELECT COUNT(1) FROM likes l2 WHERE l2.resource_id = r.id AND l2.created_at >= ?)
-        ) AS heat
-      FROM resources r
-      {where}
-    """
-    order_by = {
-        "time": "ORDER BY r.id DESC",
-        "likes": "ORDER BY like_count DESC, r.id DESC",
-        "hot": "ORDER BY heat DESC, r.id DESC",
-    }.get((sort or "time").lower(), "ORDER BY r.id DESC")
-
-    limit_sql = "LIMIT ? OFFSET ?"
-    params: List = [threshold, threshold]
-    if args:
-        params.extend(args)
-    params.extend([page_size, offset])
-
-    items = cur.execute(f"{base_sql} {order_by} {limit_sql}", tuple(params)).fetchall()
-    return {
-        "items": [
-            {
-                "id": int(i["id"]),
-                "slug": i["slug"],
-                "title": i["title"],
-                "description": i["description"],
-                "created_at": i["created_at"],
-                "likeCount": int(i["like_count"] or 0),
-                "downloadCount": int(i["download_count"] or 0),
-            }
-            for i in items
-        ],
-        "page": page,
-        "pageSize": page_size,
-        "total": total,
-    }
-
-
 

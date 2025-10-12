@@ -366,6 +366,73 @@ def list_resources(q: str = Query(default=""), page: int = Query(default=1), pag
     return {"items": [dict(i) for i in items], "page": page, "pageSize": page_size, "total": total}
 
 
+# ----- Resource likes (collections) -----
+
+@router.get("/api/resources/likes")
+def get_resource_likes(request: Request, ids: str = Query(default="")):
+    ids = (ids or "").strip()
+    if not ids:
+        return {"items": []}
+    try:
+        resource_ids = [int(x) for x in ids.split(",") if x.strip().isdigit()]
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "参数错误"})
+    if not resource_ids:
+        return {"items": []}
+    conn = get_connection()
+    cur = conn.cursor()
+    ph = ",".join(["?"] * len(resource_ids))
+    counts = cur.execute(
+        f"SELECT resource_id, COUNT(1) AS c FROM resource_likes WHERE resource_id IN ({ph}) GROUP BY resource_id",
+        tuple(resource_ids),
+    ).fetchall()
+    count_map = {int(r["resource_id"]): int(r["c"]) for r in counts}
+    uid = _require_user_id(request)
+    liked_set = set()
+    if uid is not None:
+        liked_rows = cur.execute(
+            f"SELECT resource_id FROM resource_likes WHERE user_id = ? AND resource_id IN ({ph})",
+            (uid, *resource_ids),
+        ).fetchall()
+        liked_set = {int(r["resource_id"]) for r in liked_rows}
+    items = []
+    for rid in resource_ids:
+        items.append({"id": rid, "likes": int(count_map.get(rid, 0)), "liked": rid in liked_set})
+    return {"items": items}
+
+
+@router.post("/api/resources/{rid}/like")
+def like_resource(request: Request, rid: int):
+    uid = _require_user_id(request)
+    if uid is None:
+        return JSONResponse(status_code=401, content={"error": "未登录"})
+    conn = get_connection()
+    cur = conn.cursor()
+    exists = cur.execute("SELECT id FROM resources WHERE id = ?", (rid,)).fetchone()
+    if not exists:
+        return JSONResponse(status_code=404, content={"error": "资源不存在"})
+    cur.execute("INSERT OR IGNORE INTO resource_likes (resource_id, user_id) VALUES (?, ?)", (rid, uid))
+    conn.commit()
+    total = cur.execute("SELECT COUNT(1) as c FROM resource_likes WHERE resource_id = ?", (rid,)).fetchone()["c"]
+    return {"liked": True, "likes": int(total)}
+
+
+@router.delete("/api/resources/{rid}/like")
+def unlike_resource(request: Request, rid: int):
+    uid = _require_user_id(request)
+    if uid is None:
+        return JSONResponse(status_code=401, content={"error": "未登录"})
+    conn = get_connection()
+    cur = conn.cursor()
+    exists = cur.execute("SELECT id FROM resources WHERE id = ?", (rid,)).fetchone()
+    if not exists:
+        return JSONResponse(status_code=404, content={"error": "资源不存在"})
+    cur.execute("DELETE FROM resource_likes WHERE resource_id = ? AND user_id = ?", (rid, uid))
+    conn.commit()
+    total = cur.execute("SELECT COUNT(1) as c FROM resource_likes WHERE resource_id = ?", (rid,)).fetchone()["c"]
+    return {"liked": False, "likes": int(total)}
+
+
 @router.get("/api/files/{fid}/download")
 def download_file(fid: int):
     conn = get_connection()

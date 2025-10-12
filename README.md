@@ -1,137 +1,137 @@
-# MSUT全栈认证系统
+﻿# MSUT鍏ㄦ爤璁よ瘉绯荤粺
 
-> 重要变更：本项目后端已从 Node.js + Express 重构为 Python + FastAPI，API 与行为保持兼容，前端无需改动即可工作。详情见文末“重要变更：后端已重构为 Python/FastAPI”。
+> 閲嶈鍙樻洿锛氭湰椤圭洰鍚庣宸蹭粠 Node.js + Express 閲嶆瀯涓?Python + FastAPI锛孉PI 涓庤涓轰繚鎸佸吋瀹癸紝鍓嶇鏃犻渶鏀瑰姩鍗冲彲宸ヤ綔銆傝鎯呰鏂囨湯鈥滈噸瑕佸彉鏇达細鍚庣宸查噸鏋勪负 Python/FastAPI鈥濄€?
 
-基于 Python + FastAPI + Vue.js + TypeScript 构建的现代化全栈认证与资源管理系统！
+鍩轰簬 Python + FastAPI + Vue.js + TypeScript 鏋勫缓鐨勭幇浠ｅ寲鍏ㄦ爤璁よ瘉涓庤祫婧愮鐞嗙郴缁燂紒
 
-## 🧭 重要变更：后端已重构为 Python/FastAPI
+## 馃Л 閲嶈鍙樻洿锛氬悗绔凡閲嶆瀯涓?Python/FastAPI
 
-本项目的后端已从 Node.js + Express 完整迁移为 Python + FastAPI，API 路径、请求和响应结构保持不变，前端无需改动即可工作。
+鏈」鐩殑鍚庣宸蹭粠 Node.js + Express 瀹屾暣杩佺Щ涓?Python + FastAPI锛孉PI 璺緞銆佽姹傚拰鍝嶅簲缁撴瀯淇濇寔涓嶅彉锛屽墠绔棤闇€鏀瑰姩鍗冲彲宸ヤ綔銆?
 
-- 核心要点
+- 鏍稿績瑕佺偣
 
-  - 替换原 `server/src/*.ts` 实现，新增 Python 代码于 `server/` 目录。
-  - 行为一致：鉴权、Cookie（SameSite/secure）、分页、错误返回、下载响应头均与原实现对齐。
-  - 静态上传目录仍为 `/uploads`，公开访问、长缓存。
-  - SQLite 结构保持不变，保留从 `email` → `username` 的自动迁移。
-- 新后端技术栈
+  - 鏇挎崲鍘?`server/src/*.ts` 瀹炵幇锛屾柊澧?Python 浠ｇ爜浜?`server/` 鐩綍銆?
+  - 琛屼负涓€鑷达細閴存潈銆丆ookie锛圫ameSite/secure锛夈€佸垎椤点€侀敊璇繑鍥炪€佷笅杞藉搷搴斿ご鍧囦笌鍘熷疄鐜板榻愩€?
+  - 闈欐€佷笂浼犵洰褰曚粛涓?`/uploads`锛屽叕寮€璁块棶銆侀暱缂撳瓨銆?
+  - SQLite 缁撴瀯淇濇寔涓嶅彉锛屼繚鐣欎粠 `email` 鈫?`username` 鐨勮嚜鍔ㄨ縼绉汇€?
+- 鏂板悗绔妧鏈爤
 
-  - Python 3.11+、FastAPI、Uvicorn
-  - SQLite（`sqlite3`）、PyJWT、bcrypt、python-multipart
-- 关键文件（后端）
+  - Python 3.11+銆丗astAPI銆乁vicorn
+  - SQLite锛坄sqlite3`锛夈€丳yJWT銆乥crypt銆乸ython-multipart
+- 鍏抽敭鏂囦欢锛堝悗绔級
 
-  - `server/app.py`：应用入口（挂载路由与静态目录、启动迁移、基础安全头）
-  - `server/auth.py`：认证接口（register/login/logout/me）
-  - `server/files.py`：资源与文件接口（创建/上传/列表/详情/更新/删除/下载）
-  - `server/db.py`：数据库连接、初始化与迁移
-  - `server/utils.py`：工具函数（nanoid、slug、Cookie 选项、布尔解析）
-  - `server/schemas.py`：类型声明（JWT 载荷）
-  - `server/requirements.txt`：后端依赖清单
-  - 数据/文件默认位置：`server/data.sqlite`、`server/uploads/`
-- 本地开发
+  - `server/app.py`锛氬簲鐢ㄥ叆鍙ｏ紙鎸傝浇璺敱涓庨潤鎬佺洰褰曘€佸惎鍔ㄨ縼绉汇€佸熀纭€瀹夊叏澶达級
+  - `server/auth.py`锛氳璇佹帴鍙ｏ紙register/login/logout/me锛?
+  - `server/files.py`锛氳祫婧愪笌鏂囦欢鎺ュ彛锛堝垱寤?涓婁紶/鍒楄〃/璇︽儏/鏇存柊/鍒犻櫎/涓嬭浇锛?
+  - `server/db.py`锛氭暟鎹簱杩炴帴銆佸垵濮嬪寲涓庤縼绉?
+  - `server/utils.py`锛氬伐鍏峰嚱鏁帮紙nanoid銆乻lug銆丆ookie 閫夐」銆佸竷灏旇В鏋愶級
+  - `server/schemas.py`锛氱被鍨嬪０鏄庯紙JWT 杞借嵎锛?
+  - `server/requirements.txt`锛氬悗绔緷璧栨竻鍗?
+  - 鏁版嵁/鏂囦欢榛樿浣嶇疆锛歚server/data.sqlite`銆乣server/uploads/`
+- 鏈湴寮€鍙?
 
-  - 安装依赖：`python -m pip install -r server/requirements.txt`
-  - 启动后端（开发）：`npm run dev:server`（等价 `python -m uvicorn server.app:app --reload --port 3000`）
-  - 启动前端（开发）：`npm run dev:client`（Vite 代理 `/api` → `http://localhost:3000`）
-- Docker 与部署
+  - 瀹夎渚濊禆锛歚python -m pip install -r server/requirements.txt`
+  - 鍚姩鍚庣锛堝紑鍙戯級锛歚npm run dev:server`锛堢瓑浠?`python -m uvicorn server.app:app --reload --port 3000`锛?
+  - 鍚姩鍓嶇锛堝紑鍙戯級锛歚npm run dev:client`锛圴ite 浠ｇ悊 `/api` 鈫?`http://localhost:3000`锛?
+- Docker 涓庨儴缃?
 
-  - `Dockerfile` 已更新为 Python 后端 + Nginx 前端；Compose 健康检查指向 `http://localhost:3400/api/auth/me`。
-  - 典型命令：`docker build -t msut-auth-system:py .`，`docker-compose up -d`
-  - 卷与路径：`/app/server/uploads`、`/app/server/data.sqlite`
-- 环境变量（与原实现保持一致）
+  - `Dockerfile` 宸叉洿鏂颁负 Python 鍚庣 + Nginx 鍓嶇锛汣ompose 鍋ュ悍妫€鏌ユ寚鍚?`http://localhost:3400/api/auth/me`銆?
+  - 鍏稿瀷鍛戒护锛歚docker build -t msut-auth-system:py .`锛宍docker-compose up -d`
+  - 鍗蜂笌璺緞锛歚/app/server/uploads`銆乣/app/server/data.sqlite`
+- 鐜鍙橀噺锛堜笌鍘熷疄鐜颁繚鎸佷竴鑷达級
 
-  - `PORT`：后端端口（开发 3000，Docker 默认 3400）
-  - `JWT_SECRET`：JWT 密钥（生产必配）
-  - `NODE_ENV`：运行环境（`production` 时默认启用 HTTPS 相关行为）
-  - `PUBLIC_BASE_URL`：用于生成资源分享链接
-  - `HTTPS_ENABLED`：是否启用 HTTPS（决定 Cookie SameSite/secure 与 HSTS）
-  - `COOKIE_DOMAIN`：Cookie 域名（可选）
-- API 兼容性
+  - `PORT`锛氬悗绔鍙ｏ紙寮€鍙?3000锛孌ocker 榛樿 3400锛?
+  - `JWT_SECRET`锛欽WT 瀵嗛挜锛堢敓浜у繀閰嶏級
+  - `NODE_ENV`锛氳繍琛岀幆澧冿紙`production` 鏃堕粯璁ゅ惎鐢?HTTPS 鐩稿叧琛屼负锛?
+  - `PUBLIC_BASE_URL`锛氱敤浜庣敓鎴愯祫婧愬垎浜摼鎺?
+  - `HTTPS_ENABLED`锛氭槸鍚﹀惎鐢?HTTPS锛堝喅瀹?Cookie SameSite/secure 涓?HSTS锛?
+  - `COOKIE_DOMAIN`锛欳ookie 鍩熷悕锛堝彲閫夛級
+- API 鍏煎鎬?
 
-  - 路径与方法保持不变：
-    - `POST /api/auth/register`、`POST /api/auth/login`、`POST /api/auth/logout`、`GET /api/auth/me`
-    - `GET /api/private/ping`（需登录）
-    - `POST /api/resources`（需登录）、`GET /api/resources`、`GET /api/resources/:slug`
-    - `PATCH /api/resources/:id`（需登录）、`DELETE /api/resources/:id`（需登录）
-    - `POST /api/files/upload`（需登录，字段名 `files`，最多 10 个，单文件 50MB）
+  - 璺緞涓庢柟娉曚繚鎸佷笉鍙橈細
+    - `POST /api/auth/register`銆乣POST /api/auth/login`銆乣POST /api/auth/logout`銆乣GET /api/auth/me`
+    - `GET /api/private/ping`锛堥渶鐧诲綍锛?
+    - `POST /api/resources`锛堥渶鐧诲綍锛夈€乣GET /api/resources`銆乣GET /api/resources/:slug`
+    - `PATCH /api/resources/:id`锛堥渶鐧诲綍锛夈€乣DELETE /api/resources/:id`锛堥渶鐧诲綍锛?
+    - `POST /api/files/upload`锛堥渶鐧诲綍锛屽瓧娈靛悕 `files`锛屾渶澶?10 涓紝鍗曟枃浠?50MB锛?
     - `GET /api/files/:id/download`
-  - 错误返回 `{ error: string }`；下载使用 `Content-Disposition: attachment; filename*=` UTF-8 百分号编码。
-- 备注
+  - 閿欒杩斿洖 `{ error: string }`锛涗笅杞戒娇鐢?`Content-Disposition: attachment; filename*=` UTF-8 鐧惧垎鍙风紪鐮併€?
+- 澶囨敞
 
-  - 旧的 TypeScript 服务器代码仍在仓库中，但已不再被使用（开发脚本与 Docker 均使用 Python 版本）。
+  - 鏃х殑 TypeScript 鏈嶅姟鍣ㄤ唬鐮佷粛鍦ㄤ粨搴撲腑锛屼絾宸蹭笉鍐嶈浣跨敤锛堝紑鍙戣剼鏈笌 Docker 鍧囦娇鐢?Python 鐗堟湰锛夈€?
 
-## 🚀 技术栈
+## 馃殌 鎶€鏈爤
 
-### 后端
+### 鍚庣
 
-- **Node.js** 20.18.0 + **Express** 框架
-- **TypeScript** 提供类型安全
-- **SQLite** 数据库 (better-sqlite3)
-- **JWT** 身份认证
-- **bcryptjs** 密码加密
-- **multer** 文件上传处理
+- **Node.js** 20.18.0 + **Express** 妗嗘灦
+- **TypeScript** 鎻愪緵绫诲瀷瀹夊叏
+- **SQLite** 鏁版嵁搴?(better-sqlite3)
+- **JWT** 韬唤璁よ瘉
+- **bcryptjs** 瀵嗙爜鍔犲瘑
+- **multer** 鏂囦欢涓婁紶澶勭悊
 
-### 前端
+### 鍓嶇
 
 - **Vue.js** 3.5.21 + **TypeScript**
-- **Vite** 构建工具
-- **Element Plus** UI 组件库
-- **Pinia** 状态管理
-- **Vue Router** 路由管理
+- **Vite** 鏋勫缓宸ュ叿
+- **Element Plus** UI 缁勪欢搴?
+- **Pinia** 鐘舵€佺鐞?
+- **Vue Router** 璺敱绠＄悊
 
-### 部署
+### 閮ㄧ讲
 
-- **Docker** 容器化部署
-- **Nginx** 反向代理和静态文件服务
-- 支持国内镜像源加速
+- **Docker** 瀹瑰櫒鍖栭儴缃?
+- **Nginx** 鍙嶅悜浠ｇ悊鍜岄潤鎬佹枃浠舵湇鍔?
+- 鏀寔鍥藉唴闀滃儚婧愬姞閫?
 
-## 📦 功能特性
+## 馃摝 鍔熻兘鐗规€?
 
-- ✅ 用户注册/登录/注销
-- ✅ JWT 身份认证
-- ✅ 资源管理系统
-- ✅ 文件上传功能
-- ✅ 响应式设计
-- ✅ Docker 容器化部署
-- ✅ 生产环境优化
+- 鉁?鐢ㄦ埛娉ㄥ唽/鐧诲綍/娉ㄩ攢
+- 鉁?JWT 韬唤璁よ瘉
+- 鉁?璧勬簮绠＄悊绯荤粺
+- 鉁?鏂囦欢涓婁紶鍔熻兘
+- 鉁?鍝嶅簲寮忚璁?
+- 鉁?Docker 瀹瑰櫒鍖栭儴缃?
+- 鉁?鐢熶骇鐜浼樺寲
 
-## 🛠️ 快速开始
+## 馃洜锔?蹇€熷紑濮?
 
-### 环境要求
+### 鐜瑕佹眰
 
 - Node.js 20.18.0+
-- Docker (可选)
+- Docker (鍙€?
 
-### 本地开发
+### 鏈湴寮€鍙?
 
 ```bash
-# 安装依赖
+# 瀹夎渚濊禆
 npm install
 
-# 启动后端开发服务器
+# 鍚姩鍚庣寮€鍙戞湇鍔″櫒
 npm run dev:server
 
-# 启动前端开发服务器
+# 鍚姩鍓嶇寮€鍙戞湇鍔″櫒
 npm run dev:client
 
-# 同时启动前后端
+# 鍚屾椂鍚姩鍓嶅悗绔?
 npm run dev:all
 ```
 
-访问地址：
+璁块棶鍦板潃锛?
 
-- 前端: http://localhost:5173
-- 后端 API: http://localhost:3400
+- 鍓嶇: http://localhost:5173
+- 鍚庣 API: http://localhost:3400
 
-### Docker 部署
+### Docker 閮ㄧ讲
 
-#### 标准构建
+#### 鏍囧噯鏋勫缓
 
 ```bash
-# 构建镜像
+# 鏋勫缓闀滃儚
 docker build -t msut-auth-system:1.0.0 .
 
-# 运行容器
+# 杩愯瀹瑰櫒
 docker run -d \
   --name msut-auth-app \
   -p 1122:80 \
@@ -143,108 +143,108 @@ docker run -d \
   msut-auth-system:1.0.0
 ```
 
-#### 国内镜像源构建（推荐国内用户）
+#### 鍥藉唴闀滃儚婧愭瀯寤猴紙鎺ㄨ崘鍥藉唴鐢ㄦ埛锛?
 
 ```bash
-# 使用国内镜像源构建
+# 浣跨敤鍥藉唴闀滃儚婧愭瀯寤?
 docker build -f Dockerfile.cn -t msut-auth-system:1.0.0-cn .
 
-# 或使用 Docker Compose
+# 鎴栦娇鐢?Docker Compose
 docker-compose up -d
 ```
 
-#### 验证部署
+#### 楠岃瘉閮ㄧ讲
 
 ```bash
-# 检查容器状态
+# 妫€鏌ュ鍣ㄧ姸鎬?
 docker ps
 
-# 测试前端访问
+# 娴嬭瘯鍓嶇璁块棶
 curl http://localhost:1122
 
-# 测试后端API
+# 娴嬭瘯鍚庣API
 curl http://localhost:3400/api/auth/me
 
-# 查看日志
+# 鏌ョ湅鏃ュ織
 docker logs msut-auth-app
 ```
 
-## 📁 项目结构
+## 馃搧 椤圭洰缁撴瀯
 
 ```
-msut主站/
-├── server/                 # 后端代码
-│   ├── src/
-│   │   ├── auth.ts        # 认证逻辑
-│   │   ├── db.ts          # 数据库连接
-│   │   ├── files.ts       # 文件管理
-│   │   └── index.ts       # 入口文件
-│   ├── uploads/           # 上传文件目录
-│   └── package.json
-├── melon-tech-web/        # 前端代码
-│   ├── src/
-│   │   ├── api/           # API 接口
-│   │   ├── components/    # 公共组件
-│   │   ├── router/        # 路由配置
-│   │   ├── stores/        # 状态管理
-│   │   └── views/         # 页面组件
-│   └── package.json
-├── Dockerfile             # Docker 构建文件
-├── Dockerfile.cn          # 国内镜像源版本
-├── docker-compose.yml     # Docker Compose 配置
-└── README.md
+msut涓荤珯/
+鈹溾攢鈹€ server/                 # 鍚庣浠ｇ爜
+鈹?  鈹溾攢鈹€ src/
+鈹?  鈹?  鈹溾攢鈹€ auth.ts        # 璁よ瘉閫昏緫
+鈹?  鈹?  鈹溾攢鈹€ db.ts          # 鏁版嵁搴撹繛鎺?
+鈹?  鈹?  鈹溾攢鈹€ files.ts       # 鏂囦欢绠＄悊
+鈹?  鈹?  鈹斺攢鈹€ index.ts       # 鍏ュ彛鏂囦欢
+鈹?  鈹溾攢鈹€ uploads/           # 涓婁紶鏂囦欢鐩綍
+鈹?  鈹斺攢鈹€ package.json
+鈹溾攢鈹€ melon-tech-web/        # 鍓嶇浠ｇ爜
+鈹?  鈹溾攢鈹€ src/
+鈹?  鈹?  鈹溾攢鈹€ api/           # API 鎺ュ彛
+鈹?  鈹?  鈹溾攢鈹€ components/    # 鍏叡缁勪欢
+鈹?  鈹?  鈹溾攢鈹€ router/        # 璺敱閰嶇疆
+鈹?  鈹?  鈹溾攢鈹€ stores/        # 鐘舵€佺鐞?
+鈹?  鈹?  鈹斺攢鈹€ views/         # 椤甸潰缁勪欢
+鈹?  鈹斺攢鈹€ package.json
+鈹溾攢鈹€ Dockerfile             # Docker 鏋勫缓鏂囦欢
+鈹溾攢鈹€ Dockerfile.cn          # 鍥藉唴闀滃儚婧愮増鏈?
+鈹溾攢鈹€ docker-compose.yml     # Docker Compose 閰嶇疆
+鈹斺攢鈹€ README.md
 ```
 
-## 🔧 环境变量
+## 馃敡 鐜鍙橀噺
 
-### 后端环境变量
+### 鍚庣鐜鍙橀噺
 
-- `PORT`: 服务器端口 (默认: 3400)
-- `JWT_SECRET`: JWT 密钥 (生产环境必须修改)
-- `NODE_ENV`: 运行环境 (development/production)
-- `PUBLIC_BASE_URL`: 公共访问地址
-- `HTTPS_ENABLED`: 是否启用HTTPS (默认: false)
-- `COOKIE_DOMAIN`: Cookie域名设置 (可选)
+- `PORT`: 鏈嶅姟鍣ㄧ鍙?(榛樿: 3400)
+- `JWT_SECRET`: JWT 瀵嗛挜 (鐢熶骇鐜蹇呴』淇敼)
+- `NODE_ENV`: 杩愯鐜 (development/production)
+- `PUBLIC_BASE_URL`: 鍏叡璁块棶鍦板潃
+- `HTTPS_ENABLED`: 鏄惁鍚敤HTTPS (榛樿: false)
+- `COOKIE_DOMAIN`: Cookie鍩熷悕璁剧疆 (鍙€?
 
-### 前端环境变量
+### 鍓嶇鐜鍙橀噺
 
-- `VITE_PUBLIC_BASE_URL`: API 基础地址
+- `VITE_PUBLIC_BASE_URL`: API 鍩虹鍦板潃
 
-## 🔐 安全特性
+## 馃攼 瀹夊叏鐗规€?
 
-- ✅ 密码bcrypt加密存储
-- ✅ JWT token身份验证
-- ✅ Helmet安全中间件
-- ✅ 非root用户运行容器
-- ✅ 只读文件系统权限控制
+- 鉁?瀵嗙爜bcrypt鍔犲瘑瀛樺偍
+- 鉁?JWT token韬唤楠岃瘉
+- 鉁?Helmet瀹夊叏涓棿浠?
+- 鉁?闈瀝oot鐢ㄦ埛杩愯瀹瑰櫒
+- 鉁?鍙鏂囦欢绯荤粺鏉冮檺鎺у埗
 
-## 🚀 生产环境部署
+## 馃殌 鐢熶骇鐜閮ㄧ讲
 
-1. **修改JWT密钥**
+1. **淇敼JWT瀵嗛挜**
 
    ```bash
    export JWT_SECRET=your-very-secure-random-secret-key
    ```
-2. **使用Docker Compose部署**
+2. **浣跨敤Docker Compose閮ㄧ讲**
 
    ```bash
    docker-compose up -d
    ```
-3. **配置反向代理**（可选）
+3. **閰嶇疆鍙嶅悜浠ｇ悊**锛堝彲閫夛級
 
-   - 使用 Nginx/Apache 作为前端代理
-   - 配置 HTTPS 证书
-   - 设置域名解析
+   - 浣跨敤 Nginx/Apache 浣滀负鍓嶇浠ｇ悊
+   - 閰嶇疆 HTTPS 璇佷功
+   - 璁剧疆鍩熷悕瑙ｆ瀽
 
-## 🧩 DSL 生成器（DSL → .melsave）
+## 馃З DSL 鐢熸垚鍣紙DSL 鈫?.melsave锛?
 
-本项目已集成“甜瓜游乐场”DSL 到 .melsave 的在线生成工具：
+鏈」鐩凡闆嗘垚鈥滅敎鐡滄父涔愬満鈥滵SL 鍒?.melsave 鐨勫湪绾跨敓鎴愬伐鍏凤細
 
-- 前端入口：导航栏中的“DSL 工具”，无需登录即可使用。
-- 后端接口：`POST /api/melsave/generate`
-  - 请求体：`{ "dsl": "..." }`，内容为 input.py 的 DSL 文本。
-  - 响应：`.melsave` 文件字节流；`Content-Disposition` 包含 UTF-8 百分号编码的文件名。
-- 开发调试示例：
+- 鍓嶇鍏ュ彛锛氬鑸爮涓殑鈥淒SL 宸ュ叿鈥濓紝鏃犻渶鐧诲綍鍗冲彲浣跨敤銆?
+- 鍚庣鎺ュ彛锛歚POST /api/melsave/generate`
+  - 璇锋眰浣擄細`{ "dsl": "..." }`锛屽唴瀹逛负 input.py 鐨?DSL 鏂囨湰銆?
+  - 鍝嶅簲锛歚.melsave` 鏂囦欢瀛楄妭娴侊紱`Content-Disposition` 鍖呭惈 UTF-8 鐧惧垎鍙风紪鐮佺殑鏂囦欢鍚嶃€?
+- 寮€鍙戣皟璇曠ず渚嬶細
   ```bash
   curl -X POST http://localhost:3000/api/melsave/generate \
     -H "Content-Type: application/json" \
@@ -252,80 +252,78 @@ msut主站/
     -o out.melsave
   ```
 
-实现说明：后端在每次请求时会将生成器目录复制到临时工作目录，写入 DSL 为 `input.py` 并运行流水线，完成后读取生成的 `.melsave` 返回并清理临时目录，避免并发写入冲突。
+瀹炵幇璇存槑锛氬悗绔湪姣忔璇锋眰鏃朵細灏嗙敓鎴愬櫒鐩綍澶嶅埗鍒颁复鏃跺伐浣滅洰褰曪紝鍐欏叆 DSL 涓?`input.py` 骞惰繍琛屾祦姘寸嚎锛屽畬鎴愬悗璇诲彇鐢熸垚鐨?`.melsave` 杩斿洖骞舵竻鐞嗕复鏃剁洰褰曪紝閬垮厤骞跺彂鍐欏叆鍐茬獊銆?
 
-## 📋 API 接口
+## 馃搵 API 鎺ュ彛
 
-### 认证接口
+### 璁よ瘉鎺ュ彛
 
-- `POST /api/auth/register` - 用户注册
-- `POST /api/auth/login` - 用户登录
-- `POST /api/auth/logout` - 用户注销
-- `GET /api/auth/me` - 获取当前用户信息
+- `POST /api/auth/register` - 鐢ㄦ埛娉ㄥ唽
+- `POST /api/auth/login` - 鐢ㄦ埛鐧诲綍
+- `POST /api/auth/logout` - 鐢ㄦ埛娉ㄩ攢
+- `GET /api/auth/me` - 鑾峰彇褰撳墠鐢ㄦ埛淇℃伅
 
-### 资源接口
+### 璧勬簮鎺ュ彛
 
-- `GET /api/resources` - 获取资源列表
-- `POST /api/resources` - 创建资源（需要认证）
-- `GET /api/resources/:slug` - 获取资源详情
-- `POST /api/files/upload` - 上传文件（需要认证）
-- `GET /api/files/:id/download` - 下载文件
+- `GET /api/resources` - 鑾峰彇璧勬簮鍒楄〃
+- `POST /api/resources` - 鍒涘缓璧勬簮锛堥渶瑕佽璇侊級
+- `GET /api/resources/:slug` - 鑾峰彇璧勬簮璇︽儏
+- `POST /api/files/upload` - 涓婁紶鏂囦欢锛堥渶瑕佽璇侊級
+- `GET /api/files/:id/download` - 涓嬭浇鏂囦欢
 
-### 文件点赞（新增）
+### 鏂囦欢鐐硅禐锛堟柊澧烇級
 
-- 仅登录用户可点赞，访客仅可查看点赞数。
-- 接口：
-  - `GET /api/files/likes?ids=1,2,3` 返回 `{ items: [{ id, likes, liked }] }`
-  - `POST /api/files/:id/like` 点赞（幂等）返回 `{ liked: true, likes }`
-  - `DELETE /api/files/:id/like` 取消点赞返回 `{ liked: false, likes }`
-  - 前端资源详情页的文件卡片显示点赞数量并提供点赞按钮。
+- 浠呯櫥褰曠敤鎴峰彲鐐硅禐锛岃瀹粎鍙煡鐪嬬偣璧炴暟銆?- 鎺ュ彛锛?  - `GET /api/files/likes?ids=1,2,3` 杩斿洖 `{ items: [{ id, likes, liked }] }`
+  - `POST /api/files/:id/like` 鐐硅禐锛堝箓绛夛級杩斿洖 `{ liked: true, likes }`
+  - `DELETE /api/files/:id/like` 鍙栨秷鐐硅禐杩斿洖 `{ liked: false, likes }`
+  - 鍓嶇璧勬簮璇︽儏椤电殑鏂囦欢鍗＄墖鏄剧ず鐐硅禐鏁伴噺骞舵彁渚涚偣璧炴寜閽€?
+## 馃摑 寮€鍙戣鏄?
 
-## 📝 开发说明
+### 鏁版嵁搴?
 
-### 数据库
+椤圭洰浣跨敤 SQLite 鏁版嵁搴擄紝鏁版嵁鏂囦欢浣嶄簬 `server/data.sqlite`銆傞娆¤繍琛屼細鑷姩鍒涘缓鎵€闇€鐨勮〃缁撴瀯銆?
 
-项目使用 SQLite 数据库，数据文件位于 `server/data.sqlite`。首次运行会自动创建所需的表结构。
+### 鏂囦欢涓婁紶
 
-### 文件上传
+涓婁紶鐨勬枃浠跺瓨鍌ㄥ湪 `server/uploads/` 鐩綍锛屽缓璁湪鐢熶骇鐜涓寕杞藉閮ㄥ瓨鍌ㄥ嵎銆?
 
-上传的文件存储在 `server/uploads/` 目录，建议在生产环境中挂载外部存储卷。
+### 鏋勫缓浼樺寲
 
-### 构建优化
+- 澶氶樁娈礑ocker鏋勫缓锛屾渶灏忓寲闀滃儚浣撶Н
+- 鍓嶇璧勬簮鍘嬬缉鍜岀紦瀛樹紭鍖?
+- 鍚庣渚濊禆鐢熶骇鐜绮剧畝
 
-- 多阶段Docker构建，最小化镜像体积
-- 前端资源压缩和缓存优化
-- 后端依赖生产环境精简
+## 馃 璐＄尞鎸囧崡
 
-## 🤝 贡献指南
+1. Fork 椤圭洰
+2. 鍒涘缓鐗规€у垎鏀?(`git checkout -b feature/amazing-feature`)
+3. 鎻愪氦鏇存敼 (`git commit -m 'Add some amazing feature'`)
+4. 鎺ㄩ€佸埌鍒嗘敮 (`git push origin feature/amazing-feature`)
+5. 鍒涘缓 Pull Request
 
-1. Fork 项目
-2. 创建特性分支 (`git checkout -b feature/amazing-feature`)
-3. 提交更改 (`git commit -m 'Add some amazing feature'`)
-4. 推送到分支 (`git push origin feature/amazing-feature`)
-5. 创建 Pull Request
+## 馃悰 甯歌闂
 
-## 🐛 常见问题
+### Q: 瀹瑰櫒鍚姩澶辫触鎬庝箞鍔烇紵
 
-### Q: 容器启动失败怎么办？
+A: 妫€鏌ョ鍙?122鍜?400鏄惁琚崰鐢紝鏌ョ湅瀹瑰櫒鏃ュ織锛歚docker logs msut-auth-app`
 
-A: 检查端口1122和3400是否被占用，查看容器日志：`docker logs msut-auth-app`
+### Q: 鍓嶇椤甸潰绌虹櫧鎬庝箞鍔烇紵
 
-### Q: 前端页面空白怎么办？
+A: 纭鏋勫缓鏄惁鎴愬姛锛屾鏌ユ祻瑙堝櫒鎺у埗鍙伴敊璇俊鎭?
 
-A: 确认构建是否成功，检查浏览器控制台错误信息
+### Q: 鏂囦欢涓婁紶澶辫触鎬庝箞鍔烇紵
 
-### Q: 文件上传失败怎么办？
+A: 妫€鏌ヤ笂浼犵洰褰曟潈闄愬拰纾佺洏绌洪棿锛岀‘璁ocker鍗锋寕杞芥纭?
 
-A: 检查上传目录权限和磁盘空间，确认Docker卷挂载正确
+### Q: 鐧诲綍鐘舵€佹棤娉曠淮鎸佹€庝箞鍔烇紵
 
-### Q: 登录状态无法维持怎么办？
+A: 妫€鏌TTPS_ENABLED鐜鍙橀噺璁剧疆锛屽鏋滀娇鐢℉TTP璁剧疆涓篺alse锛孒TTPS璁剧疆涓簍rue銆傚悓鏃剁‘璁OOKIE_DOMAIN閰嶇疆鏄惁姝ｇ‘銆?
 
-A: 检查HTTPS_ENABLED环境变量设置，如果使用HTTP设置为false，HTTPS设置为true。同时确认COOKIE_DOMAIN配置是否正确。
+## 馃搫 璁稿彲璇?
 
-## 📄 许可证
+MIT License - 璇﹁ [LICENSE](LICENSE) 鏂囦欢
 
-MIT License - 详见 [LICENSE](LICENSE) 文件
+## 馃啒 鏀寔
 
-## 🆘 支持
+濡傛湁闂锛岃鍦?GitHub Issues 涓彁浜ら棶棰樻弿杩般€?
 
-如有问题，请在 GitHub Issues 中提交问题描述。

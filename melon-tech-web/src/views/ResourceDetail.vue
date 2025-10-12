@@ -12,6 +12,10 @@
       <div class="share">
         <el-input v-model="data.shareUrl" readonly style="max-width: 520px" />
         <el-button @click="copy(data.shareUrl)">复制链接</el-button>
+        <div class="likes-bar">
+          <span class="likes">❤ {{ resourceLike?.likes || 0 }}</span>
+          <el-button v-if="auth.user" size="small" @click="toggleResourceLike()">{{ resourceLike?.liked ? '已赞' : '点赞' }}</el-button>
+        </div>
       </div>
     </el-card>
 
@@ -37,17 +41,9 @@
             <el-card v-for="f in data.files" :key="f.id" shadow="never" class="file">
               <div class="file-row">
                 <div class="name" :title="f.original_name">{{ f.original_name }}</div>
-                <div class="ops">
-                  <span class="likes" :title="(likesMap[f.id]?.likes || 0) + ' 次点赞'">❤ {{ likesMap[f.id]?.likes || 0 }}</span>
-                  <el-button size="small" type="primary" @click="download(f.id)">下载</el-button>
-                </div>
+                <el-button size="small" type="primary" @click="download(f.id)">下载</el-button>
               </div>
-              <div class="meta">
-                {{ prettySize(f.size) }} · {{ f.mime || 'unknown' }}
-                <template v-if="auth.user">
-                  <el-button link type="primary" @click="toggleLike(f.id)">{{ likesMap[f.id]?.liked ? '已赞' : '点赞' }}</el-button>
-                </template>
-              </div>
+              <div class="meta">{{ prettySize(f.size) }} · {{ f.mime || 'unknown' }}</div>
             </el-card>
           </el-space>
         </el-card>
@@ -65,13 +61,13 @@ import { onMounted, ref } from 'vue'
 import { getResource } from '../api/resources'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getFileLikes, likeFile, unlikeFile, type FileLikeInfo } from '../api/likes'
+import { getResourceLikes, likeResource, unlikeResource, type LikeInfo } from '../api/likes'
 import { useAuth } from '../stores/auth'
 
 const route = useRoute()
 const data = ref<any>(null)
 const auth = useAuth()
-const likesMap = ref<Record<number, FileLikeInfo>>({})
+const resourceLike = ref<LikeInfo | null>(null)
 
 function prettySize(n: number) {
   if (!n && n !== 0) return ''
@@ -83,11 +79,10 @@ function prettySize(n: number) {
 
 async function fetch() {
   data.value = await getResource(route.params.slug as string)
-  const ids = (data.value?.files || []).map((f: any) => f.id) as number[]
-  const items = await getFileLikes(ids)
-  const m: Record<number, FileLikeInfo> = {}
-  items.forEach(i => { m[i.id] = i })
-  likesMap.value = m
+  if (data.value?.id) {
+    const items = await getResourceLikes([data.value.id])
+    resourceLike.value = items[0] || { id: data.value.id, likes: 0, liked: false }
+  }
 }
 function copy(text: string) {
   navigator.clipboard.writeText(text).then(() => ElMessage.success('链接已复制'))
@@ -96,19 +91,20 @@ function download(fileId: number) {
   // 直接打开后端公开下载接口
   window.open(`/api/files/${fileId}/download`, '_blank')
 }
-async function toggleLike(fileId: number) {
+async function toggleResourceLike() {
   try {
     if (!auth.user) {
       ElMessage.warning('请先登录')
       return
     }
-    const current = likesMap.value[fileId]
-    if (current?.liked) {
-      const r = await unlikeFile(fileId)
-      likesMap.value[fileId] = { id: fileId, likes: r.likes, liked: r.liked }
+    const current = resourceLike.value
+    if (!current) return
+    if (current.liked) {
+      const r = await unlikeResource(current.id)
+      resourceLike.value = { id: current.id, likes: r.likes, liked: r.liked }
     } else {
-      const r = await likeFile(fileId)
-      likesMap.value[fileId] = { id: fileId, likes: r.likes, liked: r.liked }
+      const r = await likeResource(current.id)
+      resourceLike.value = { id: current.id, likes: r.likes, liked: r.liked }
     }
   } catch (e: any) {
     const msg = e?.response?.data?.error || '操作失败'
@@ -127,7 +123,7 @@ onMounted(fetch)
 .file { border-radius: 12px; }
 .file-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 70%; }
-.ops { display: flex; align-items: center; gap: 8px; }
+.likes-bar { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 .likes { color: var(--el-text-color-secondary); font-size: 12px; }
 .meta { color: var(--el-text-color-secondary); font-size: 12px; margin-top: 4px; }
 .mt-16 { margin-top: 16px; }

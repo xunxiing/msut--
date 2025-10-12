@@ -22,10 +22,10 @@ Scope: This AGENTS.md applies to the entire repository.
 
 Additional tool routes (non-breaking additions):
 - DSL generator (anonymous): `POST /api/melsave/generate` with JSON `{ dsl: string }` returns a `.melsave` file stream with UTF‑8 filename header.
-- File likes (authenticated):
-  - `GET /api/files/likes?ids=1,2,3` → `{ items: [{ id, likes, liked }] }`
-  - `POST /api/files/:id/like` → like a file (idempotent)
-  - `DELETE /api/files/:id/like` → remove like
+- Resource likes (authenticated):
+  - `GET /api/resources/likes?ids=1,2,3` → `{ items: [{ id, likes, liked }] }`
+  - `POST /api/resources/:id/like` → like a resource (idempotent)
+  - `DELETE /api/resources/:id/like` → remove like
 
 ## Environment & Config
 - `PORT` (dev 3000, Docker 3400), `JWT_SECRET`, `NODE_ENV`, `PUBLIC_BASE_URL`, `HTTPS_ENABLED`, `COOKIE_DOMAIN`.

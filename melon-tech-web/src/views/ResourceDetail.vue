@@ -1,7 +1,7 @@
 <template>
   <div class="container" v-if="data">
     <el-breadcrumb separator="/">
-      <el-breadcrumb-item @click="$router.push('/resources')" style="cursor:pointer">文件集</el-breadcrumb-item>
+      <el-breadcrumb-item @click="$router.push('/resources')" style="cursor:pointer">文件</el-breadcrumb-item>
       <el-breadcrumb-item>{{ data.title }}</el-breadcrumb-item>
     </el-breadcrumb>
 
@@ -13,8 +13,13 @@
         <el-input v-model="data.shareUrl" readonly style="max-width: 520px" />
         <el-button @click="copy(data.shareUrl)">复制链接</el-button>
         <div class="likes-bar">
-          <span class="likes">❤ {{ resourceLike?.likes || 0 }}</span>
-          <el-button v-if="auth.user" size="small" @click="toggleResourceLike()">{{ resourceLike?.liked ? '已赞' : '点赞' }}</el-button>
+          <button class="like-btn" :class="{ liked: !!resourceLike?.liked }" @click="toggleResourceLike" :title="resourceLike?.liked ? '已赞' : '点赞'">
+            <svg class="like-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path :fill="resourceLike?.liked ? '#f44336' : 'currentColor'" d="M12.1 21.35l-1.1-1.02C5.14 14.88 2 12.06 2 8.5 2 6 4 4 6.5 4c1.54 0 3.04.81 3.9 2.09C11.46 4.81 12.96 4 14.5 4 17 4 19 6 19 8.5c0 3.56-3.14 6.38-8.9 11.83l-1.0 1.02z" />
+            </svg>
+            <span class="count">{{ resourceLike?.likes || 0 }}</span>
+          </button>
+          <el-button v-if="auth.user" size="large" class="like-action" @click="toggleResourceLike">{{ resourceLike?.liked ? '已赞' : '点赞' }}</el-button>
         </div>
       </div>
     </el-card>
@@ -50,7 +55,7 @@
       </el-col>
     </el-row>
 
-    <el-alert type="info" show-icon title="未登录也能下载" description="分享给任何人，对方打开此页即可自由下载。" class="mt-16" />
+    <el-alert type="info" show-icon title="未登录也能下载" description="分享给任何人，对方打开此页即可自由下载" class="mt-16" />
   </div>
 
   <el-skeleton v-else animated :rows="6" class="container" />
@@ -123,8 +128,13 @@ onMounted(fetch)
 .file { border-radius: 12px; }
 .file-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 70%; }
-.likes-bar { display: flex; align-items: center; gap: 8px; margin-left: auto; }
-.likes { color: var(--el-text-color-secondary); font-size: 12px; }
+.likes-bar { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.like-btn { display: inline-flex; align-items: center; gap: 6px; background: transparent; border: none; cursor: pointer; padding: 2px 6px; color: var(--el-text-color-secondary); }
+.like-btn .like-icon { width: 28px; height: 28px; }
+.like-btn .count { font-size: 14px; }
+.like-btn.liked { color: #f44336; }
 .meta { color: var(--el-text-color-secondary); font-size: 12px; margin-top: 4px; }
 .mt-16 { margin-top: 16px; }
+.like-action { transform: scale(1.2); transform-origin: center left; }
 </style>
+

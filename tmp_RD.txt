@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <div class="container" v-if="data">
     <el-breadcrumb separator="/">
-      <el-breadcrumb-item @click="$router.push('/resources')" style="cursor:pointer">文件集</el-breadcrumb-item>
+      <el-breadcrumb-item @click="$router.push('/resources')" style="cursor:pointer">鏂囦欢闆?/el-breadcrumb-item>
       <el-breadcrumb-item>{{ data.title }}</el-breadcrumb-item>
     </el-breadcrumb>
 
@@ -11,50 +11,42 @@
 
       <div class="share">
         <el-input v-model="data.shareUrl" readonly style="max-width: 520px" />
-        <el-button @click="copy(data.shareUrl)">复制链接</el-button>
+        <el-button @click="copy(data.shareUrl)">澶嶅埗閾炬帴</el-button>
       </div>
     </el-card>
 
     <el-row :gutter="16">
       <el-col :xs="24" :md="16">
         <el-card shadow="hover">
-          <template #header>使用方法</template>
+          <template #header>浣跨敤鏂规硶</template>
           <div class="usage" v-if="data.usage">{{ data.usage }}</div>
           <template v-else>
-            <el-empty description="暂无使用说明" />
+            <el-empty description="鏆傛棤浣跨敤璇存槑" />
           </template>
           <template #footer>
-            <small>创建时间：{{ data.created_at }}</small>
+            <small>鍒涘缓鏃堕棿锛歿{ data.created_at }}</small>
           </template>
         </el-card>
       </el-col>
 
       <el-col :xs="24" :md="8">
         <el-card shadow="hover">
-          <template #header>文件</template>
-          <el-empty v-if="!data.files?.length" description="暂无文件" />
+          <template #header>鏂囦欢</template>
+          <el-empty v-if="!data.files?.length" description="鏆傛棤鏂囦欢" />
           <el-space v-else direction="vertical" alignment="stretch" style="width:100%">
             <el-card v-for="f in data.files" :key="f.id" shadow="never" class="file">
               <div class="file-row">
                 <div class="name" :title="f.original_name">{{ f.original_name }}</div>
-                <div class="ops">
-                  <span class="likes" :title="(likesMap[f.id]?.likes || 0) + ' 次点赞'">❤ {{ likesMap[f.id]?.likes || 0 }}</span>
-                  <el-button size="small" type="primary" @click="download(f.id)">下载</el-button>
-                </div>
+                <el-button size="small" type="primary" @click="download(f.id)">涓嬭浇</el-button>
               </div>
-              <div class="meta">
-                {{ prettySize(f.size) }} · {{ f.mime || 'unknown' }}
-                <template v-if="auth.user">
-                  <el-button link type="primary" @click="toggleLike(f.id)">{{ likesMap[f.id]?.liked ? '已赞' : '点赞' }}</el-button>
-                </template>
-              </div>
+              <div class="meta">{{ prettySize(f.size) }} 路 {{ f.mime || 'unknown' }}</div>
             </el-card>
           </el-space>
         </el-card>
       </el-col>
     </el-row>
 
-    <el-alert type="info" show-icon title="未登录也能下载" description="分享给任何人，对方打开此页即可自由下载。" class="mt-16" />
+    <el-alert type="info" show-icon title="鏈櫥褰曚篃鑳戒笅杞? description="鍒嗕韩缁欎换浣曚汉锛屽鏂规墦寮€姝ら〉鍗冲彲鑷敱涓嬭浇銆? class="mt-16" />
   </div>
 
   <el-skeleton v-else animated :rows="6" class="container" />
@@ -65,13 +57,9 @@ import { onMounted, ref } from 'vue'
 import { getResource } from '../api/resources'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getFileLikes, likeFile, unlikeFile, type FileLikeInfo } from '../api/likes'
-import { useAuth } from '../stores/auth'
 
 const route = useRoute()
 const data = ref<any>(null)
-const auth = useAuth()
-const likesMap = ref<Record<number, FileLikeInfo>>({})
 
 function prettySize(n: number) {
   if (!n && n !== 0) return ''
@@ -83,37 +71,13 @@ function prettySize(n: number) {
 
 async function fetch() {
   data.value = await getResource(route.params.slug as string)
-  const ids = (data.value?.files || []).map((f: any) => f.id) as number[]
-  const items = await getFileLikes(ids)
-  const m: Record<number, FileLikeInfo> = {}
-  items.forEach(i => { m[i.id] = i })
-  likesMap.value = m
 }
 function copy(text: string) {
-  navigator.clipboard.writeText(text).then(() => ElMessage.success('链接已复制'))
+  navigator.clipboard.writeText(text).then(() => ElMessage.success('閾炬帴宸插鍒?))
 }
 function download(fileId: number) {
-  // 直接打开后端公开下载接口
+  // 鐩存帴鎵撳紑鍚庣鍏紑涓嬭浇鎺ュ彛
   window.open(`/api/files/${fileId}/download`, '_blank')
-}
-async function toggleLike(fileId: number) {
-  try {
-    if (!auth.user) {
-      ElMessage.warning('请先登录')
-      return
-    }
-    const current = likesMap.value[fileId]
-    if (current?.liked) {
-      const r = await unlikeFile(fileId)
-      likesMap.value[fileId] = { id: fileId, likes: r.likes, liked: r.liked }
-    } else {
-      const r = await likeFile(fileId)
-      likesMap.value[fileId] = { id: fileId, likes: r.likes, liked: r.liked }
-    }
-  } catch (e: any) {
-    const msg = e?.response?.data?.error || '操作失败'
-    ElMessage.error(msg)
-  }
 }
 onMounted(fetch)
 </script>
@@ -127,8 +91,6 @@ onMounted(fetch)
 .file { border-radius: 12px; }
 .file-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 70%; }
-.ops { display: flex; align-items: center; gap: 8px; }
-.likes { color: var(--el-text-color-secondary); font-size: 12px; }
 .meta { color: var(--el-text-color-secondary); font-size: 12px; margin-top: 4px; }
 .mt-16 { margin-top: 16px; }
 </style>

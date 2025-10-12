@@ -261,6 +261,73 @@ def delete_resource(request: Request, rid: int):
     return {"ok": True}
 
 
+@router.get("/api/files/likes")
+def get_file_likes(request: Request, ids: str = Query(default="")):
+    ids = (ids or "").strip()
+    if not ids:
+        return {"items": []}
+    try:
+        file_ids = [int(x) for x in ids.split(",") if x.strip().isdigit()]
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "参数错误"})
+    if not file_ids:
+        return {"items": []}
+    conn = get_connection()
+    cur = conn.cursor()
+    # Build dynamic placeholders for IN clause
+    ph = ",".join(["?"] * len(file_ids))
+    counts = cur.execute(
+        f"SELECT file_id, COUNT(1) AS c FROM resource_file_likes WHERE file_id IN ({ph}) GROUP BY file_id",
+        tuple(file_ids),
+    ).fetchall()
+    count_map = {int(r["file_id"]): int(r["c"]) for r in counts}
+    uid = _require_user_id(request)
+    liked_set = set()
+    if uid is not None:
+        liked_rows = cur.execute(
+            f"SELECT file_id FROM resource_file_likes WHERE user_id = ? AND file_id IN ({ph})",
+            (uid, *file_ids),
+        ).fetchall()
+        liked_set = {int(r["file_id"]) for r in liked_rows}
+    items = []
+    for fid in file_ids:
+        items.append({"id": fid, "likes": int(count_map.get(fid, 0)), "liked": fid in liked_set})
+    return {"items": items}
+
+
+@router.post("/api/files/{fid}/like")
+def like_file(request: Request, fid: int):
+    uid = _require_user_id(request)
+    if uid is None:
+        return JSONResponse(status_code=401, content={"error": "未登录"})
+    conn = get_connection()
+    cur = conn.cursor()
+    exists = cur.execute("SELECT id FROM resource_files WHERE id = ?", (fid,)).fetchone()
+    if not exists:
+        return JSONResponse(status_code=404, content={"error": "文件不存在"})
+    # idempotent like
+    cur.execute("INSERT OR IGNORE INTO resource_file_likes (file_id, user_id) VALUES (?, ?)", (fid, uid))
+    conn.commit()
+    total = cur.execute("SELECT COUNT(1) as c FROM resource_file_likes WHERE file_id = ?", (fid,)).fetchone()["c"]
+    return {"liked": True, "likes": int(total)}
+
+
+@router.delete("/api/files/{fid}/like")
+def unlike_file(request: Request, fid: int):
+    uid = _require_user_id(request)
+    if uid is None:
+        return JSONResponse(status_code=401, content={"error": "未登录"})
+    conn = get_connection()
+    cur = conn.cursor()
+    exists = cur.execute("SELECT id FROM resource_files WHERE id = ?", (fid,)).fetchone()
+    if not exists:
+        return JSONResponse(status_code=404, content={"error": "文件不存在"})
+    cur.execute("DELETE FROM resource_file_likes WHERE file_id = ? AND user_id = ?", (fid, uid))
+    conn.commit()
+    total = cur.execute("SELECT COUNT(1) as c FROM resource_file_likes WHERE file_id = ?", (fid,)).fetchone()["c"]
+    return {"liked": False, "likes": int(total)}
+
+
 @router.get("/api/resources/{slug}")
 def get_resource(slug: str):
     conn = get_connection()

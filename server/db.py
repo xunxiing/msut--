@@ -120,6 +120,17 @@ def run_migrations(conn: Optional[sqlite3.Connection] = None) -> None:
               created_at TEXT NOT NULL DEFAULT (datetime('now')),
               FOREIGN KEY (resource_id) REFERENCES resources(id) ON DELETE CASCADE
             );
+
+            -- Per-file likes (one like per user per file)
+            CREATE TABLE IF NOT EXISTS resource_file_likes (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              file_id INTEGER NOT NULL,
+              user_id INTEGER NOT NULL,
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              UNIQUE(file_id, user_id),
+              FOREIGN KEY (file_id) REFERENCES resource_files(id) ON DELETE CASCADE,
+              FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
             """
         )
         conn.commit()

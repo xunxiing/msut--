@@ -9,16 +9,17 @@
 本项目的后端已从 Node.js + Express 完整迁移为 Python + FastAPI，API 路径、请求和响应结构保持不变，前端无需改动即可工作。
 
 - 核心要点
+
   - 替换原 `server/src/*.ts` 实现，新增 Python 代码于 `server/` 目录。
   - 行为一致：鉴权、Cookie（SameSite/secure）、分页、错误返回、下载响应头均与原实现对齐。
   - 静态上传目录仍为 `/uploads`，公开访问、长缓存。
   - SQLite 结构保持不变，保留从 `email` → `username` 的自动迁移。
-
 - 新后端技术栈
+
   - Python 3.11+、FastAPI、Uvicorn
   - SQLite（`sqlite3`）、PyJWT、bcrypt、python-multipart
-
 - 关键文件（后端）
+
   - `server/app.py`：应用入口（挂载路由与静态目录、启动迁移、基础安全头）
   - `server/auth.py`：认证接口（register/login/logout/me）
   - `server/files.py`：资源与文件接口（创建/上传/列表/详情/更新/删除/下载）
@@ -27,26 +28,26 @@
   - `server/schemas.py`：类型声明（JWT 载荷）
   - `server/requirements.txt`：后端依赖清单
   - 数据/文件默认位置：`server/data.sqlite`、`server/uploads/`
-
 - 本地开发
+
   - 安装依赖：`python -m pip install -r server/requirements.txt`
   - 启动后端（开发）：`npm run dev:server`（等价 `python -m uvicorn server.app:app --reload --port 3000`）
   - 启动前端（开发）：`npm run dev:client`（Vite 代理 `/api` → `http://localhost:3000`）
-
 - Docker 与部署
+
   - `Dockerfile` 已更新为 Python 后端 + Nginx 前端；Compose 健康检查指向 `http://localhost:3400/api/auth/me`。
   - 典型命令：`docker build -t msut-auth-system:py .`，`docker-compose up -d`
   - 卷与路径：`/app/server/uploads`、`/app/server/data.sqlite`
-
 - 环境变量（与原实现保持一致）
+
   - `PORT`：后端端口（开发 3000，Docker 默认 3400）
   - `JWT_SECRET`：JWT 密钥（生产必配）
   - `NODE_ENV`：运行环境（`production` 时默认启用 HTTPS 相关行为）
   - `PUBLIC_BASE_URL`：用于生成资源分享链接
   - `HTTPS_ENABLED`：是否启用 HTTPS（决定 Cookie SameSite/secure 与 HSTS）
   - `COOKIE_DOMAIN`：Cookie 域名（可选）
-
 - API 兼容性
+
   - 路径与方法保持不变：
     - `POST /api/auth/register`、`POST /api/auth/login`、`POST /api/auth/logout`、`GET /api/auth/me`
     - `GET /api/private/ping`（需登录）
@@ -55,14 +56,14 @@
     - `POST /api/files/upload`（需登录，字段名 `files`，最多 10 个，单文件 50MB）
     - `GET /api/files/:id/download`
   - 错误返回 `{ error: string }`；下载使用 `Content-Disposition: attachment; filename*=` UTF-8 百分号编码。
-
 - 备注
+
   - 旧的 TypeScript 服务器代码仍在仓库中，但已不再被使用（开发脚本与 Docker 均使用 Python 版本）。
-  - 如需彻底移除旧代码，请提交需求，我们会在清理前再次核对前端依赖与部署流程。
 
 ## 🚀 技术栈
 
 ### 后端
+
 - **Node.js** 20.18.0 + **Express** 框架
 - **TypeScript** 提供类型安全
 - **SQLite** 数据库 (better-sqlite3)
@@ -71,6 +72,7 @@
 - **multer** 文件上传处理
 
 ### 前端
+
 - **Vue.js** 3.5.21 + **TypeScript**
 - **Vite** 构建工具
 - **Element Plus** UI 组件库
@@ -78,6 +80,7 @@
 - **Vue Router** 路由管理
 
 ### 部署
+
 - **Docker** 容器化部署
 - **Nginx** 反向代理和静态文件服务
 - 支持国内镜像源加速
@@ -95,6 +98,7 @@
 ## 🛠️ 快速开始
 
 ### 环境要求
+
 - Node.js 20.18.0+
 - Docker (可选)
 
@@ -115,12 +119,14 @@ npm run dev:all
 ```
 
 访问地址：
+
 - 前端: http://localhost:5173
 - 后端 API: http://localhost:3400
 
 ### Docker 部署
 
 #### 标准构建
+
 ```bash
 # 构建镜像
 docker build -t msut-auth-system:1.0.0 .
@@ -138,6 +144,7 @@ docker run -d \
 ```
 
 #### 国内镜像源构建（推荐国内用户）
+
 ```bash
 # 使用国内镜像源构建
 docker build -f Dockerfile.cn -t msut-auth-system:1.0.0-cn .
@@ -147,6 +154,7 @@ docker-compose up -d
 ```
 
 #### 验证部署
+
 ```bash
 # 检查容器状态
 docker ps
@@ -190,6 +198,7 @@ msut主站/
 ## 🔧 环境变量
 
 ### 后端环境变量
+
 - `PORT`: 服务器端口 (默认: 3400)
 - `JWT_SECRET`: JWT 密钥 (生产环境必须修改)
 - `NODE_ENV`: 运行环境 (development/production)
@@ -198,6 +207,7 @@ msut主站/
 - `COOKIE_DOMAIN`: Cookie域名设置 (可选)
 
 ### 前端环境变量
+
 - `VITE_PUBLIC_BASE_URL`: API 基础地址
 
 ## 🔐 安全特性
@@ -211,16 +221,17 @@ msut主站/
 ## 🚀 生产环境部署
 
 1. **修改JWT密钥**
+
    ```bash
    export JWT_SECRET=your-very-secure-random-secret-key
    ```
-
 2. **使用Docker Compose部署**
+
    ```bash
    docker-compose up -d
    ```
-
 3. **配置反向代理**（可选）
+
    - 使用 Nginx/Apache 作为前端代理
    - 配置 HTTPS 证书
    - 设置域名解析
@@ -246,12 +257,14 @@ msut主站/
 ## 📋 API 接口
 
 ### 认证接口
+
 - `POST /api/auth/register` - 用户注册
 - `POST /api/auth/login` - 用户登录
 - `POST /api/auth/logout` - 用户注销
 - `GET /api/auth/me` - 获取当前用户信息
 
 ### 资源接口
+
 - `GET /api/resources` - 获取资源列表
 - `POST /api/resources` - 创建资源（需要认证）
 - `GET /api/resources/:slug` - 获取资源详情
@@ -261,12 +274,15 @@ msut主站/
 ## 📝 开发说明
 
 ### 数据库
+
 项目使用 SQLite 数据库，数据文件位于 `server/data.sqlite`。首次运行会自动创建所需的表结构。
 
 ### 文件上传
+
 上传的文件存储在 `server/uploads/` 目录，建议在生产环境中挂载外部存储卷。
 
 ### 构建优化
+
 - 多阶段Docker构建，最小化镜像体积
 - 前端资源压缩和缓存优化
 - 后端依赖生产环境精简
@@ -282,15 +298,19 @@ msut主站/
 ## 🐛 常见问题
 
 ### Q: 容器启动失败怎么办？
+
 A: 检查端口1122和3400是否被占用，查看容器日志：`docker logs msut-auth-app`
 
 ### Q: 前端页面空白怎么办？
+
 A: 确认构建是否成功，检查浏览器控制台错误信息
 
 ### Q: 文件上传失败怎么办？
+
 A: 检查上传目录权限和磁盘空间，确认Docker卷挂载正确
 
 ### Q: 登录状态无法维持怎么办？
+
 A: 检查HTTPS_ENABLED环境变量设置，如果使用HTTP设置为false，HTTPS设置为true。同时确认COOKIE_DOMAIN配置是否正确。
 
 ## 📄 许可证

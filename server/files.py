@@ -261,6 +261,13 @@ def delete_resource(request: Request, rid: int):
     return {"ok": True}
 
 
+# Early alias to ensure static '/api/resources/likes' matches before dynamic '/api/resources/{slug}'.
+# This delegates to the canonical handler defined later in this file.
+@router.get("/api/resources/likes")
+def _get_resource_likes_alias(request: Request, ids: str = Query(default="")):
+    return get_resource_likes(request, ids)
+
+
 @router.get("/api/files/likes")
 def get_file_likes(request: Request, ids: str = Query(default="")):
     ids = (ids or "").strip()

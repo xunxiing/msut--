@@ -98,14 +98,28 @@ onMounted(fetch)
 </script>
 
 <style scoped>
-.container { 
-  max-width: 1160px; 
-  margin: 0 auto; 
+.container {
+  max-width: 1160px;
+  margin: 0 auto;
   padding: 16px;
   position: relative;
-  background: radial-gradient(1200px 600px at 50% -200px, var(--el-color-success-light-7), transparent 70%),
-              linear-gradient(180deg, rgba(16,185,129,.06), rgba(255,255,255,0));
-  overflow: hidden;
+  /* 让背景可以延伸到容器外，避免两侧留白 */
+  overflow: visible;
+  isolation: isolate;
+}
+/* 让顶部背景满屏延伸，内容仍保持定宽居中 */
+.container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100vw;
+  height: 100%;
+  background:
+    radial-gradient(1400px 700px at 50% -220px, var(--el-color-success-light-7), transparent 72%),
+    linear-gradient(180deg, rgba(16,185,129,.06), rgba(255,255,255,0));
+  z-index: -2;
 }
 .container::after {
   content: '';

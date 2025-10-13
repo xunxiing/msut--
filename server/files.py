@@ -339,7 +339,15 @@ def unlike_file(request: Request, fid: int):
 def get_resource(slug: str):
     conn = get_connection()
     cur = conn.cursor()
-    r = cur.execute("SELECT * FROM resources WHERE slug = ?", (slug,)).fetchone()
+    r = cur.execute(
+        """
+        SELECT r.*, u.name AS author_name, u.username AS author_username
+        FROM resources r
+        LEFT JOIN users u ON u.id = r.created_by
+        WHERE r.slug = ?
+        """,
+        (slug,),
+    ).fetchone()
     if not r:
         return JSONResponse(status_code=404, content={"error": "未找到资源"})
     files = cur.execute(
@@ -358,14 +366,17 @@ def list_resources(q: str = Query(default=""), page: int = Query(default=1), pag
     offset = (page - 1) * page_size
     conn = get_connection()
     cur = conn.cursor()
-    where = "WHERE title LIKE ? OR description LIKE ?" if q else ""
+    where = "WHERE r.title LIKE ? OR r.description LIKE ?" if q else ""
     args: List = [f"%{q}%", f"%{q}%"] if q else []
     total = cur.execute(f"SELECT COUNT(1) as c FROM resources {where}", tuple(args)).fetchone()["c"]
     items = cur.execute(
         f"""
-        SELECT id, slug, title, description, created_at
-        FROM resources {where}
-        ORDER BY id DESC
+        SELECT r.id, r.slug, r.title, r.description, r.created_at,
+               u.name AS author_name, u.username AS author_username
+        FROM resources r
+        LEFT JOIN users u ON u.id = r.created_by
+        {where}
+        ORDER BY r.id DESC
         LIMIT ? OFFSET ?
         """,
         (*args, page_size, offset),

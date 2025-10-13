@@ -307,6 +307,21 @@ function download(id: number) {
   max-width: 1160px;
   margin: 0 auto;
   padding: 16px;
+  position: relative;
+  background: radial-gradient(1200px 600px at 50% -200px, var(--el-color-success-light-7), transparent 70%),
+              linear-gradient(180deg, rgba(16,185,129,.06), rgba(255,255,255,0));
+}
+.container::after {
+  content: '';
+  position: absolute;
+  inset: -20% -10% auto -10%;
+  height: 360px;
+  background:
+    radial-gradient(400px 200px at 15% -30px, rgba(16,185,129,.12), transparent 70%),
+    radial-gradient(400px 200px at 85% -30px, rgba(16,185,129,.12), transparent 70%);
+  filter: blur(20px);
+  pointer-events: none;
+  z-index: -1;
 }
 .outer-card {
   border-radius: 14px;

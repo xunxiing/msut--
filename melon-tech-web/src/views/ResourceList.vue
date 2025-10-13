@@ -15,6 +15,7 @@
           <div class="desc">{{ r.description || '暂无描述' }}</div>
           <div class="meta">
             <el-tag size="small">{{ r.created_at }}</el-tag>
+            <span class="author" v-if="(r as any).author_name">作者：{{ (r as any).author_name }}</span>
             <button
               class="like-btn"
               :class="{ liked: !!likesMap[r.id]?.liked }"
@@ -104,12 +105,13 @@ onMounted(fetch)
   position: relative;
   background: radial-gradient(1200px 600px at 50% -200px, var(--el-color-success-light-7), transparent 70%),
               linear-gradient(180deg, rgba(16,185,129,.06), rgba(255,255,255,0));
+  overflow: hidden;
 }
 .container::after {
   content: '';
   position: absolute;
-  inset: -20% -10% auto -10%;
-  height: 360px;
+  left: 0; right: 0; top: 0;
+  height: 320px;
   background:
     radial-gradient(400px 200px at 15% -30px, rgba(16,185,129,.12), transparent 70%),
     radial-gradient(400px 200px at 85% -30px, rgba(16,185,129,.12), transparent 70%);
@@ -121,6 +123,7 @@ onMounted(fetch)
 .title { font-weight: 700; font-size: 16px; margin-bottom: 6px; }
 .desc { color: var(--el-text-color-secondary); min-height: 40px; }
 .meta { margin-top: 8px; display: flex; align-items: center; gap: 10px; }
+.author { color: var(--el-text-color-secondary); font-size: 13px; }
 .card { border-radius: 14px; }
 .pager { display: flex; justify-content: center; margin: 18px 0; }
 .actions { display: flex; gap: 10px; align-items: center; }

@@ -17,6 +17,8 @@ export type ResourceItem = {
   description: string
   usage: string
   created_at: string
+  author_name?: string
+  author_username?: string
   files: ResourceFile[]
   shareUrl: string
 }

@@ -33,7 +33,7 @@
             <el-empty description="暂无使用说明" />
           </template>
           <template #footer>
-            <small>创建时间：{{ data.created_at }}</small>
+            <small>创建时间：{{ data.created_at }} · 作者：{{ (data as any).author_name || '未知' }}</small>
           </template>
         </el-card>
       </el-col>
@@ -137,4 +137,3 @@ onMounted(fetch)
 .mt-16 { margin-top: 16px; }
 .like-action { transform: scale(1.2); transform-origin: center left; }
 </style>
-

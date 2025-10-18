@@ -15,7 +15,8 @@ Scope: This AGENTS.md applies to the entire repository.
   - Auth: `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`
   - Protected ping: `GET /api/private/ping`
   - Resources: `GET /api/resources`, `POST /api/resources`, `GET /api/resources/:slug`, `PATCH /api/resources/:id`, `DELETE /api/resources/:id`
-  - Files: `POST /api/files/upload`, `GET /api/files/:id/download`
+- Files: `POST /api/files/upload`, `GET /api/files/:id/download`
+  - Upload accepts multipart field `files` (<=10, 50MB each). Optional form field `saveWatermark` (boolean) enables extracting a watermark from `.melsave` uploads and persisting it for later checks.
 - Error shape must be `{ error: string }` (not `{ detail: ... }`).
 - Cookie name must remain `token`. Use `utils.cookie_kwargs()` to preserve `SameSite`/`Secure` parity with env flags.
 - Download responses must set `Content-Disposition` with UTF-8 filename* percent-encoding.
@@ -26,11 +27,13 @@ Additional tool routes (non-breaking additions):
   - `GET /api/resources/likes?ids=1,2,3` → `{ items: [{ id, likes, liked }] }`
   - `POST /api/resources/:id/like` → like a resource (idempotent)
   - `DELETE /api/resources/:id/like` → remove like
+ - Watermark check (anonymous): `POST /api/watermark/check` with multipart `file` (`.melsave`/`.zip`). Returns `{ watermark, length, embedded, matches: [{ fileId, resourceId, resourceSlug, resourceTitle, originalName, urlPath }] }`.
 
 ## Environment & Config
 - `PORT` (dev 3000, Docker 3400), `JWT_SECRET`, `NODE_ENV`, `PUBLIC_BASE_URL`, `HTTPS_ENABLED`, `COOKIE_DOMAIN`.
 - HSTS should only apply if `HTTPS_ENABLED` evaluates to true (see `utils.parse_bool`).
 - DB and uploads are relative to `server/` and must not be relocated without updating the Docker volumes and README.
+  - The SQLite DB location is controlled by `DATA_DIR` (default `server/data/`) with the file `data.sqlite`. Do not change without adjusting Docker volumes and README.
 
 ## Local Development
 - Backend: `python -m uvicorn server.app:app --reload --port 3000` (or `npm run dev:server`).

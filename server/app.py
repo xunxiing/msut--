@@ -1,4 +1,5 @@
 import os
+import logging
 from pathlib import Path
 from typing import Callable
 
@@ -8,7 +9,7 @@ from starlette.middleware.cors import CORSMiddleware
 from starlette.staticfiles import StaticFiles
 
 from .auth import router as auth_router, get_current_user, is_https_enabled
-from .db import run_migrations
+from .db import run_migrations, DB_FILE
 from .files import router as files_router
 from .melsave import router as melsave_router
 
@@ -19,7 +20,18 @@ app = FastAPI()
 # Run DB migrations at startup
 @app.on_event("startup")
 def _startup():
+    # Basic logging config; adjustable via LOG_LEVEL env (default INFO)
+    lvl = os.getenv("LOG_LEVEL", "INFO").upper()
+    try:
+        logging.basicConfig(level=getattr(logging, lvl, logging.INFO))
+    except Exception:
+        logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger("msut.app")
     run_migrations()
+    try:
+        logger.info("startup complete: DATA_DIR=%s DB=%s HTTPS_ENABLED=%s", os.getenv("DATA_DIR"), str(DB_FILE), os.getenv("HTTPS_ENABLED"))
+    except Exception:
+        pass
 
 
 # Security headers / HSTS

@@ -1,4 +1,6 @@
 import os
+import tempfile
+import logging
 from pathlib import Path
 from typing import List, Optional
 
@@ -7,10 +9,16 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from .auth import get_current_user
 from .db import get_connection
-from .utils import nanoid, now_ms, slugify_str
+from .utils import nanoid, now_ms, slugify_str, parse_bool
+from .label.watermark_indexer import (
+    extract_sequence_from_melsave,
+    canonicalize,
+    fnv1a64,
+)
 
 
 router = APIRouter()
+logger = logging.getLogger("msut.files")
 
 PUBLIC_BASE = os.getenv("PUBLIC_BASE_URL", "http://127.0.0.1:5173")
 
@@ -22,6 +30,14 @@ MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 
 def _share_url(slug: str) -> str:
     return f"{PUBLIC_BASE}/share/{slug}"
+
+
+def _u64_to_i64(u: int) -> int:
+    """Map an unsigned 64-bit int to SQLite-compatible signed 64-bit range.
+    Keeps two's complement representation so equality works on both sides.
+    """
+    u &= 0xFFFFFFFFFFFFFFFF
+    return u - (1 << 64) if (u & (1 << 63)) else u
 
 
 def _require_user_id(request: Request) -> Optional[int]:
@@ -106,7 +122,23 @@ def _save_upload(file: UploadFile, dest_dir: Path) -> Optional[Path]:
 
 
 @router.post("/api/files/upload")
-def upload_to_resource(request: Request, resourceId: int = Form(...), files: List[UploadFile] = File(default=[])):
+def upload_to_resource(
+    request: Request,
+    resourceId: int = Form(...),
+    files: List[UploadFile] = File(default=[]),
+    saveWatermark: Optional[str] = Form(None),
+):
+    # Debug logging for watermark persistence path
+    try:
+        import logging as _logging
+        _logging.getLogger("msut.files").info(
+            "upload_to_resource: resourceId=%s saveWatermark_raw=%s files_count=%s",
+            resourceId,
+            saveWatermark,
+            len(files or []),
+        )
+    except Exception:
+        pass
     uid = _require_user_id(request)
     if uid is None:
         return JSONResponse(status_code=401, content={"error": "未登录"})
@@ -120,6 +152,7 @@ def upload_to_resource(request: Request, resourceId: int = Form(...), files: Lis
     if not files:
         return JSONResponse(status_code=400, content={"error": "没有文件"})
     saved = []
+    do_wm = parse_bool(saveWatermark, False)
     for uf in files[:10]:
         dest = _save_upload(uf, UPLOAD_DIR)
         if dest is None:
@@ -139,6 +172,37 @@ def upload_to_resource(request: Request, resourceId: int = Form(...), files: Lis
                 url_path,
             ),
         )
+        # Attempt watermark extraction for .melsave/.zip when requested
+        try:
+            suffix = str(dest.suffix).lower()
+            if do_wm and suffix in {".melsave", ".zip"}:
+                logger.info("wm: extracting fileId=%s name=%s suffix=%s", int(info.lastrowid), uf.filename or dest.name, suffix)
+                raw_seq, embedded = extract_sequence_from_melsave(str(dest))
+                seq_canon = canonicalize([str(x) for x in raw_seq])
+                wm_u64 = int(fnv1a64(seq_canon))
+                wm_i64 = _u64_to_i64(wm_u64)
+                emb_i64 = _u64_to_i64(int(embedded)) if embedded is not None else None
+                cur.execute(
+                    """
+                    INSERT OR REPLACE INTO file_watermarks (file_id, watermark_u64, seq_len, embedded_watermark)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (int(info.lastrowid), wm_i64, int(len(seq_canon)), emb_i64),
+                )
+                logger.info(
+                    "wm: saved fileId=%s watermark_u64=%s watermark_i64=%s length=%s embedded=%s embedded_i64=%s",
+                    int(info.lastrowid), wm_u64, wm_i64, int(len(seq_canon)),
+                    embedded if embedded is not None else None,
+                    emb_i64,
+                )
+            else:
+                logger.info("wm: skipped (saveWatermark=%s suffix=%s) fileId=%s", do_wm, suffix, int(info.lastrowid))
+        except Exception as ex:
+            # Do not fail the whole upload if watermark extraction fails
+            try:
+                logger.exception("wm: extract failed fileId=%s error=%s", int(info.lastrowid), ex)
+            except Exception:
+                pass
         saved.append(
             {
                 "id": int(info.lastrowid),
@@ -150,6 +214,107 @@ def upload_to_resource(request: Request, resourceId: int = Form(...), files: Lis
         )
     conn.commit()
     return {"ok": True, "files": saved}
+
+
+@router.post("/api/watermark/check")
+async def check_watermark(file: UploadFile = File(...)):
+    # Accept one .melsave (or .zip) and return computed watermark and DB matches
+    try:
+        suffix = Path(file.filename or "").suffix.lower()
+        try:
+            logger.info("wm-check: received name=%s suffix=%s", file.filename, suffix)
+        except Exception:
+            pass
+        if suffix not in {".melsave", ".zip"}:
+            return JSONResponse(status_code=400, content={"error": "仅支持 .melsave 或 .zip"})
+        # Save to a temp file for processing
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            while True:
+                chunk = file.file.read(1024 * 1024)
+                if not chunk:
+                    break
+                tmp.write(chunk)
+            tmp_path = Path(tmp.name)
+    except Exception:
+        try:
+            file.file.close()
+        except Exception:
+            pass
+        return JSONResponse(status_code=400, content={"error": "文件读取失败"})
+    finally:
+        try:
+            file.file.close()
+        except Exception:
+            pass
+
+    try:
+        raw_seq, embedded = extract_sequence_from_melsave(str(tmp_path))
+        seq_canon = canonicalize([str(x) for x in raw_seq])
+        wm_u64 = int(fnv1a64(seq_canon))
+        wm_i64 = _u64_to_i64(wm_u64)
+        emb_i64 = _u64_to_i64(int(embedded)) if embedded is not None else None
+        length = int(len(seq_canon))
+        try:
+            logger.info(
+                "wm-check: computed watermark_u64=%s watermark_i64=%s length=%s embedded=%s embedded_i64=%s",
+                wm_u64, wm_i64, length,
+                embedded if embedded is not None else None,
+                emb_i64,
+            )
+        except Exception:
+            pass
+    except Exception as e:
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        return JSONResponse(status_code=400, content={"error": f"提取失败: {e}"})
+
+    # Query DB for matches
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
+        rows = cur.execute(
+            """
+            SELECT rf.id AS file_id, rf.resource_id, rf.original_name, rf.url_path,
+                   r.slug AS resource_slug, r.title AS resource_title
+            FROM file_watermarks fw
+            JOIN resource_files rf ON rf.id = fw.file_id
+            LEFT JOIN resources r ON r.id = rf.resource_id
+            WHERE fw.watermark_u64 = ?
+            ORDER BY rf.id DESC
+            """,
+            (wm_i64,),
+        ).fetchall()
+        matches = [
+            {
+                "fileId": int(r["file_id"]),
+                "resourceId": int(r["resource_id"]) if r["resource_id"] is not None else None,
+                "resourceSlug": r["resource_slug"],
+                "resourceTitle": r["resource_title"],
+                "originalName": r["original_name"],
+                "urlPath": r["url_path"],
+            }
+            for r in rows
+        ]
+        try:
+            logger.info("wm-check: matches=%s fileIds=%s", len(matches), [m.get("fileId") for m in matches])
+        except Exception:
+            pass
+    except Exception:
+        matches = []
+    finally:
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+    return {
+        "watermark": wm_u64,
+        "length": length,
+        "embedded": int(embedded) if embedded is not None else None,
+        "matches": matches,
+    }
 
 
 @router.get("/api/my/resources")

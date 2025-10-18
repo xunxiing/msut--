@@ -121,6 +121,18 @@ def run_migrations(conn: Optional[sqlite3.Connection] = None) -> None:
               FOREIGN KEY (resource_id) REFERENCES resources(id) ON DELETE CASCADE
             );
 
+            -- Optional per-file watermark info for .melsave uploads
+            CREATE TABLE IF NOT EXISTS file_watermarks (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              file_id INTEGER NOT NULL UNIQUE,
+              watermark_u64 INTEGER NOT NULL,
+              seq_len INTEGER NOT NULL,
+              embedded_watermark INTEGER,
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              FOREIGN KEY (file_id) REFERENCES resource_files(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_file_watermarks_wm ON file_watermarks(watermark_u64);
+
             -- Per-file likes (one like per user per file)
             CREATE TABLE IF NOT EXISTS resource_file_likes (
               id INTEGER PRIMARY KEY AUTOINCREMENT,

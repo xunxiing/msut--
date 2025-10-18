@@ -26,11 +26,17 @@
 
     <el-card v-else-if="step === 1" class="card">
       <template #header>上传文件</template>
+      <el-alert type="info" :closable="false" class="mb" show-icon title="可选：为 .melsave 存档提取并保存水印，便于后续检测匹配" />
+      <el-form @submit.prevent label-width="0">
+        <el-form-item>
+          <el-checkbox v-model="saveWatermark">保存 .melsave 水印到数据库</el-checkbox>
+        </el-form-item>
+      </el-form>
       <el-upload
         ref="uploadRef"
         v-model:file-list="fileList"
         :action="`/api/files/upload`"
-        :data="{ resourceId: resourceId }"
+        :data="{ resourceId: resourceId, saveWatermark }"
         :with-credentials="true"
         :multiple="true"
         :auto-upload="false"
@@ -85,6 +91,7 @@ const shareUrl = ref('')
 
 const fileList = ref<UploadUserFile[]>([])
 const uploaded = ref(false)
+const saveWatermark = ref<boolean>(false)
 
 async function onCreate() {
   await formRef.value?.validate()

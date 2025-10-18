@@ -533,7 +533,8 @@ def list_resources(q: str = Query(default=""), page: int = Query(default=1), pag
     cur = conn.cursor()
     where = "WHERE r.title LIKE ? OR r.description LIKE ?" if q else ""
     args: List = [f"%{q}%", f"%{q}%"] if q else []
-    total = cur.execute(f"SELECT COUNT(1) as c FROM resources {where}", tuple(args)).fetchone()["c"]
+    # Use the same table alias as in the items query to avoid 'no such column: r.title'
+    total = cur.execute(f"SELECT COUNT(1) as c FROM resources r {where}", tuple(args)).fetchone()["c"]
     items = cur.execute(
         f"""
         SELECT r.id, r.slug, r.title, r.description, r.created_at,

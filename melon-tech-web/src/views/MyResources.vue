@@ -22,7 +22,7 @@
                     <div class="title">{{ item.title }}</div>
                     <div class="meta">创建于 {{ item.created_at }} · 文件 {{ item.files.length }} 个</div>
                   </div>
-                  <el-space size="small">
+                  <el-space size="small" wrap class="actions">
                     <el-button size="small" @click="copy(item.shareUrl)">复制链接</el-button>
                     <el-button size="small" @click="$router.push(`/share/${item.slug}`)">预览</el-button>
                     <el-button size="small" @click="openUpload(item)">添加文件</el-button>
@@ -411,9 +411,41 @@ onBeforeUnmount(() => {
   line-height: 1.6;
   white-space: pre-wrap;
 }
-.share-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-</style>
+  .share-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  /* Mobile responsive tweaks */
+  @media (max-width: 640px) {
+    .resource-header {
+      align-items: flex-start;
+    }
+    .actions {
+      width: 100%;
+      justify-content: flex-start;
+    }
+    /* Make action buttons wrap: 3 per row */
+    :deep(.actions .el-space__item) {
+      flex: 1 1 calc(33.333% - 8px);
+    }
+    :deep(.actions .el-button) {
+      width: 100%;
+    }
+
+    .share-row {
+      flex-wrap: wrap;
+    }
+    :deep(.share-row .el-input) {
+      flex: 1 0 100%;
+    }
+  }
+
+  /* XS phones: 2 per row */
+  @media (max-width: 420px) {
+    :deep(.actions .el-space__item) {
+      flex: 1 1 calc(50% - 8px);
+    }
+  }
+  </style>

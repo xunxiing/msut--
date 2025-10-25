@@ -314,11 +314,20 @@ function download(id: number) {
 }
 
 // Ensure background uploads are aborted on route changes/unmount
+function abortAllUploads() {
+  if (!uploadRef.value) return
+  ;(upload.fileList || []).forEach((f) => {
+    if ((f as any).status === 'uploading') {
+      // Element Plus UploadInstance.abort expects a file argument in newer types
+      uploadRef.value!.abort(f as any)
+    }
+  })
+}
 onBeforeRouteLeave(() => {
-  uploadRef.value?.abort()
+  abortAllUploads()
 })
 onBeforeUnmount(() => {
-  uploadRef.value?.abort()
+  abortAllUploads()
 })
 </script>
 

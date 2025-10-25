@@ -153,11 +153,20 @@ async function copy(text: string) {
 }
 
 // Abort any in-flight uploads when leaving or unmounting
+function abortAllUploads() {
+  if (!uploadRef.value) return
+  fileList.value.forEach((f) => {
+    if (f.status === 'uploading') {
+      // Element Plus UploadInstance.abort now requires a file argument
+      uploadRef.value!.abort(f as any)
+    }
+  })
+}
 onBeforeRouteLeave(() => {
-  uploadRef.value?.abort()
+  abortAllUploads()
 })
 onBeforeUnmount(() => {
-  uploadRef.value?.abort()
+  abortAllUploads()
 })
 </script>
 

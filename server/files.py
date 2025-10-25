@@ -84,45 +84,78 @@ async def create_resource(request: Request, title: Optional[str] = Form(None), d
     return {"id": rid, "slug": slug, "title": title, "description": description or "", "usage": usage or "", "shareUrl": _share_url(slug)}
 
 
-def _save_upload(file: UploadFile, dest_dir: Path) -> Optional[Path]:
+async def _save_upload_atomic(request: Request, file: UploadFile, dest_dir: Path) -> Optional[Path]:
+    """Save an uploaded file via a temporary .part file and atomically rename.
+    Returns final destination path on success, or None on failure.
+    Aborts and cleans up if client disconnects or file exceeds MAX_FILE_SIZE.
+    """
     ext = Path(file.filename or "").suffix
     stored_name = f"{now_ms()}-{nanoid()}{ext}"
-    dest = dest_dir / stored_name
+    final_path = dest_dir / stored_name
+    temp_path = dest_dir / (stored_name + ".part")
     size = 0
     try:
-        with dest.open("wb") as f:
+        with temp_path.open("wb") as f:
             while True:
-                chunk = file.file.read(1024 * 1024)
+                # Read in 1MB chunks
+                chunk = await file.read(1024 * 1024)
                 if not chunk:
                     break
                 f.write(chunk)
                 size += len(chunk)
+                # Size limit per file
                 if size > MAX_FILE_SIZE:
                     try:
                         f.flush()
                     except Exception:
                         pass
-                    f.close()
-                    dest.unlink(missing_ok=True)
+                    try:
+                        f.close()
+                    except Exception:
+                        pass
+                    temp_path.unlink(missing_ok=True)
                     return None
-        return dest
-    except Exception:
-        # Any filesystem error (e.g. PermissionError, disk full) should not crash
-        # the request handler. Return None so caller can respond with { error }.
+                # Check client disconnect mid-stream
+                try:
+                    if await request.is_disconnected():
+                        try:
+                            f.flush()
+                        except Exception:
+                            pass
+                        try:
+                            f.close()
+                        except Exception:
+                            pass
+                        temp_path.unlink(missing_ok=True)
+                        return None
+                except Exception:
+                    # If disconnect check fails, continue best-effort
+                    pass
+        # Final disconnect check after write complete
         try:
-            dest.unlink(missing_ok=True)
+            if await request.is_disconnected():
+                temp_path.unlink(missing_ok=True)
+                return None
+        except Exception:
+            pass
+        # Atomic replace to final name
+        os.replace(str(temp_path), str(final_path))
+        return final_path
+    except Exception:
+        try:
+            temp_path.unlink(missing_ok=True)
         except Exception:
             pass
         return None
     finally:
         try:
-            file.file.close()
+            await file.close()
         except Exception:
             pass
 
 
 @router.post("/api/files/upload")
-def upload_to_resource(
+async def upload_to_resource(
     request: Request,
     resourceId: int = Form(...),
     files: List[UploadFile] = File(default=[]),
@@ -153,66 +186,89 @@ def upload_to_resource(
         return JSONResponse(status_code=400, content={"error": "没有文件"})
     saved = []
     do_wm = parse_bool(saveWatermark, False)
-    for uf in files[:10]:
-        dest = _save_upload(uf, UPLOAD_DIR)
-        if dest is None:
-            return JSONResponse(status_code=400, content={"error": "上传失败"})
-        url_path = f"/uploads/{dest.name}"
-        info = cur.execute(
-            """
-            INSERT INTO resource_files (resource_id, original_name, stored_name, mime, size, url_path)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (
-                resourceId,
-                uf.filename or dest.name,
-                dest.name,
-                uf.content_type or None,
-                dest.stat().st_size,
-                url_path,
-            ),
-        )
+    # Begin a transaction to ensure DB rollback on failure
+    cur.execute("BEGIN")
+    created_file_paths: List[Path] = []
+    try:
+        for uf in files[:10]:
+            dest = await _save_upload_atomic(request, uf, UPLOAD_DIR)
+            if dest is None:
+                raise RuntimeError("upload_failed")
+            created_file_paths.append(dest)
+            url_path = f"/uploads/{dest.name}"
+            info = cur.execute(
+                """
+                INSERT INTO resource_files (resource_id, original_name, stored_name, mime, size, url_path)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    resourceId,
+                    uf.filename or dest.name,
+                    dest.name,
+                    uf.content_type or None,
+                    dest.stat().st_size,
+                    url_path,
+                ),
+            )
         # Attempt watermark extraction for .melsave/.zip when requested
-        try:
-            suffix = str(dest.suffix).lower()
-            if do_wm and suffix in {".melsave", ".zip"}:
-                logger.info("wm: extracting fileId=%s name=%s suffix=%s", int(info.lastrowid), uf.filename or dest.name, suffix)
-                raw_seq, embedded = extract_sequence_from_melsave(str(dest))
-                seq_canon = canonicalize([str(x) for x in raw_seq])
-                wm_u64 = int(fnv1a64(seq_canon))
-                wm_i64 = _u64_to_i64(wm_u64)
-                emb_i64 = _u64_to_i64(int(embedded)) if embedded is not None else None
-                cur.execute(
-                    """
-                    INSERT OR REPLACE INTO file_watermarks (file_id, watermark_u64, seq_len, embedded_watermark)
-                    VALUES (?, ?, ?, ?)
-                    """,
-                    (int(info.lastrowid), wm_i64, int(len(seq_canon)), emb_i64),
-                )
-                logger.info(
-                    "wm: saved fileId=%s watermark_u64=%s watermark_i64=%s length=%s embedded=%s embedded_i64=%s",
-                    int(info.lastrowid), wm_u64, wm_i64, int(len(seq_canon)),
-                    embedded if embedded is not None else None,
-                    emb_i64,
-                )
-            else:
-                logger.info("wm: skipped (saveWatermark=%s suffix=%s) fileId=%s", do_wm, suffix, int(info.lastrowid))
-        except Exception as ex:
-            # Do not fail the whole upload if watermark extraction fails
             try:
-                logger.exception("wm: extract failed fileId=%s error=%s", int(info.lastrowid), ex)
+                suffix = str(dest.suffix).lower()
+                if do_wm and suffix in {".melsave", ".zip"}:
+                    logger.info(
+                        "wm: extracting fileId=%s name=%s suffix=%s",
+                        int(info.lastrowid), uf.filename or dest.name, suffix,
+                    )
+                    raw_seq, embedded = extract_sequence_from_melsave(str(dest))
+                    seq_canon = canonicalize([str(x) for x in raw_seq])
+                    wm_u64 = int(fnv1a64(seq_canon))
+                    wm_i64 = _u64_to_i64(wm_u64)
+                    emb_i64 = _u64_to_i64(int(embedded)) if embedded is not None else None
+                    cur.execute(
+                        """
+                        INSERT OR REPLACE INTO file_watermarks (file_id, watermark_u64, seq_len, embedded_watermark)
+                        VALUES (?, ?, ?, ?)
+                        """,
+                        (int(info.lastrowid), wm_i64, int(len(seq_canon)), emb_i64),
+                    )
+                    logger.info(
+                        "wm: saved fileId=%s watermark_u64=%s watermark_i64=%s length=%s embedded=%s embedded_i64=%s",
+                        int(info.lastrowid), wm_u64, wm_i64, int(len(seq_canon)),
+                        embedded if embedded is not None else None,
+                        emb_i64,
+                    )
+                else:
+                    logger.info(
+                        "wm: skipped (saveWatermark=%s suffix=%s) fileId=%s",
+                        do_wm, suffix, int(info.lastrowid),
+                    )
+            except Exception as ex:
+                # Do not fail the whole upload if watermark extraction fails
+                try:
+                    logger.exception("wm: extract failed fileId=%s error=%s", int(info.lastrowid), ex)
+                except Exception:
+                    pass
+            saved.append(
+                {
+                    "id": int(info.lastrowid),
+                    "originalName": uf.filename or dest.name,
+                    "size": dest.stat().st_size,
+                    "mime": uf.content_type or None,
+                    "urlPath": url_path,
+                }
+            )
+        conn.commit()
+    except Exception:
+        # Roll back DB and delete any files saved during this request
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        for p in created_file_paths:
+            try:
+                p.unlink(missing_ok=True)
             except Exception:
                 pass
-        saved.append(
-            {
-                "id": int(info.lastrowid),
-                "originalName": uf.filename or dest.name,
-                "size": dest.stat().st_size,
-                "mime": uf.content_type or None,
-                "urlPath": url_path,
-            }
-        )
-    conn.commit()
+        return JSONResponse(status_code=400, content={"error": "上传失败"})
     return {"ok": True, "files": saved}
 
 

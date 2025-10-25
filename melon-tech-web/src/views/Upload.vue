@@ -72,7 +72,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onBeforeUnmount } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
 import type { FormInstance, FormRules, UploadInstance, UploadUserFile } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import { createResource } from '../api/resources'
@@ -150,6 +151,14 @@ async function copy(text: string) {
     ElMessage.error('复制失败，请手动复制')
   }
 }
+
+// Abort any in-flight uploads when leaving or unmounting
+onBeforeRouteLeave(() => {
+  uploadRef.value?.abort()
+})
+onBeforeUnmount(() => {
+  uploadRef.value?.abort()
+})
 </script>
 
 <style scoped>

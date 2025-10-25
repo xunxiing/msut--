@@ -134,7 +134,8 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref, onBeforeUnmount } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
 import type { FormInstance, UploadInstance, UploadUserFile } from 'element-plus'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { listMyResources, updateResourceMeta, deleteResource, type MyResourceItem } from '../api/resources'
@@ -311,6 +312,14 @@ function handleUploadError() {
 function download(id: number) {
   window.open(`/api/files/${id}/download`, '_blank')
 }
+
+// Ensure background uploads are aborted on route changes/unmount
+onBeforeRouteLeave(() => {
+  uploadRef.value?.abort()
+})
+onBeforeUnmount(() => {
+  uploadRef.value?.abort()
+})
 </script>
 
 <style scoped>

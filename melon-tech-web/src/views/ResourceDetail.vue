@@ -136,4 +136,11 @@ onMounted(fetch)
 .meta { color: var(--el-text-color-secondary); font-size: 12px; margin-top: 4px; }
 .mt-16 { margin-top: 16px; }
 .like-action { transform: scale(1.2); transform-origin: center left; }
+
+/* Responsive: wrap share row on small screens */
+@media (max-width: 640px) {
+  .share { flex-wrap: wrap; }
+  :deep(.share .el-input) { flex: 1 0 100%; }
+  .likes-bar { width: 100%; justify-content: flex-start; }
+}
 </style>

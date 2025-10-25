@@ -1,0 +1,33 @@
+*** Begin Patch
+*** Update File: melon-tech-web/src/App.vue
+@@
+-    <el-menu mode="horizontal" :router="true" :default-active=".path" class="topbar">
++    <el-menu
++      mode="horizontal"
++      :router="true"
++      :default-active=".path"
++      :ellipsis="false"
++      :class="['topbar', { 'is-menu-open': menuOpen }]"
++    >
+@@
+-      <button class="menu-toggle" @click.stop="toggleMenu" aria-label="打开菜单" title="菜单">?</button>
++      <button
++        class="menu-toggle"
++        @click.stop="toggleMenu"
++        aria-label="打开菜单"
++        :aria-expanded="menuOpen ? 'true' : 'false'"
++        title="菜单"
++        v-show="!menuOpen"
++      >
++        <span class="bars" aria-hidden="true"><i></i><i></i><i></i></span>
++      </button>
+@@
+-      <div v-if="menuOpen" class="menu-backdrop" @click.self="closeMenu">
+-        <div :class="['menu-panel', isMobile ? 'mobile' : 'desktop']">
++      <div v-if="menuOpen" class="menu-backdrop" @click.self="closeMenu">
++        <div :class="['menu-panel', isMobile ? 'mobile' : 'desktop']">
+           <div class="menu-panel-header">
+             <div class="menu-title">导航菜单</div>
+             <button class="menu-close" @click="closeMenu" aria-label="关闭">?</button>
+           </div>
+*** End Patch

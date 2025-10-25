@@ -1,12 +1,22 @@
 <template>
-  <div>
+  <div class="app-root">
     <el-menu
       mode="horizontal"
       :router="true"
       :default-active="$route.path"
       :ellipsis="false"
-      :class="['topbar', { 'is-menu-open': menuOpen }]"
+      :class="['topbar', { 'drawer-open': menuOpen }]"
     >
+      <button
+        v-if="!menuOpen"
+        class="menu-toggle start"
+        @click.stop="toggleMenu"
+        aria-label="打开菜单"
+        title="菜单"
+      >
+        <span class="bars" aria-hidden="true"><i></i><i></i><i></i></span>
+      </button>
+
       <el-menu-item index="/" class="brand">🍉 甜瓜联合科技</el-menu-item>
       <el-menu-item index="/about" class="nav-item">关于</el-menu-item>
       <el-menu-item index="/dsl" class="nav-item">DSL 工具</el-menu-item>
@@ -15,50 +25,65 @@
       <el-menu-item v-if="auth.user" index="/dashboard" class="nav-item">控制台</el-menu-item>
       <el-menu-item v-if="auth.user" index="/my/resources" class="nav-item">我的存档</el-menu-item>
       <el-menu-item v-if="auth.user" index="/upload" class="nav-item">上传文件</el-menu-item>
-      <button class="menu-toggle" @click.stop="toggleMenu" aria-label="打开菜单" :aria-expanded="menuOpen ? 'true' : 'false'" title="菜单" v-show="!menuOpen">
-        <span class="bars" aria-hidden="true"><i></i><i></i><i></i></span>
-      </button>
+
       <div class="flex-spacer"></div>
       <template v-if="!auth.user">
         <el-menu-item index="/login" class="nav-item">登录</el-menu-item>
         <el-menu-item index="/register" class="nav-item">注册</el-menu-item>
       </template>
-      <el-menu-item v-else @click="onLogout" class="nav-item">退出</el-menu-item>
-
-      <!-- 顶栏内的折叠按钮已移除 -->
+      <el-menu-item v-else @click="onLogout" class="nav-item logout-btn">退出</el-menu-item>
     </el-menu>
 
-    <transition name="fade">
-      <div v-if="menuOpen" :class="['menu-backdrop', isMobile ? 'mobile' : 'desktop']" @click.self="closeMenu">
-        <div :class="['menu-panel', isMobile ? 'mobile' : 'desktop']">
-          <div class="menu-panel-header">
+    <transition name="drawer">
+      <div v-if="menuOpen" class="menu-backdrop" @click.self="closeMenu">
+        <aside class="menu-drawer" role="dialog" aria-label="导航菜单">
+          <div class="menu-drawer-header">
             <div class="menu-title">导航菜单</div>
-            <button class="menu-close" @click="closeMenu" aria-label="关闭">✕</button>
+            <button class="menu-toggle close" @click="closeMenu" aria-label="关闭">
+              <span class="bars" aria-hidden="true"><i></i><i></i><i></i></span>
+            </button>
           </div>
-          <div class="menu-grid">
-            <div
-              v-for="item in visibleItems"
-              :key="item.path || item.key"
-              class="menu-card"
-              @click="onMenuCardClick(item)"
-            >
-              <div class="menu-card-icon">{{ item.icon }}</div>
-              <div class="menu-card-text">{{ item.label }}</div>
+
+          <nav class="menu-list">
+            <div class="menu-section">
+              <div class="menu-section-title">通用</div>
+              <button
+                v-for="item in commonItems"
+                :key="'c-' + (item.path || item.key)"
+                class="menu-item"
+                @click="onMenuItemClick(item)"
+              >
+                <component v-if="item.icon" :is="item.icon" class="mi-icon" aria-hidden="true" />
+                <span class="mi-label">{{ item.label }}</span>
+              </button>
             </div>
-          </div>
-        </div>
+
+            <div class="menu-section">
+              <div class="menu-section-title">我的</div>
+              <button
+                v-for="item in myItems"
+                :key="'m-' + (item.path || item.key)"
+                class="menu-item"
+                @click="onMenuItemClick(item)"
+              >
+                <component v-if="item.icon" :is="item.icon" class="mi-icon" aria-hidden="true" />
+                <span class="mi-label">{{ item.label }}</span>
+              </button>
+            </div>
+          </nav>
+        </aside>
       </div>
     </transition>
 
     <router-view />
   </div>
-  
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, type Component } from 'vue'
 import { useAuth } from './stores/auth'
 import { useRouter } from 'vue-router'
+import { House, InfoFilled, Connection, Watermelon, Folder, DataAnalysis, Collection, Upload, User, EditPen, SwitchButton } from '@element-plus/icons-vue'
 
 const auth = useAuth()
 const router = useRouter()
@@ -90,32 +115,32 @@ const toggleMenu = () => { menuOpen.value = !menuOpen.value }
 const closeMenu = () => { menuOpen.value = false }
 const onKeydown = (e: KeyboardEvent) => { if (e.key === 'Escape') closeMenu() }
 
-// 菜单卡片项（按需根据登录态显示）
-type MenuItem = { label: string; icon: string; path?: string; key?: string; action?: () => void }
-const allItems = computed<MenuItem[]>(() => {
-  const common: MenuItem[] = [
-    { label: '首页', icon: '🏠', path: '/' },
-    { label: '关于', icon: 'ℹ️', path: '/about' },
-    { label: 'DSL 工具', icon: '🧩', path: '/dsl' },
-    { label: '水印检测', icon: '💧', path: '/watermark' },
-    { label: '文件库', icon: '📁', path: '/resources' },
+type MenuItem = { label: string; icon?: Component; path?: string; key?: string; action?: () => void }
+
+const commonItems = computed<MenuItem[]>(() => [
+  { label: '首页', icon: House, path: '/' },
+  { label: '关于', icon: InfoFilled, path: '/about' },
+  { label: 'DSL 工具', icon: Connection, path: '/dsl' },
+  { label: '水印检测', icon: Watermelon, path: '/watermark' },
+  { label: '文件库', icon: Folder, path: '/resources' },
+])
+
+const myItems = computed<MenuItem[]>(() => {
+  if (auth.user) {
+    return [
+      { label: '控制台', icon: DataAnalysis, path: '/dashboard' },
+      { label: '我的存档', icon: Collection, path: '/my/resources' },
+      { label: '上传文件', icon: Upload, path: '/upload' },
+      { label: '退出登录', icon: SwitchButton, key: 'logout', action: onLogout },
+    ]
+  }
+  return [
+    { label: '登录', icon: User, path: '/login' },
+    { label: '注册', icon: EditPen, path: '/register' },
   ]
-  const authed: MenuItem[] = [
-    { label: '控制台', icon: '📊', path: '/dashboard' },
-    { label: '我的存档', icon: '📚', path: '/my/resources' },
-    { label: '上传文件', icon: '⬆️', path: '/upload' },
-    { label: '退出登录', icon: '🚪', key: 'logout', action: onLogout },
-  ]
-  const guest: MenuItem[] = [
-    { label: '登录', icon: '🔑', path: '/login' },
-    { label: '注册', icon: '📝', path: '/register' },
-  ]
-  return auth.user ? [...common, ...authed] : [...common, ...guest]
 })
 
-const visibleItems = computed(() => allItems.value)
-
-const onMenuCardClick = async (item: MenuItem) => {
+const onMenuItemClick = async (item: MenuItem) => {
   if (item.action) {
     await item.action()
     menuOpen.value = false
@@ -136,196 +161,90 @@ const onMenuCardClick = async (item: MenuItem) => {
   padding: 0 20px;
   box-shadow: 0 2px 10px rgba(0,0,0,.04);
   align-items: center;
+  width: 100%;
+  max-width: 100vw;
+  box-sizing: border-box;
+  transition: padding-left 0.2s ease;
 }
-.topbar.is-menu-open { pointer-events: none; }
+@media (min-width: 769px) {
+  .topbar.drawer-open {
+    padding-left: 340px;
+  }
+}
 .brand { font-weight: 800; }
 .flex-spacer { flex: 1; }
+.logout-btn {
+  transition: transform .2s ease;
+}
 
-/* 右上角更明显的折叠按钮（移动端更醒目） */
+/* 左上角汉堡按钮 */
 .menu-toggle {
   margin-left: 10px;
   background: transparent;
   border: none;
   padding: 0;
   line-height: 1;
-  font-size: 0; /* 由 bars 绘制图标 */
+  font-size: 0;
   cursor: pointer;
-  transition: all .3s ease;
+  transition: all .2s ease;
   display: flex;
   align-items: center;
   justify-content: center;
   width: 44px;
   height: 38px;
-  position: relative;
 }
-.menu-toggle:hover { 
-  transform: scale(1.05);
-}
-.menu-toggle:active {
-  transform: scale(0.95);
-}
-/* 三条横线图标 */
-.menu-toggle .bars { 
-  display: inline-flex; 
-  flex-direction: column; 
-  gap: 4px; 
-  width: 22px;
-  height: 16px;
-}
-.menu-toggle .bars i { 
-  display: block; 
-  width: 22px; 
-  height: 2.5px; 
-  background: #4fc08d; 
-  border-radius: 3px;
-  transition: all .3s ease;
-}
-/* 添加悬停效果 */
-.menu-toggle:hover .bars i {
-  background: #2ecc71;
-}
+.menu-toggle.start { margin-left: 8px; margin-right: 8px; }
+.menu-toggle .bars { display: inline-flex; flex-direction: column; gap: 4px; width: 22px; height: 16px; }
+.menu-toggle .bars i { display: block; width: 22px; height: 2.5px; background: #4fc08d; border-radius: 3px; transition: all .2s ease; }
+.menu-toggle:hover .bars i { background: #2ecc71; }
+.menu-toggle.close { margin-left: auto; width: 38px; height: 34px; }
 
-/* 背景虚化与遮罩 */
+/* 抽屉容器与过渡 */
 .menu-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,.18);
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
-  z-index: 4000;
-  display: flex;
-  align-items: flex-start;
-  justify-content: flex-end;
+  position: fixed; inset: 0; background: rgba(33, 150, 243, 0.04);
+  z-index: 4000; display: flex; align-items: flex-start; justify-content: flex-start;
+  padding-top: 8px; padding-left: 4px;
 }
-
-/* 桌面端：菜单占据上半屏，从顶部展开 */
-.menu-backdrop.desktop { 
-  align-items: flex-start; 
-  justify-content: center; 
-  padding-top: 60px;
-}
-/* 移动端：维持右上角弹出位置 */
-.menu-backdrop.mobile { align-items: flex-start; justify-content: flex-end; }
-
-/* 菜单卡片面板 */
-.menu-panel {
-  background: #fff;
-  color: #222;
-  border-radius: 16px;
+.menu-drawer {
+  background: #fff; color: #222; border-radius: 16px;
   box-shadow: 0 12px 32px rgba(0,0,0,.12);
-  margin: 16px;
-  overflow: hidden;
-  position: relative;
-  z-index: 4001; /* 确保在顶栏之上，避免重合 */
+  width: 320px; max-width: calc(100% - 16px);
+  height: calc(100% - 16px);
+  overflow: hidden; position: relative; z-index: 4001;
+  transition: transform .2s ease;
 }
-.menu-panel.desktop { 
-  width: 100%; 
-  max-width: none;
-  height: 50vh;
-  margin: 0;
-  margin-bottom: auto;
-  transform: scale(1);
-  border-radius: 0 0 24px 24px;
-  left: 0;
-  right: 0;
-}
-.menu-panel.mobile { width: 100%; height: calc(100% - 32px); }
-
-.menu-panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 1px solid rgba(0,0,0,.06);
-}
+.menu-drawer-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 12px 12px 8px; border-bottom: 1px solid rgba(0,0,0,.06); }
 .menu-title { font-weight: 700; }
-.menu-close {
-  border: none;
-  background: transparent;
-  font-size: 18px;
-  cursor: pointer;
-  color: #666;
-}
-.menu-close:hover { color: #000; }
 
-.menu-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0 2px;
-  padding: 16px;
-  padding-bottom: 20px;
-}
-@media (min-width: 480px) {
-  .menu-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
-@media (min-width: 768px) {
-  .menu-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0 2px; }
-}
-@media (min-width: 1200px) {
-  .menu-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0 2px; }
-}
+/* 进入/离开时抽屉从左滑入/滑出 */
+.drawer-enter-from .menu-drawer { transform: translateX(-340px); }
+.drawer-leave-to .menu-drawer { transform: translateX(-340px); }
 
-.menu-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 30px 22px;
-  border-radius: 0;
-  border: 1px solid rgba(0,0,0,.06);
-  background: linear-gradient(to right, rgba(124, 227, 161, .15), rgba(124, 227, 161, .05), rgba(255, 255, 255, 0));
-  cursor: pointer;
-  transition: all .15s ease;
-  text-align: left;
-  margin-bottom: 8px;
+/* 列表与组标题 */
+.menu-list { padding: 8px 8px 16px; overflow-y: auto; max-height: calc(100% - 48px); }
+.menu-section { margin-top: 8px; }
+.menu-section-title { margin: 8px 8px 6px; font-size: 12px; font-weight: 700; color: #6b7280; letter-spacing: .04em; text-transform: uppercase; }
+.menu-item {
+  width: 100%; display: flex; align-items: center; gap: 12px;
+  padding: 8px 10px; border-radius: 10px; border: 1px solid transparent;
+  background: transparent; cursor: pointer; min-height: 36px;
 }
-.menu-card:hover, .menu-card:active {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 16px rgba(0,0,0,.08);
-  border-color: rgba(34, 139, 34, .7);
-  background: linear-gradient(to right, 
-    rgba(34, 139, 34, .45) 0%, 
-    rgba(34, 139, 34, .45) 15%,
-    rgba(34, 139, 34, .35) 25%,
-    rgba(34, 139, 34, .25) 35%,
-    rgba(34, 139, 34, .15) 50%,
-    rgba(34, 139, 34, .08) 70%,
-    rgba(34, 139, 34, .05) 100%);
-}
-.menu-card:active {
-  background: linear-gradient(to right, rgba(34, 139, 34, .85), rgba(34, 139, 34, .55), rgba(255, 255, 255, 0));
-  border-color: rgba(34, 139, 34, .9);
-  box-shadow: 0 8px 16px rgba(34, 139, 34, .2);
-}
-.menu-card-icon { 
-  font-size: 24px; 
-  line-height: 1;
-  color: #4fc08d;
-}
-.menu-card-text { 
-  font-weight: 600; 
-  font-size: 17px;
-  color: #555;
-  margin-left: auto;
-  text-align: right;
-}
+.menu-item:hover { background: #f5faf7; border-color: rgba(76,175,80,.25); }
+.menu-item:active { background: #e8f5e9; border-color: rgba(46,125,50,.35); }
+.menu-item:active .mi-icon { color: #2e7d32; }
+.menu-item:active .mi-label { color: #111827; }
+.menu-list :deep(.mi-icon) { width: 18px; height: 18px; font-size: 18px; color: #4CAF50; flex: none; }
+.mi-label { font-size: 17px; color: #1f2937; }
 
-/* 移动端：隐藏顶栏大多数菜单项，仅保留品牌与折叠按钮，点击后全屏展开；增强按钮可见性 */
+/* 移动端仅保留品牌与汉堡按钮 */
 @media (max-width: 768px) {
   .topbar :deep(.el-menu-item).nav-item { display: none !important; }
-  .menu-toggle { 
-    margin-left: 4px; 
-    width: 40px;
-    height: 34px;
-    background: transparent;
-  }
-  .menu-panel.mobile { height: calc(100% - 32px); }
 }
 
-/* 过渡动画 */
-.fade-enter-active, .fade-leave-active { transition: opacity .15s ease; }
-.fade-enter-from, .fade-leave-to { opacity: 0; }
-
-/* 隐藏 Element Plus 横向菜单的“更多(…)”溢出入口，避免出现三点按钮 */
+/* 隐藏 Element Plus 横向菜单的“更多”入口（...） */
 .topbar :deep(.el-sub-menu) { display: none !important; }
+
+/* 抽屉淡入背景整体过渡（仅用于透明背景下的轻微渐显） */
+.drawer-enter-active, .drawer-leave-active { transition: opacity .15s ease; }
+.drawer-enter-from, .drawer-leave-to { opacity: 0; }
 </style>

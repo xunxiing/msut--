@@ -1,0 +1,60 @@
+<template>
+  <div>
+    <el-menu
+      mode="horizontal"
+      :router="true"
+      :default-active="$route.path"
+      :ellipsis="false"
+      :class="['topbar', { 'is-menu-open': menuOpen }]"
+    >
+      <button
+        class="menu-toggle start"
+        @click.stop="toggleMenu"
+        aria-label="打开菜单"
+        :aria-expanded="menuOpen ? 'true' : 'false'"
+        title="菜单"
+        v-show="!menuOpen"
+      >
+        <span class="bars" aria-hidden="true"><i></i><i></i><i></i></span>
+      </button>
+      <el-menu-item index="/" class="brand">🍉 甜瓜联合科技</el-menu-item>
+      <el-menu-item index="/about" class="nav-item">关于</el-menu-item>
+      <el-menu-item index="/dsl" class="nav-item">DSL 工具</el-menu-item>
+      <el-menu-item index="/watermark" class="nav-item">水印检�?/el-menu-item>
+      <el-menu-item index="/resources" class="nav-item">文件�?/el-menu-item>
+      <el-menu-item v-if="auth.user" index="/dashboard" class="nav-item">控制�?/el-menu-item>
+      <el-menu-item v-if="auth.user" index="/my/resources" class="nav-item">我的存档</el-menu-item>
+      <el-menu-item v-if="auth.user" index="/upload" class="nav-item">上传文件</el-menu-item>
+
+      
+      <div class="flex-spacer"></div>
+      <template v-if="!auth.user">
+        <el-menu-item index="/login" class="nav-item">登录</el-menu-item>
+        <el-menu-item index="/register" class="nav-item">注册</el-menu-item>
+      </template>
+      <el-menu-item v-else @click="onLogout" class="nav-item">退�?/el-menu-item>
+    </el-menu>
+
+    <transition name="fade">
+      <div v-if="menuOpen" class="menu-backdrop" @click.self="closeMenu">
+        <aside class="menu-drawer" role="dialog" aria-label="导航菜单">
+          <div class="menu-drawer-header">
+            <div class="menu-title">导航菜单</div>
+            <button class="menu-close" @click="closeMenu" aria-label="关闭">×</button>
+          </div>
+          <nav class="menu-list">
+            <button
+              v-for="item in visibleItems"
+              :key="item.path || item.key"
+              class="menu-item"
+              @click="onMenuCardClick(item)"
+            >
+              <component v-if="item.icon" :is="item.icon" class="mi-icon" aria-hidden="true" />
+              <span class="mi-label">{{ item.label }}</span>
+            </button>
+          </nav>
+        </aside>
+      </div>
+    </transition>
+
+    <router-view />

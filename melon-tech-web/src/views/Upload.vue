@@ -61,7 +61,7 @@
     <el-result v-else icon="success" title="分享创建完成" sub-title="未登录的用户也能通过链接访问并下载">
       <template #extra>
         <el-input v-model="shareUrl" readonly style="max-width:520px; margin:0 auto 12px;" />
-        <el-space>
+        <el-space wrap class="result-actions">
           <el-button type="primary" @click="copy(shareUrl)">复制链接</el-button>
           <el-button @click="$router.push(`/share/${slug}`)">查看详情</el-button>
           <el-button @click="$router.push('/resources')">返回列表</el-button>
@@ -175,4 +175,10 @@ onBeforeUnmount(() => {
 .card { border-radius: 14px; }
 .mb { margin-bottom: 12px; }
 .mt { margin-top: 10px; }
+
+/* Responsive result actions */
+@media (max-width: 640px) {
+  :deep(.result-actions .el-space__item) { flex: 1 1 calc(50% - 8px); }
+  :deep(.result-actions .el-button) { width: 100%; }
+}
 </style>

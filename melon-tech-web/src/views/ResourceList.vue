@@ -140,10 +140,16 @@ onMounted(fetch)
 .author { color: var(--el-text-color-secondary); font-size: 13px; }
 .card { border-radius: 14px; }
 .pager { display: flex; justify-content: center; margin: 18px 0; }
-.actions { display: flex; gap: 10px; align-items: center; }
+.actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .like-btn { display: inline-flex; align-items: center; gap: 6px; background: transparent; border: none; cursor: pointer; padding: 2px 6px; color: var(--el-text-color-secondary); }
 .like-btn .like-icon { width: 24px; height: 24px; }
 .like-btn .count { font-size: 14px; }
 .like-btn.liked { color: #f44336; }
+
+/* Responsive for header actions */
+@media (max-width: 640px) {
+  .actions { justify-content: flex-start; }
+  :deep(.actions .el-input) { flex: 1 0 100%; }
+}
 </style>
 

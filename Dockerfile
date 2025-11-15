@@ -58,25 +58,27 @@ RUN echo "=== 更新包索引 ===" && apk update \
 RUN echo '#!/bin/sh' > /app/start.sh && \
     echo 'set -e' >> /app/start.sh && \
     echo '' >> /app/start.sh && \
-    echo '# 启动后端服务 (FastAPI)' >> /app/start.sh && \
+    echo '# 启动后端服务 (FastAPI) 作为 appuser' >> /app/start.sh && \
     echo 'PORT="${PORT:-3400}"' >> /app/start.sh && \
     echo 'cd /app' >> /app/start.sh && \
-    echo 'python3 -m uvicorn server.app:app --host 0.0.0.0 --port "$PORT" &' >> /app/start.sh && \
+    echo 'gosu appuser python3 -m uvicorn server.app:app --host 0.0.0.0 --port "$PORT" --log-level info &' >> /app/start.sh && \
+    echo 'FASTAPI_PID=$!' >> /app/start.sh && \
+    echo 'echo "FastAPI started with PID $FASTAPI_PID"' >> /app/start.sh && \
+    echo 'sleep 3' >> /app/start.sh && \
     echo '' >> /app/start.sh && \
-    echo '# 启动 nginx' >> /app/start.sh && \
-    echo 'nginx -g "daemon off;" &' >> /app/start.sh && \
-    echo 'wait' >> /app/start.sh && \
+    echo '# 启动 nginx 作为 root' >> /app/start.sh && \
+    echo 'nginx -e /dev/stderr -g "daemon off;"' >> /app/start.sh && \
     chmod +x /app/start.sh
+
+# 安装 gosu 用于用户切换
+RUN apk add --no-cache gosu
 
 # 创建必要的目录和设置权限
 RUN mkdir -p /app/server/uploads /tmp /var/cache/nginx /var/log/nginx && \
-    chown -R appuser:appgroup /app/server /usr/share/nginx/html /var/cache/nginx /var/log/nginx /etc/nginx/conf.d && \
+    chown -R appuser:appgroup /app/server /usr/share/nginx/html /var/cache/nginx /var/log/nginx && \
     chmod -R 755 /app/server/uploads && \
-    touch /run/nginx.pid && \
-    chown appuser:appgroup /run/nginx.pid
-
-# 切换到非 root 用户
-USER appuser
+    touch /tmp/nginx.pid && \
+    chown appuser:appgroup /tmp/nginx.pid
 
 # 环境变量（移除敏感的 JWT_SECRET）
 ENV NODE_ENV=production \
@@ -101,4 +103,5 @@ LABEL org.opencontainers.image.title="MSUT全栈认证系统" \
       org.opencontainers.image.vendor="MSUT" \
       org.opencontainers.image.licenses="MIT"
 
+# 以 root 用户启动，脚本内部会切换到 appuser
 ENTRYPOINT ["/app/start.sh"]

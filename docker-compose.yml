@@ -2,60 +2,10 @@ services:
   msut-auth-app:
     image: crpi-75lq6t3o28kvt0hk.cn-heyuan.personal.cr.aliyuncs.com/msut/msut-web:latest
     container_name: msut-auth-app
-    user: "0:0"
     security_opt:
       - label=disable
-    entrypoint:
-      - /bin/sh
-      - -c
-      - |
-        set -e
-        umask 000
-        # Ensure mounts exist and are writable by appuser (10001)
-        mkdir -p /app/server/uploads /app/server/data
-        chown -R 10001:10001 /app/server/uploads /app/server/data || true
-        chmod -R u+rwX,g+rwX /app/server/uploads /app/server/data || true
-        # Ensure SQLite DB file exists and is writable by appuser
-        # Note: use $$ to escape docker-compose variable interpolation
-        DB_DIR="$${DATA_DIR:-/app/server/data}"
-        DB_FILE="$$DB_DIR/data.sqlite"
-        echo "[init] DB_DIR=$$DB_DIR"
-        echo "[init] DB_FILE=$$DB_FILE"
-        mkdir -p "$$DB_DIR" || true
-        # If a directory exists at the DB file path (historical mis-mount), fix it
-        if [ -d "$$DB_FILE" ]; then
-          echo "[init] WARN: $$DB_FILE is a directory; attempting to fix..."
-          if rmdir "$$DB_FILE" 2>/dev/null; then
-            echo "[init] Removed empty directory at DB file path"
-          else
-            mv "$$DB_FILE" "$$DB_FILE.dirbak-$(date +%s)" 2>/dev/null || true
-            echo "[init] Renamed directory to backup: $$DB_FILE.dirbak-*"
-          fi
-        fi
-        touch "$$DB_FILE" || true
-        chown 10001:10001 "$$DB_FILE" || true
-        chmod 0666 "$$DB_FILE" || true
-        echo "[init] ls -ld $$DB_DIR:" && ls -ld "$$DB_DIR" || true
-        echo "[init] ls -l $$DB_DIR:" && ls -l "$$DB_DIR" || true
-        # Start FastAPI as appuser using gosu
-        PORT="$${PORT:-3400}"
-        echo "[init] Starting FastAPI on port $$PORT"
-        cd /app && gosu appuser python3 -m uvicorn server.app:app --host 0.0.0.0 --port $$PORT --log-level info &
-        FASTAPI_PID=$!
-        echo "[init] FastAPI started with PID $$FASTAPI_PID"
-        # Wait a moment to ensure FastAPI is ready
-        sleep 5
-        # Test if FastAPI is responding
-        if curl -f http://localhost:$$PORT/api/auth/me >/dev/null 2>&1; then
-          echo "[init] FastAPI is responding"
-        else
-          echo "[init] WARNING: FastAPI may not be ready yet, continuing..."
-        fi
-        # Start nginx as root (required for port 80)
-        echo "[init] Starting nginx"
-        exec nginx -e /dev/stderr -g "daemon off;"
     ports:
-      - "1122:80"
+      - "1122:3400"
       - "3400:3400"
     environment:
       - NODE_ENV=production

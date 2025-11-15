@@ -23,11 +23,11 @@ FROM python:3.11-alpine${ALPINE_VERSION}
 
 WORKDIR /app
 
-# Runtime deps: curl for healthcheck, sqlite for CLI access, gosu for dropping privileges
+# Runtime deps: curl for healthcheck, sqlite for CLI access, su-exec for dropping privileges
 RUN apk add --no-cache \
     curl \
     sqlite \
-    gosu \
+    su-exec \
     && rm -rf /var/cache/apk/*
 
 # Non-root user
@@ -82,7 +82,7 @@ RUN echo '#!/bin/sh' > /app/start.sh && \
     echo 'PORT="${PORT:-3400}"' >> /app/start.sh && \
     echo 'cd /app' >> /app/start.sh && \
     echo 'echo "[init] Starting FastAPI on port $PORT"' >> /app/start.sh && \
-    echo 'exec gosu appuser python3 -m uvicorn server.app:app --host 0.0.0.0 --port "$PORT" --log-level info' >> /app/start.sh && \
+    echo 'exec su-exec appuser python3 -m uvicorn server.app:app --host 0.0.0.0 --port "$PORT" --log-level info' >> /app/start.sh && \
     chmod +x /app/start.sh
 
 ENV NODE_ENV=production \

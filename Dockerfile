@@ -23,11 +23,13 @@ FROM python:3.11-alpine${ALPINE_VERSION}
 
 WORKDIR /app
 
-# Runtime deps: curl for healthcheck, sqlite for CLI access, su-exec for dropping privileges
+# Runtime deps: curl for healthcheck, sqlite for CLI access, su-exec for dropping privileges, nodejs/npm for static frontend server
 RUN apk add --no-cache \
     curl \
     sqlite \
     su-exec \
+    nodejs \
+    npm \
     && rm -rf /var/cache/apk/*
 
 # Non-root user
@@ -39,6 +41,9 @@ COPY --from=frontend-builder /app/web/dist /app/web/dist
 
 # Copy backend code
 COPY server /app/server
+
+# Install Node-based static file server for frontend
+RUN npm install -g serve
 
 # Install Python deps (with build deps for native wheels), then clean up
 RUN echo "=== apk update ===" && apk update \
@@ -80,7 +85,14 @@ RUN echo '#!/bin/sh' > /app/start.sh && \
     echo 'echo "[init] ls -l $DATA_DIR:" && ls -l "$DATA_DIR" || true' >> /app/start.sh && \
     echo '' >> /app/start.sh && \
     echo 'PORT="${PORT:-3400}"' >> /app/start.sh && \
+    echo 'FRONTEND_PORT="${FRONTEND_PORT:-80}"' >> /app/start.sh && \
     echo 'cd /app' >> /app/start.sh && \
+    echo 'if [ -d "/app/web/dist" ]; then' >> /app/start.sh && \
+    echo '  echo "[init] Starting static frontend on port $FRONTEND_PORT (serve /app/web/dist)"' >> /app/start.sh && \
+    echo '  su-exec appuser serve -s /app/web/dist -l "tcp://0.0.0.0:$FRONTEND_PORT" --single &' >> /app/start.sh && \
+    echo 'else' >> /app/start.sh && \
+    echo '  echo "[init] WARNING: /app/web/dist not found; frontend will not be served"' >> /app/start.sh && \
+    echo 'fi' >> /app/start.sh && \
     echo 'echo "[init] Starting FastAPI on port $PORT"' >> /app/start.sh && \
     echo 'exec su-exec appuser python3 -m uvicorn server.app:app --host 0.0.0.0 --port "$PORT" --log-level info' >> /app/start.sh && \
     chmod +x /app/start.sh
@@ -95,7 +107,7 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
 
 VOLUME ["/app/server/uploads", "/app/server/data"]
 
-EXPOSE 3400
+EXPOSE 80 3400
 
 LABEL org.opencontainers.image.title="MSUT fullstack auth system" \
       org.opencontainers.image.description="Python + Vue.js fullstack auth and resource management (backend-only container, no Nginx)" \
@@ -105,4 +117,3 @@ LABEL org.opencontainers.image.title="MSUT fullstack auth system" \
       org.opencontainers.image.licenses="MIT"
 
 ENTRYPOINT ["/app/start.sh"]
-

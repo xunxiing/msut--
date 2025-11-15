@@ -44,8 +44,8 @@ Additional tool routes (non-breaking additions):
   - `python server/_test_files.py` – resources + upload
 
 ## Docker & Nginx
-- `Dockerfile` builds the frontend assets but the final image only runs FastAPI via Uvicorn (no Nginx inside the container). Frontend static files are expected to be served by an external Nginx or other reverse proxy.
-- `docker-compose.yml` exposes ports 1122 and 3400, both mapped to the backend API port `3400` (external Nginx or a separate frontend is expected to run outside the container). The container image itself includes a healthcheck on `http://localhost:3400/api/auth/me`.
+- `Dockerfile` builds the frontend assets and the final image runs **FastAPI via Uvicorn (port 3400)** plus a minimal Node-based static server (`serve`) that exposes the built frontend from `/app/web/dist` on **port 80** (no Nginx inside the container).
+- `docker-compose.yml` exposes ports `1122:80` (frontend static files) and `3400:3400` (backend API). The container image itself includes a healthcheck on `http://localhost:3400/api/auth/me`.
 - If you change ports or mount points, update both Dockerfile, compose and README consistently.
 
 ## Coding Conventions

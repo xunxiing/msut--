@@ -5,7 +5,7 @@ services:
     security_opt:
       - label=disable
     ports:
-      - "1122:3400"
+      - "1122:80"
       - "3400:3400"
     environment:
       - NODE_ENV=production

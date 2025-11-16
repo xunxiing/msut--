@@ -8,6 +8,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/my/resources', name: 'my-resources', meta: { requiresAuth: true }, component: () => import('../views/MyResources.vue') },
   { path: '/login', name: 'login', component: () => import('../views/Login.vue') },
   { path: '/register', name: 'register', component: () => import('../views/Register.vue') },
+  { path: '/tutorials', name: 'tutorials', component: () => import('../views/TutorialRAG.vue') },
   { path: '/resources', name: 'resources', component: () => import('../views/ResourceList.vue') },
   { path: '/upload', name: 'upload', meta: { requiresAuth: true }, component: () => import('../views/Upload.vue') },
   { path: '/dsl', name: 'dsl-tool', component: () => import('../views/DSLTool.vue') },

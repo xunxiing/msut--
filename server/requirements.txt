@@ -4,3 +4,4 @@ PyJWT==2.9.0
 bcrypt==4.2.0
 python-multipart==0.0.9
 typing-extensions>=4.12.2
+requests>=2.32.0

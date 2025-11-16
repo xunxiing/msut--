@@ -1,0 +1,456 @@
+<template>
+  <div class="page">
+    <div class="page-inner">
+      <section class="hero">
+        <div class="hero-main">
+          <h2>教程中心 · AI 搜索与问答</h2>
+          <p class="subtitle">
+            在这里集中管理甜瓜相关教程，一键搜索文档内容，或通过 AI 基于教程知识为你答疑解惑。
+          </p>
+          <div class="mode-toggle">
+            <span class="label">模式：</span>
+            <el-radio-group v-model="mode" size="small">
+              <el-radio-button label="search">文档搜索</el-radio-button>
+              <el-radio-button label="qa">AI 问答</el-radio-button>
+              <el-radio-button label="both">搜索 + 问答</el-radio-button>
+            </el-radio-group>
+          </div>
+          <div class="query-box">
+            <el-input
+              v-model="query"
+              :autosize="{ minRows: 1, maxRows: 4 }"
+              type="textarea"
+              placeholder="输入要查找的内容或想问的问题，例如：如何安装模组？"
+              @keyup.enter.exact.prevent="onSearch"
+            />
+            <div class="query-actions">
+              <el-button type="primary" :loading="loading" @click="onSearch">
+                {{ mode === 'qa' ? '问问 AI' : '搜索' }}
+              </el-button>
+              <span v-if="lastTookMs" class="hint">耗时约 {{ lastTookMs }} ms</span>
+              <span v-if="!ragEnabled" class="hint weak">当前仅开启文档搜索（RAG 未配置）</span>
+            </div>
+          </div>
+        </div>
+        <div class="hero-side">
+          <el-card class="quick-create" shadow="hover">
+            <div class="qc-header">
+              <h3>新增教程</h3>
+              <p>适合整理图文教程或攻略，支持被搜索与 AI 使用。</p>
+            </div>
+            <el-form label-position="top" @submit.prevent>
+              <el-form-item label="标题">
+                <el-input v-model="newTitle" placeholder="例如：甜瓜游乐场模组安装全流程" />
+              </el-form-item>
+              <el-form-item label="简介（可选）">
+                <el-input v-model="newDesc" placeholder="一句话说明这篇教程主要讲什么" />
+              </el-form-item>
+              <el-form-item label="正文内容">
+                <el-input
+                  v-model="newContent"
+                  type="textarea"
+                  :autosize="{ minRows: 5, maxRows: 10 }"
+                  placeholder="在这里粘贴或编写完整教程文本（支持中英文，不需要特别格式）"
+                />
+              </el-form-item>
+              <div class="qc-actions">
+                <el-button type="primary" plain :loading="creating" @click="onCreateTutorial">
+                  保存为教程
+                </el-button>
+              </div>
+            </el-form>
+          </el-card>
+        </div>
+      </section>
+
+      <section class="content">
+        <div class="left-pane">
+          <h3 class="section-title">搜索结果 / 教程列表</h3>
+          <div class="search-results" v-if="results.length">
+            <el-card
+              v-for="item in results"
+              :key="item.tutorialId + '-' + item.slug"
+              class="result-card"
+              shadow="hover"
+              @click="onSelectTutorial(item.tutorialId)"
+            >
+              <div class="rc-title">
+                <span class="rc-name">{{ item.title }}</span>
+                <span v-if="item.score !== null" class="rc-score">相关度 {{ item.score.toFixed(2) }}</span>
+              </div>
+              <p class="rc-excerpt">{{ item.excerpt }}</p>
+            </el-card>
+          </div>
+          <div v-else class="search-empty">
+            <p>暂无搜索结果，你也可以直接浏览全部教程：</p>
+            <el-button type="default" size="small" @click="loadTutorialList">加载教程列表</el-button>
+            <el-divider />
+            <el-skeleton v-if="listLoading" :rows="4" animated />
+            <el-card
+              v-else
+              v-for="t in tutorials"
+              :key="t.id"
+              class="result-card"
+              shadow="hover"
+              @click="onSelectTutorial(t.id)"
+            >
+              <div class="rc-title">
+                <span class="rc-name">{{ t.title }}</span>
+              </div>
+              <p class="rc-excerpt">{{ t.description || '暂无简介' }}</p>
+            </el-card>
+          </div>
+        </div>
+
+        <div class="right-pane">
+          <h3 class="section-title">教程内容 / AI 回答</h3>
+          <div class="qa-box" v-if="answer">
+            <div class="qa-answer">
+              <div class="qa-label">AI 回答</div>
+              <div class="qa-text">
+                <p v-for="(para, idx) in splitAnswer" :key="idx">{{ para }}</p>
+              </div>
+            </div>
+            <div class="qa-sources" v-if="answer.sources && answer.sources.length">
+              <div class="qa-label">引用片段</div>
+              <ul>
+                <li v-for="s in answer.sources" :key="s.tutorialId + '-' + s.slug + '-' + s.excerpt.slice(0, 8)">
+                  <strong>{{ s.title }}</strong>：{{ s.excerpt }}
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <div v-if="selectedTutorial" class="doc-viewer">
+            <div class="doc-header">
+              <h3>{{ selectedTutorial.title }}</h3>
+              <p class="doc-desc">{{ selectedTutorial.description || '暂无简介' }}</p>
+            </div>
+            <div class="doc-body">
+              <p v-for="(line, idx) in selectedLines" :key="idx">
+                {{ line }}
+              </p>
+            </div>
+          </div>
+
+          <div v-else-if="!answer" class="doc-placeholder">
+            <p>从左侧选择一篇教程，或在上方输入问题让 AI 帮你解答。</p>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed, onMounted, ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import {
+  createTutorial,
+  type SearchAndAskResponse,
+  searchAndAsk,
+  listTutorials,
+  getTutorial,
+  type TutorialDetail,
+  type TutorialItem,
+} from '../api/tutorials'
+import { useAuth } from '../stores/auth'
+
+const auth = useAuth()
+
+const mode = ref<'search' | 'qa' | 'both'>('both')
+const query = ref('')
+const loading = ref(false)
+const lastTookMs = ref<number | null>(null)
+const ragEnabled = ref(true)
+
+const results = ref<SearchAndAskResponse['search']['items']>([])
+const answer = ref<SearchAndAskResponse['answer'] | null>(null)
+
+const tutorials = ref<TutorialItem[]>([])
+const listLoading = ref(false)
+
+const selectedTutorial = ref<TutorialDetail | null>(null)
+
+const newTitle = ref('')
+const newDesc = ref('')
+const newContent = ref('')
+const creating = ref(false)
+
+const splitAnswer = computed(() => {
+  if (!answer.value?.text) return []
+  return answer.value.text.split(/\n+/).filter(Boolean)
+})
+
+const selectedLines = computed(() => {
+  if (!selectedTutorial.value) return []
+  return selectedTutorial.value.content.split(/\r?\n/).filter(Boolean)
+})
+
+async function onSearch() {
+  const q = query.value.trim()
+  if (!q) {
+    ElMessage.warning('请输入要搜索或提问的内容')
+    return
+  }
+  loading.value = true
+  try {
+    const data = await searchAndAsk({ query: q, mode: mode.value, limit: 6 })
+    results.value = data.search.items || []
+    answer.value = data.answer
+    lastTookMs.value = data.search.tookMs
+    ragEnabled.value = data.ragEnabled
+  } catch (e: any) {
+    const msg = e?.response?.data?.error || '搜索失败，请稍后重试'
+    ElMessage.error(msg)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadTutorialList() {
+  listLoading.value = true
+  try {
+    const data = await listTutorials({ page: 1, pageSize: 50 })
+    tutorials.value = data.items
+  } catch (e: any) {
+    const msg = e?.response?.data?.error || '加载教程列表失败'
+    ElMessage.error(msg)
+  } finally {
+    listLoading.value = false
+  }
+}
+
+async function onSelectTutorial(id: number) {
+  try {
+    const detail = await getTutorial(id)
+    selectedTutorial.value = detail
+  } catch (e: any) {
+    const msg = e?.response?.data?.error || '加载教程失败'
+    ElMessage.error(msg)
+  }
+}
+
+async function onCreateTutorial() {
+  if (!auth.user) {
+    ElMessage.warning('请先登录后再创建教程')
+    return
+  }
+  const title = newTitle.value.trim()
+  const content = newContent.value.trim()
+  if (!title || !content) {
+    ElMessage.warning('标题和正文内容不能为空')
+    return
+  }
+  creating.value = true
+  try {
+    const data = await createTutorial({ title, description: newDesc.value.trim(), content })
+    ElMessage.success('教程已保存')
+    newTitle.value = ''
+    newDesc.value = ''
+    newContent.value = ''
+    await loadTutorialList()
+    if (data.id) {
+      await onSelectTutorial(data.id)
+    }
+  } catch (e: any) {
+    const msg = e?.response?.data?.error || '保存失败，请稍后重试'
+    ElMessage.error(msg)
+  } finally {
+    creating.value = false
+  }
+}
+
+onMounted(() => {
+  loadTutorialList()
+})
+</script>
+
+<style scoped>
+.page {
+  padding: 16px;
+}
+.page-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 2.1fr) minmax(0, 1.4fr);
+  gap: 16px;
+  margin-bottom: 18px;
+}
+@media (max-width: 900px) {
+  .hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.hero-main {
+  padding: 16px 18px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(56, 189, 248, 0.05));
+  border: 1px solid rgba(16, 185, 129, 0.15);
+}
+.hero-main h2 {
+  margin: 0 0 6px;
+}
+.subtitle {
+  margin: 0 0 12px;
+  color: var(--el-text-color-secondary);
+  font-size: 14px;
+}
+.mode-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.mode-toggle .label {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+.query-box {
+  margin-top: 4px;
+}
+.query-actions {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.hint {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+.hint.weak {
+  color: #999;
+}
+.hero-side {
+  display: flex;
+}
+.quick-create {
+  flex: 1;
+  border-radius: 14px;
+}
+.qc-header h3 {
+  margin: 0 0 4px;
+}
+.qc-header p {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+.qc-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.content {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.8fr);
+  gap: 16px;
+}
+@media (max-width: 900px) {
+  .content {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.section-title {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+.left-pane,
+.right-pane {
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+}
+.search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.result-card {
+  cursor: pointer;
+}
+.rc-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.rc-name {
+  font-weight: 600;
+}
+.rc-score {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+.rc-excerpt {
+  margin: 0;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+.search-empty {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+.qa-box {
+  margin-bottom: 12px;
+}
+.qa-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #16a34a;
+  margin-bottom: 4px;
+}
+.qa-text {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(16, 185, 129, 0.04);
+  border: 1px solid rgba(16, 185, 129, 0.12);
+  font-size: 14px;
+}
+.qa-text p {
+  margin: 0 0 4px;
+}
+.qa-text p:last-child {
+  margin-bottom: 0;
+}
+.qa-sources {
+  margin-top: 8px;
+  font-size: 12px;
+}
+.qa-sources ul {
+  padding-left: 18px;
+  margin: 0;
+}
+.doc-viewer {
+  margin-top: 8px;
+}
+.doc-header h3 {
+  margin: 0 0 4px;
+}
+.doc-desc {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+.doc-body {
+  padding: 8px 10px;
+  background: #fafafa;
+  border-radius: 8px;
+  max-height: 420px;
+  overflow: auto;
+  font-size: 14px;
+}
+.doc-body p {
+  margin: 0 0 4px;
+}
+.doc-placeholder {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  margin-top: 12px;
+}
+</style>
+

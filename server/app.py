@@ -8,10 +8,43 @@ from fastapi.responses import JSONResponse, Response
 from starlette.middleware.cors import CORSMiddleware
 from starlette.staticfiles import StaticFiles
 
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+def _load_env_from_file(path: Path) -> None:
+    if not path.exists():
+        return
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            for raw in f:
+                line = raw.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                key = key.strip()
+                value = value.strip().strip('"').strip("'")
+                if not key:
+                    continue
+                os.environ.setdefault(key, value)
+    except Exception:
+        # 环境变量加载失败时静默忽略，避免影响主流程
+        pass
+
+
+# 在导入其余模块前优先加载根目录和 server 目录下的 .env，
+# 以便 JWT / RAG 等配置在模块级读取时已生效。
+_load_env_from_file(BASE_DIR / ".env")
+_load_env_from_file(BASE_DIR / "server" / ".env")
+
+
 from .auth import router as auth_router, get_current_user, is_https_enabled
 from .db import run_migrations, DB_FILE
 from .files import router as files_router
 from .melsave import router as melsave_router
+from .tutorials import router as tutorials_router
 
 
 app = FastAPI()
@@ -55,6 +88,7 @@ app.mount("/uploads", StaticFiles(directory=str(uploads_path), html=False, check
 app.include_router(auth_router)
 app.include_router(files_router)
 app.include_router(melsave_router)
+app.include_router(tutorials_router)
 
 
 @app.get("/api/private/ping")

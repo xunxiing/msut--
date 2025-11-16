@@ -20,6 +20,7 @@
       <el-menu-item index="/" class="brand">🍉 甜瓜联合科技</el-menu-item>
       <el-menu-item index="/about" class="nav-item">关于</el-menu-item>
       <el-menu-item index="/dsl" class="nav-item">DSL 工具</el-menu-item>
+      <el-menu-item index="/tutorials" class="nav-item">教程中心</el-menu-item>
       <el-menu-item index="/watermark" class="nav-item">水印检测</el-menu-item>
       <el-menu-item index="/resources" class="nav-item">文件库</el-menu-item>
       <el-menu-item v-if="auth.user" index="/dashboard" class="nav-item">控制台</el-menu-item>
@@ -121,6 +122,7 @@ const commonItems = computed<MenuItem[]>(() => [
   { label: '首页', icon: House, path: '/' },
   { label: '关于', icon: InfoFilled, path: '/about' },
   { label: 'DSL 工具', icon: Connection, path: '/dsl' },
+  { label: '教程中心', icon: Collection, path: '/tutorials' },
   { label: '水印检测', icon: Watermelon, path: '/watermark' },
   { label: '文件库', icon: Folder, path: '/resources' },
 ])

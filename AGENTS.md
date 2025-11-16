@@ -5,7 +5,7 @@ Scope: This AGENTS.md applies to the entire repository.
 ## Backend Overview
 - The backend has been fully migrated to Python/FastAPI. Do NOT re-enable the legacy Node/Express implementation under `server/src` or `server/dist`.
 - App entry: `server/app.py`
-- Routes: defined in `server/auth.py`, `server/files.py`, and `server/melsave.py`
+- Routes: defined in `server/auth.py`, `server/files.py`, `server/melsave.py`, and `server/tutorials.py` (tutorial docs + RAG).
 - DB/migrations: `server/db.py` (SQLite, file at `server/data.sqlite`)
 - Static uploads: `server/uploads/` mounted at `/uploads`
 - Utilities: `server/utils.py` (cookie options, boolean env parsing, slug/nanoid)
@@ -22,7 +22,7 @@ Scope: This AGENTS.md applies to the entire repository.
 - Download responses must set `Content-Disposition` with UTF-8 filename* percent-encoding.
 
 Additional tool routes (non-breaking additions):
-- DSL generator (anonymous): `POST /api/melsave/generate` with JSON `{ dsl: string }` returns a `.melsave` file stream with UTF‑8 filename header.
+- DSL generator (anonymous): `POST /api/melsave/generate` with JSON `{ dsl: string }` returns a `.melsave` file stream with UTF-8 filename header.
 - Resource likes (authenticated):
   - `GET /api/resources/likes?ids=1,2,3` → `{ items: [{ id, likes, liked }] }`
   - `POST /api/resources/:id/like` → like a resource (idempotent)
@@ -31,6 +31,12 @@ Additional tool routes (non-breaking additions):
 
 ## Environment & Config
 - `PORT` (dev 3000, Docker 3400), `JWT_SECRET`, `NODE_ENV`, `PUBLIC_BASE_URL`, `HTTPS_ENABLED`, `COOKIE_DOMAIN`.
+- RAG / LLM (optional, for tutorial search + QA, typically via OpenAI-compatible APIs such as 硅基流动):
+  - `RAG_API_BASE` – HTTP base (e.g. `https://api.siliconflow.cn/v1`).
+  - `RAG_API_KEY` – API key used for both embeddings and chat.
+  - `RAG_LLM_MODEL` – chat model name (e.g. `deepseek-ai/DeepSeek-V3.2-Exp`).
+  - `RAG_EMBED_MODEL` – embedding model name (e.g. `BAAI/bge-m3`).
+  - `RAG_EMBED_DIM` – embedding dimension (e.g. `1024`), used for sanity logging.
 - HSTS should only apply if `HTTPS_ENABLED` evaluates to true (see `utils.parse_bool`).
 - DB and uploads are relative to `server/` and must not be relocated without updating the Docker volumes and README.
   - The SQLite DB location is controlled by `DATA_DIR` (default `server/data/`) with the file `data.sqlite`. Do not change without adjusting Docker volumes and README.
@@ -69,3 +75,4 @@ Additional tool routes (non-breaking additions):
 
 ## Questions
 If you’re unsure about API parity or behavior, prefer maintaining the current FastAPI implementation’s behavior and return shapes, and leave a short note in PR/commit messages (or open an issue) before making behavioral changes.
+

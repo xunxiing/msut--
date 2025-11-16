@@ -1,6 +1,7 @@
 <template>
   <div class="rag-page">
-    <div class="rag-inner">
+    <div class="rag-container">
+      <div class="rag-inner">
       <header class="rag-header">
         <div class="rag-title-block">
           <h1>教程中心 · AI 搜索与问答</h1>
@@ -11,35 +12,9 @@
         <div class="rag-header-actions">
           <el-button @click="goUpload">上传文件</el-button>
           <el-button type="primary" plain @click="createDialogVisible = true">新增教程</el-button>
+          <el-button type="primary" link @click="goTutorialLibrary">打开教程文档库</el-button>
         </div>
       </header>
-
-      <section class="rag-query-card">
-        <div class="rag-mode-row">
-          <span class="label">模式：</span>
-          <el-radio-group v-model="mode" size="small">
-            <el-radio-button label="search">文档搜索</el-radio-button>
-            <el-radio-button label="qa">AI 问答</el-radio-button>
-            <el-radio-button label="both">搜索 + 问答</el-radio-button>
-          </el-radio-group>
-        </div>
-        <div class="rag-input-row">
-          <el-input
-            v-model="query"
-            :autosize="{ minRows: 2, maxRows: 6 }"
-            type="textarea"
-            placeholder="输入要查找的内容或想问的问题，例如：如何安装模组"
-            @keyup.enter.exact.prevent="onSearch"
-          />
-          <div class="rag-query-actions">
-            <el-button type="primary" :loading="loading" @click="onSearch">
-              {{ mode === 'qa' ? '问问 AI' : '搜索' }}
-            </el-button>
-            <span v-if="lastTookMs" class="hint">耗时：{{ lastTookMs }} ms</span>
-            <span v-if="!ragEnabled" class="hint weak">当前仅开启文档搜索（RAG 未配置）</span>
-          </div>
-        </div>
-      </section>
 
       <section class="rag-main">
         <div class="rag-column rag-results">
@@ -119,8 +94,58 @@
           </div>
 
           <div v-else-if="!answer" class="doc-placeholder">
-            <p>从左侧选择一篇教程，或在上方输入问题，让 AI 帮你解答。</p>
+            <p>从左侧选择一篇教程，或在下方输入问题，让 AI 帮你解答。</p>
           </div>
+        </div>
+      </section>
+
+      <section class="rag-query-card">
+        <div class="rag-input-container">
+          <div class="rag-input-wrapper-expanded">
+            <el-input
+              v-model="query"
+              :autosize="{ minRows: 2, maxRows: 6 }"
+              type="textarea"
+              placeholder="输入要查找的内容或想问的问题，例如：如何安装模组"
+              @keyup.enter.exact.prevent="onSearch"
+              class="rag-textarea"
+            />
+          </div>
+          <div class="rag-search-controls">
+            <el-button type="primary" :loading="loading" @click="onSearch" size="default">
+              <el-icon style="margin-right: 4px">
+                <component :is="mode === 'qa' ? 'ChatDotRound' : 'Search'" />
+              </el-icon>
+              {{ mode === 'qa' ? '问问 AI' : '搜索' }}
+            </el-button>
+            <div class="rag-mode-dropdown-right">
+              <el-dropdown @command="handleModeChange" trigger="click">
+                <el-button size="default" type="info" plain>
+                  <el-icon style="margin-right: 4px">
+                    <component :is="mode === 'qa' ? 'ChatDotRound' : 'Search'" />
+                  </el-icon>
+                  {{ mode === 'qa' ? 'AI 问答' : '文档搜索' }}
+                  <el-icon style="margin-left: 4px"><ArrowDown /></el-icon>
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="search">
+                      <el-icon style="margin-right: 8px"><Search /></el-icon>
+                      文档搜索
+                    </el-dropdown-item>
+                    <el-dropdown-item command="qa">
+                      <el-icon style="margin-right: 8px"><ChatDotRound /></el-icon>
+                      AI 问答
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
+          </div>
+        </div>
+        <div class="rag-query-info">
+          <span v-if="lastTookMs" class="hint">耗时：{{ lastTookMs }} ms</span>
+          <span v-if="!ragEnabled" class="hint weak">当前仅开启文档搜索（RAG 未配置）</span>
         </div>
       </section>
 
@@ -152,6 +177,7 @@
         </el-form>
       </el-dialog>
     </div>
+    </div>
   </div>
 </template>
 
@@ -159,6 +185,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
+import { Search, ChatDotRound, ArrowDown } from '@element-plus/icons-vue'
 import {
   createTutorial,
   type SearchAndAskResponse,
@@ -173,7 +200,7 @@ import { useAuth } from '../stores/auth'
 const auth = useAuth()
 const router = useRouter()
 
-const mode = ref<'search' | 'qa' | 'both'>('both')
+const mode = ref<'search' | 'qa'>('search')
 const query = ref('')
 const loading = ref(false)
 const lastTookMs = ref<number | null>(null)
@@ -251,6 +278,14 @@ function goUpload() {
   router.push('/upload')
 }
 
+function goTutorialLibrary() {
+  router.push('/tutorials/library')
+}
+
+function handleModeChange(command: string) {
+  mode.value = command as 'search' | 'qa'
+}
+
 async function onCreateTutorial() {
   if (!auth.user) {
     ElMessage.warning('请先登录后再创建教程')
@@ -289,8 +324,15 @@ onMounted(() => {
 
 <style scoped>
 .rag-page {
-  padding: 16px;
+  min-height: 100vh;
   background: #f3f4f6;
+  padding: 0;
+  margin: 0;
+}
+.rag-container {
+  min-height: 100vh;
+  background: #f3f4f6;
+  padding: 16px;
 }
 .rag-inner {
   max-width: 1200px;
@@ -318,27 +360,71 @@ onMounted(() => {
   flex-shrink: 0;
 }
 .rag-query-card {
-  padding: 16px 18px;
-  border-radius: 16px;
+  padding: 24px 32px;
+  border-radius: 24px;
   background: #ffffff;
-  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
-  margin-bottom: 20px;
+  box-shadow: 0 8px 32px rgba(15, 23, 42, 0.08);
+  margin: 32px auto 0;
+  max-width: 800px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
 }
-.rag-mode-row {
+.rag-input-container {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  align-items: flex-start;
+  gap: 16px;
   margin-bottom: 12px;
 }
-.rag-mode-row .label {
-  font-size: 13px;
-  color: var(--el-text-color-secondary);
+.rag-input-wrapper-expanded {
+  flex: 1;
+  min-width: 0;
+  margin-right: 16px;
 }
-.rag-query-actions {
-  margin-top: 8px;
+.rag-search-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.rag-mode-dropdown-right .el-button {
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.15);
+}
+.rag-mode-dropdown-right :deep(.el-dropdown-menu__item) {
   display: flex;
   align-items: center;
-  gap: 12px;
+  padding: 8px 16px;
+}
+.rag-input-wrapper {
+  flex: 1;
+  min-width: 0;
+}
+.rag-textarea {
+  border-radius: 12px;
+}
+.rag-textarea :deep(.el-textarea__inner) {
+  border-radius: 12px;
+  border-color: #409eff;
+  box-shadow: 0 0 0 1px #409eff;
+}
+.rag-textarea :deep(.el-textarea__inner:focus) {
+  border-color: #409eff;
+  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2);
+}
+.rag-search-button {
+  flex-shrink: 0;
+  padding-top: 0;
+}
+.rag-search-button :deep(.el-button) {
+  height: 40px;
+  padding: 8px 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.3);
+}
+.rag-query-info {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 8px;
 }
 .hint {
   font-size: 12px;
@@ -472,4 +558,3 @@ onMounted(() => {
   margin-top: 8px;
 }
 </style>
-

@@ -9,12 +9,14 @@ const routes: RouteRecordRaw[] = [
   { path: '/login', name: 'login', component: () => import('../views/Login.vue') },
   { path: '/register', name: 'register', component: () => import('../views/Register.vue') },
   { path: '/tutorials', name: 'tutorials', component: () => import('../views/TutorialRAG.vue') },
+  { path: '/tutorials/library', name: 'tutorials-library', component: () => import('../views/TutorialLibrary.vue') },
   { path: '/resources', name: 'resources', component: () => import('../views/ResourceList.vue') },
   { path: '/upload', name: 'upload', meta: { requiresAuth: true }, component: () => import('../views/Upload.vue') },
   { path: '/dsl', name: 'dsl-tool', component: () => import('../views/DSLTool.vue') },
   { path: '/watermark', name: 'watermark', component: () => import('../views/Watermark.vue') },
   { path: '/share/:slug', name: 'resource-detail', component: () => import('../views/ResourceDetail.vue') },
 ]
+
 
 const router = createRouter({
   history: createWebHistory(),

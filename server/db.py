@@ -154,6 +154,42 @@ def run_migrations(conn: Optional[sqlite3.Connection] = None) -> None:
               FOREIGN KEY (resource_id) REFERENCES resources(id) ON DELETE CASCADE,
               FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             );
+
+            -- 独立教程内容（用于文档系统 + RAG）
+            CREATE TABLE IF NOT EXISTS tutorials (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              slug TEXT NOT NULL UNIQUE,
+              title TEXT NOT NULL,
+              description TEXT DEFAULT '',
+              content TEXT NOT NULL,
+              created_by INTEGER,
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+              FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+            );
+
+            CREATE TRIGGER IF NOT EXISTS trg_tutorials_updated_at
+            AFTER UPDATE ON tutorials
+            FOR EACH ROW BEGIN
+              UPDATE tutorials SET updated_at = datetime('now') WHERE id = OLD.id;
+            END;
+
+            -- 教程分块向量，用于语义检索 / RAG
+            CREATE TABLE IF NOT EXISTS tutorial_embeddings (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              tutorial_id INTEGER NOT NULL,
+              chunk_index INTEGER NOT NULL,
+              chunk_text TEXT NOT NULL,
+              embedding_json TEXT NOT NULL,
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              FOREIGN KEY (tutorial_id) REFERENCES tutorials(id) ON DELETE CASCADE
+            );
+            """
+        )
+        cur.executescript(
+            """
+            CREATE INDEX IF NOT EXISTS idx_tutorials_slug ON tutorials(slug);
+            CREATE INDEX IF NOT EXISTS idx_tutorial_embeddings_tutorial ON tutorial_embeddings(tutorial_id);
             """
         )
         conn.commit()

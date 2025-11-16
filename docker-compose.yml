@@ -16,6 +16,11 @@ services:
       - HTTPS_ENABLED=${HTTPS_ENABLED:-false}
       - COOKIE_DOMAIN=${COOKIE_DOMAIN:-}
       - DATA_DIR=/app/server/data
+      - RAG_API_BASE=${RAG_API_BASE:-}
+      - RAG_API_KEY=${RAG_API_KEY:-}
+      - RAG_LLM_MODEL=${RAG_LLM_MODEL:-}
+      - RAG_EMBED_MODEL=${RAG_EMBED_MODEL:-}
+      - RAG_EMBED_DIM=${RAG_EMBED_DIM:-}
     volumes:
       - ./uploads:/app/server/uploads:rw
       # Bind the whole data dir so SQLite can create the DB file inside it.

@@ -1,72 +1,50 @@
 <template>
-  <div class="page">
-    <div class="page-inner">
-      <section class="hero">
-        <div class="hero-main">
-          <h2>教程中心 · AI 搜索与问答</h2>
-          <p class="subtitle">
+  <div class="rag-page">
+    <div class="rag-inner">
+      <header class="rag-header">
+        <div class="rag-title-block">
+          <h1>教程中心 · AI 搜索与问答</h1>
+          <p class="rag-subtitle">
             在这里集中管理甜瓜相关教程，一键搜索文档内容，或通过 AI 基于教程知识为你答疑解惑。
           </p>
-          <div class="mode-toggle">
-            <span class="label">模式：</span>
-            <el-radio-group v-model="mode" size="small">
-              <el-radio-button label="search">文档搜索</el-radio-button>
-              <el-radio-button label="qa">AI 问答</el-radio-button>
-              <el-radio-button label="both">搜索 + 问答</el-radio-button>
-            </el-radio-group>
-          </div>
-          <div class="query-box">
-            <el-input
-              v-model="query"
-              :autosize="{ minRows: 1, maxRows: 4 }"
-              type="textarea"
-              placeholder="输入要查找的内容或想问的问题，例如：如何安装模组？"
-              @keyup.enter.exact.prevent="onSearch"
-            />
-            <div class="query-actions">
-              <el-button type="primary" :loading="loading" @click="onSearch">
-                {{ mode === 'qa' ? '问问 AI' : '搜索' }}
-              </el-button>
-              <span v-if="lastTookMs" class="hint">耗时约 {{ lastTookMs }} ms</span>
-              <span v-if="!ragEnabled" class="hint weak">当前仅开启文档搜索（RAG 未配置）</span>
-            </div>
-          </div>
         </div>
-        <div class="hero-side">
-          <el-card class="quick-create" shadow="hover">
-            <div class="qc-header">
-              <h3>新增教程</h3>
-              <p>适合整理图文教程或攻略，支持被搜索与 AI 使用。</p>
-            </div>
-            <el-form label-position="top" @submit.prevent>
-              <el-form-item label="标题">
-                <el-input v-model="newTitle" placeholder="例如：甜瓜游乐场模组安装全流程" />
-              </el-form-item>
-              <el-form-item label="简介（可选）">
-                <el-input v-model="newDesc" placeholder="一句话说明这篇教程主要讲什么" />
-              </el-form-item>
-              <el-form-item label="正文内容">
-                <el-input
-                  v-model="newContent"
-                  type="textarea"
-                  :autosize="{ minRows: 5, maxRows: 10 }"
-                  placeholder="在这里粘贴或编写完整教程文本（支持中英文，不需要特别格式）"
-                />
-              </el-form-item>
-              <div class="qc-actions">
-                <el-button type="primary" plain :loading="creating" @click="onCreateTutorial">
-                  保存为教程
-                </el-button>
-              </div>
-            </el-form>
-          </el-card>
+        <div class="rag-header-actions">
+          <el-button @click="goUpload">上传文件</el-button>
+          <el-button type="primary" plain @click="createDialogVisible = true">新增教程</el-button>
+        </div>
+      </header>
+
+      <section class="rag-query-card">
+        <div class="rag-mode-row">
+          <span class="label">模式：</span>
+          <el-radio-group v-model="mode" size="small">
+            <el-radio-button label="search">文档搜索</el-radio-button>
+            <el-radio-button label="qa">AI 问答</el-radio-button>
+            <el-radio-button label="both">搜索 + 问答</el-radio-button>
+          </el-radio-group>
+        </div>
+        <div class="rag-input-row">
+          <el-input
+            v-model="query"
+            :autosize="{ minRows: 2, maxRows: 6 }"
+            type="textarea"
+            placeholder="输入要查找的内容或想问的问题，例如：如何安装模组"
+            @keyup.enter.exact.prevent="onSearch"
+          />
+          <div class="rag-query-actions">
+            <el-button type="primary" :loading="loading" @click="onSearch">
+              {{ mode === 'qa' ? '问问 AI' : '搜索' }}
+            </el-button>
+            <span v-if="lastTookMs" class="hint">耗时：{{ lastTookMs }} ms</span>
+            <span v-if="!ragEnabled" class="hint weak">当前仅开启文档搜索（RAG 未配置）</span>
+          </div>
         </div>
       </section>
 
-      <section class="content">
-        <div class="left-pane">
-          <h3 class="section-title">搜索结果 / 教程列表</h3>
-          <div class="search-results" v-if="results.length">
+      <section class="rag-main">
+        <div class="rag-column rag-results">
+          <h2 class="section-title">搜索结果 / 教程列表</h2>
+          <div v-if="results.length" class="search-results">
             <el-card
               v-for="item in results"
               :key="item.tutorialId + '-' + item.slug"
@@ -83,38 +61,45 @@
           </div>
           <div v-else class="search-empty">
             <p>暂无搜索结果，你也可以直接浏览全部教程：</p>
-            <el-button type="default" size="small" @click="loadTutorialList">加载教程列表</el-button>
+            <el-button type="default" size="small" :loading="listLoading" @click="loadTutorialList">
+              加载教程列表
+            </el-button>
             <el-divider />
             <el-skeleton v-if="listLoading" :rows="4" animated />
-            <el-card
-              v-else
-              v-for="t in tutorials"
-              :key="t.id"
-              class="result-card"
-              shadow="hover"
-              @click="onSelectTutorial(t.id)"
-            >
-              <div class="rc-title">
-                <span class="rc-name">{{ t.title }}</span>
-              </div>
-              <p class="rc-excerpt">{{ t.description || '暂无简介' }}</p>
-            </el-card>
+            <template v-else>
+              <el-card
+                v-for="t in tutorials"
+                :key="t.id"
+                class="result-card"
+                shadow="hover"
+                @click="onSelectTutorial(t.id)"
+              >
+                <div class="rc-title">
+                  <span class="rc-name">{{ t.title }}</span>
+                </div>
+                <p class="rc-excerpt">{{ t.description || '暂无简介' }}</p>
+              </el-card>
+            </template>
           </div>
         </div>
 
-        <div class="right-pane">
-          <h3 class="section-title">教程内容 / AI 回答</h3>
-          <div class="qa-box" v-if="answer">
+        <div class="rag-column rag-answer">
+          <h2 class="section-title">教程内容 / AI 回答</h2>
+
+          <div v-if="answer" class="qa-box">
             <div class="qa-answer">
               <div class="qa-label">AI 回答</div>
               <div class="qa-text">
                 <p v-for="(para, idx) in splitAnswer" :key="idx">{{ para }}</p>
               </div>
             </div>
-            <div class="qa-sources" v-if="answer.sources && answer.sources.length">
+            <div v-if="answer.sources && answer.sources.length" class="qa-sources">
               <div class="qa-label">引用片段</div>
               <ul>
-                <li v-for="s in answer.sources" :key="s.tutorialId + '-' + s.slug + '-' + s.excerpt.slice(0, 8)">
+                <li
+                  v-for="s in answer.sources"
+                  :key="s.tutorialId + '-' + s.slug + '-' + s.excerpt.slice(0, 8)"
+                >
                   <strong>{{ s.title }}</strong>：{{ s.excerpt }}
                 </li>
               </ul>
@@ -134,10 +119,38 @@
           </div>
 
           <div v-else-if="!answer" class="doc-placeholder">
-            <p>从左侧选择一篇教程，或在上方输入问题让 AI 帮你解答。</p>
+            <p>从左侧选择一篇教程，或在上方输入问题，让 AI 帮你解答。</p>
           </div>
         </div>
       </section>
+
+      <el-dialog v-model="createDialogVisible" title="新增教程" width="640px">
+        <p class="qc-intro">
+          适合整理图文教程或攻略，保存后可被搜索与 AI 使用。
+        </p>
+        <el-form label-position="top" @submit.prevent>
+          <el-form-item label="标题">
+            <el-input v-model="newTitle" placeholder="例如：甜瓜游乐场模组安装全流程" />
+          </el-form-item>
+          <el-form-item label="简介（可选）">
+            <el-input v-model="newDesc" placeholder="一句话说明这篇教程主要讲什么" />
+          </el-form-item>
+          <el-form-item label="正文内容">
+            <el-input
+              v-model="newContent"
+              type="textarea"
+              :autosize="{ minRows: 6, maxRows: 14 }"
+              placeholder="在这里粘贴或编写完整教程文本（支持中英文，不需要特别格式）"
+            />
+          </el-form-item>
+          <div class="qc-actions">
+            <el-button @click="createDialogVisible = false">取消</el-button>
+            <el-button type="primary" :loading="creating" @click="onCreateTutorial">
+              保存为教程
+            </el-button>
+          </div>
+        </el-form>
+      </el-dialog>
     </div>
   </div>
 </template>
@@ -145,6 +158,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useRouter } from 'vue-router'
 import {
   createTutorial,
   type SearchAndAskResponse,
@@ -157,6 +171,7 @@ import {
 import { useAuth } from '../stores/auth'
 
 const auth = useAuth()
+const router = useRouter()
 
 const mode = ref<'search' | 'qa' | 'both'>('both')
 const query = ref('')
@@ -176,6 +191,7 @@ const newTitle = ref('')
 const newDesc = ref('')
 const newContent = ref('')
 const creating = ref(false)
+const createDialogVisible = ref(false)
 
 const splitAnswer = computed(() => {
   if (!answer.value?.text) return []
@@ -231,6 +247,10 @@ async function onSelectTutorial(id: number) {
   }
 }
 
+function goUpload() {
+  router.push('/upload')
+}
+
 async function onCreateTutorial() {
   if (!auth.user) {
     ElMessage.warning('请先登录后再创建教程')
@@ -253,6 +273,7 @@ async function onCreateTutorial() {
     if (data.id) {
       await onSelectTutorial(data.id)
     }
+    createDialogVisible.value = false
   } catch (e: any) {
     const msg = e?.response?.data?.error || '保存失败，请稍后重试'
     ElMessage.error(msg)
@@ -267,52 +288,53 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.page {
+.rag-page {
   padding: 16px;
+  background: #f3f4f6;
 }
-.page-inner {
+.rag-inner {
   max-width: 1200px;
   margin: 0 auto;
 }
-.hero {
-  display: grid;
-  grid-template-columns: minmax(0, 2.1fr) minmax(0, 1.4fr);
+.rag-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
   gap: 16px;
-  margin-bottom: 18px;
+  margin-bottom: 16px;
 }
-@media (max-width: 900px) {
-  .hero {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-.hero-main {
-  padding: 16px 18px;
-  border-radius: 14px;
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(56, 189, 248, 0.05));
-  border: 1px solid rgba(16, 185, 129, 0.15);
-}
-.hero-main h2 {
+.rag-title-block h1 {
   margin: 0 0 6px;
+  font-size: 22px;
 }
-.subtitle {
-  margin: 0 0 12px;
-  color: var(--el-text-color-secondary);
+.rag-subtitle {
+  margin: 0;
   font-size: 14px;
+  color: var(--el-text-color-secondary);
 }
-.mode-toggle {
+.rag-header-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.rag-query-card {
+  padding: 16px 18px;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
+  margin-bottom: 20px;
+}
+.rag-mode-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
-.mode-toggle .label {
+.rag-mode-row .label {
   font-size: 13px;
   color: var(--el-text-color-secondary);
 }
-.query-box {
-  margin-top: 4px;
-}
-.query-actions {
+.rag-query-actions {
   margin-top: 8px;
   display: flex;
   align-items: center;
@@ -323,34 +345,21 @@ onMounted(() => {
   color: var(--el-text-color-secondary);
 }
 .hint.weak {
-  color: #999;
+  color: #9ca3af;
 }
-.hero-side {
-  display: flex;
-}
-.quick-create {
-  flex: 1;
-  border-radius: 14px;
-}
-.qc-header h3 {
-  margin: 0 0 4px;
-}
-.qc-header p {
-  margin: 0 0 12px;
-  font-size: 13px;
-  color: var(--el-text-color-secondary);
-}
-.qc-actions {
-  display: flex;
-  justify-content: flex-end;
-}
-.content {
+.rag-main {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.8fr);
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.7fr);
   gap: 16px;
 }
 @media (max-width: 900px) {
-  .content {
+  .rag-header {
+    flex-direction: column;
+  }
+  .rag-header-actions {
+    align-self: flex-start;
+  }
+  .rag-main {
     grid-template-columns: minmax(0, 1fr);
   }
 }
@@ -358,12 +367,11 @@ onMounted(() => {
   margin: 0 0 8px;
   font-size: 15px;
 }
-.left-pane,
-.right-pane {
-  border-radius: 14px;
+.rag-column {
+  border-radius: 16px;
   padding: 12px 14px;
-  background: #fff;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
 }
 .search-results {
   display: flex;
@@ -438,7 +446,7 @@ onMounted(() => {
 }
 .doc-body {
   padding: 8px 10px;
-  background: #fafafa;
+  background: #f9fafb;
   border-radius: 8px;
   max-height: 420px;
   overflow: auto;
@@ -451,6 +459,17 @@ onMounted(() => {
   font-size: 13px;
   color: var(--el-text-color-secondary);
   margin-top: 12px;
+}
+.qc-intro {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+.qc-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
 }
 </style>
 

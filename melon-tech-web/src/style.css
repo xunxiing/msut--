@@ -77,3 +77,25 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+
+/* 为所有设备上的输入框设置最小字体大小为16px，防止iOS客户端自动放大 */
+.el-input__inner {
+  font-size: 16px !important;
+  min-height: 40px; /* 确保输入框有足够的高度 */
+}
+
+.el-textarea__inner {
+  font-size: 16px !important;
+  line-height: 1.5; /* 改善多行文本的可读性 */
+}
+
+/* 原生input元素 */
+input[type="text"],
+input[type="password"],
+input[type="email"],
+input[type="number"],
+input[type="tel"],
+input[type="url"],
+textarea {
+  font-size: 16px !important;
+}

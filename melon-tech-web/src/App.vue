@@ -20,7 +20,7 @@
       <el-menu-item index="/" class="brand">🍉 甜瓜联合科技</el-menu-item>
       <el-menu-item index="/about" class="nav-item">关于</el-menu-item>
       <el-menu-item index="/dsl" class="nav-item">DSL 工具</el-menu-item>
-      <el-menu-item index="/tutorials" class="nav-item">教程中心</el-menu-item>
+      <el-menu-item index="/tutorials" class="nav-item">教程中心 <span class="ai-badge">AI+</span></el-menu-item>
       <el-menu-item index="/watermark" class="nav-item">水印检测</el-menu-item>
       <el-menu-item index="/resources" class="nav-item">文件库</el-menu-item>
       <el-menu-item v-if="auth.user" index="/dashboard" class="nav-item">控制台</el-menu-item>
@@ -56,6 +56,7 @@
               >
                 <component v-if="item.icon" :is="item.icon" class="mi-icon" aria-hidden="true" />
                 <span class="mi-label">{{ item.label }}</span>
+                <span v-if="item.badge" class="ai-badge">{{ item.badge }}</span>
               </button>
             </div>
 
@@ -69,6 +70,7 @@
               >
                 <component v-if="item.icon" :is="item.icon" class="mi-icon" aria-hidden="true" />
                 <span class="mi-label">{{ item.label }}</span>
+                <span v-if="item.badge" class="ai-badge">{{ item.badge }}</span>
               </button>
             </div>
           </nav>
@@ -116,13 +118,13 @@ const toggleMenu = () => { menuOpen.value = !menuOpen.value }
 const closeMenu = () => { menuOpen.value = false }
 const onKeydown = (e: KeyboardEvent) => { if (e.key === 'Escape') closeMenu() }
 
-type MenuItem = { label: string; icon?: Component; path?: string; key?: string; action?: () => void }
+type MenuItem = { label: string; icon?: Component; path?: string; key?: string; action?: () => void; badge?: string }
 
 const commonItems = computed<MenuItem[]>(() => [
   { label: '首页', icon: House, path: '/' },
   { label: '关于', icon: InfoFilled, path: '/about' },
   { label: 'DSL 工具', icon: Connection, path: '/dsl' },
-  { label: '教程中心', icon: Collection, path: '/tutorials' },
+  { label: '教程中心', icon: Collection, path: '/tutorials', badge: 'AI+' },
   { label: '水印检测', icon: Watermelon, path: '/watermark' },
   { label: '文件库', icon: Folder, path: '/resources' },
 ])
@@ -237,6 +239,65 @@ const onMenuItemClick = async (item: MenuItem) => {
 .menu-item:active .mi-label { color: #111827; }
 .menu-list :deep(.mi-icon) { width: 18px; height: 18px; font-size: 18px; color: #4CAF50; flex: none; }
 .mi-label { font-size: 17px; color: #1f2937; }
+.ai-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  background: linear-gradient(135deg, rgba(30, 58, 138, 0.9), rgba(59, 130, 246, 0.8));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  padding: 2px 0;
+  margin-left: 5px;
+  position: relative;
+  animation: twinkle 2.5s infinite ease-in-out;
+  line-height: 1.4;
+  letter-spacing: 0.5px;
+  transform: translateY(-1px);
+}
+.ai-badge::before {
+  content: "★";
+  position: absolute;
+  top: -7px;
+  right: -9px;
+  font-size: 10px;
+  color: rgba(147, 197, 253, 0.9);
+  animation: pulse 2s infinite ease-in-out;
+  text-shadow: 0 0 4px rgba(147, 197, 253, 0.6);
+}
+.ai-badge::after {
+  content: "";
+  position: absolute;
+  width: 120%;
+  height: 140%;
+  top: -20%;
+  left: -10%;
+  background: radial-gradient(circle, rgba(30, 58, 138, 0.25) 0%, rgba(59, 130, 246, 0.15) 50%, transparent 70%);
+  border-radius: 50%;
+  z-index: -1;
+  animation: glow 3.5s infinite ease-in-out;
+}
+@keyframes twinkle {
+  0%, 100% { opacity: 0.7; transform: scale(0.98); }
+  25% { opacity: 0.9; transform: scale(1.02); }
+  50% { opacity: 1; transform: scale(1.05); }
+  75% { opacity: 0.9; transform: scale(1.02); }
+}
+@keyframes pulse {
+  0%, 100% { opacity: 0.5; transform: scale(0.95); text-shadow: 0 0 3px rgba(147, 197, 253, 0.3); }
+  25% { opacity: 0.8; transform: scale(1.05); text-shadow: 0 0 5px rgba(147, 197, 253, 0.6); }
+  50% { opacity: 1; transform: scale(1.15); text-shadow: 0 0 8px rgba(147, 197, 253, 0.9); }
+  75% { opacity: 0.8; transform: scale(1.05); text-shadow: 0 0 5px rgba(147, 197, 253, 0.6); }
+}
+@keyframes glow {
+  0% { opacity: 0.2; transform: scale(0.7); }
+  25% { opacity: 0.4; transform: scale(0.9); }
+  50% { opacity: 0.7; transform: scale(1.2); }
+  75% { opacity: 0.4; transform: scale(0.9); }
+  100% { opacity: 0.2; transform: scale(0.7); }
+}
 
 /* 移动端仅保留品牌与汉堡按钮 */
 @media (max-width: 768px) {

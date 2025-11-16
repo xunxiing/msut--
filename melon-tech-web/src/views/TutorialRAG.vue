@@ -17,67 +17,35 @@
       </header>
 
       <section class="rag-main">
-        <div class="rag-column rag-results">
-          <h2 class="section-title">搜索结果 / 教程列表</h2>
-          <div v-if="results.length" class="search-results">
-            <el-card
-              v-for="item in results"
-              :key="item.tutorialId + '-' + item.slug"
-              class="result-card"
-              shadow="hover"
-              @click="onSelectTutorial(item.tutorialId)"
-            >
-              <div class="rc-title">
-                <span class="rc-name">{{ item.title }}</span>
-                <span v-if="item.score !== null" class="rc-score">相关度 {{ item.score.toFixed(2) }}</span>
-              </div>
-              <p class="rc-excerpt">{{ item.excerpt }}</p>
-            </el-card>
-          </div>
-          <div v-else class="search-empty">
-            <p>暂无搜索结果，你也可以直接浏览全部教程：</p>
-            <el-button type="default" size="small" :loading="listLoading" @click="loadTutorialList">
-              加载教程列表
-            </el-button>
-            <el-divider />
-            <el-skeleton v-if="listLoading" :rows="4" animated />
-            <template v-else>
-              <el-card
-                v-for="t in tutorials"
-                :key="t.id"
-                class="result-card"
-                shadow="hover"
-                @click="onSelectTutorial(t.id)"
-              >
-                <div class="rc-title">
-                  <span class="rc-name">{{ t.title }}</span>
-                </div>
-                <p class="rc-excerpt">{{ t.description || '暂无简介' }}</p>
-              </el-card>
-            </template>
-          </div>
-        </div>
-
         <div class="rag-column rag-answer">
           <h2 class="section-title">教程内容 / AI 回答</h2>
 
           <div v-if="answer" class="qa-box">
+            <div v-if="answer.sources && answer.sources.length" class="qa-sources-collapsible">
+              <el-collapse>
+                <el-collapse-item name="sources">
+                  <template #title>
+                    <div class="sources-title">
+                      <span class="sources-icon">📚</span>
+                      <span>已读取文档 ({{ answer.sources.length }})</span>
+                    </div>
+                  </template>
+                  <ul class="sources-list">
+                    <li
+                      v-for="s in answer.sources"
+                      :key="s.tutorialId + '-' + s.slug + '-' + s.excerpt.slice(0, 8)"
+                    >
+                      <strong><a :href="`/tutorials/library#${s.tutorialId}`" class="source-link" @click.prevent="goToTutorial(s.tutorialId)">{{ s.title }}</a></strong>：{{ s.excerpt }}
+                    </li>
+                  </ul>
+                </el-collapse-item>
+              </el-collapse>
+            </div>
             <div class="qa-answer">
               <div class="qa-label">AI 回答</div>
               <div class="qa-text">
                 <p v-for="(para, idx) in splitAnswer" :key="idx">{{ para }}</p>
               </div>
-            </div>
-            <div v-if="answer.sources && answer.sources.length" class="qa-sources">
-              <div class="qa-label">引用片段</div>
-              <ul>
-                <li
-                  v-for="s in answer.sources"
-                  :key="s.tutorialId + '-' + s.slug + '-' + s.excerpt.slice(0, 8)"
-                >
-                  <strong>{{ s.title }}</strong>：{{ s.excerpt }}
-                </li>
-              </ul>
             </div>
           </div>
 
@@ -190,27 +158,27 @@ import {
   createTutorial,
   type SearchAndAskResponse,
   searchAndAsk,
-  listTutorials,
+
   getTutorial,
   type TutorialDetail,
-  type TutorialItem,
+
 } from '../api/tutorials'
 import { useAuth } from '../stores/auth'
 
 const auth = useAuth()
 const router = useRouter()
 
-const mode = ref<'search' | 'qa'>('search')
+const mode = ref<'search' | 'qa'>('qa')
 const query = ref('')
 const loading = ref(false)
 const lastTookMs = ref<number | null>(null)
 const ragEnabled = ref(true)
+// const showResults = ref(false) // 已删除搜索结果功能
 
 const results = ref<SearchAndAskResponse['search']['items']>([])
 const answer = ref<SearchAndAskResponse['answer'] | null>(null)
 
-const tutorials = ref<TutorialItem[]>([])
-const listLoading = ref(false)
+// const listLoading = ref(false) // 已删除搜索结果功能，不再需要
 
 const selectedTutorial = ref<TutorialDetail | null>(null)
 
@@ -238,7 +206,7 @@ async function onSearch() {
   }
   loading.value = true
   try {
-    const data = await searchAndAsk({ query: q, mode: mode.value, limit: 6 })
+    const data = await searchAndAsk({ query: q, mode: mode.value, limit: 3 })
     results.value = data.search.items || []
     answer.value = data.answer
     lastTookMs.value = data.search.tookMs
@@ -251,18 +219,7 @@ async function onSearch() {
   }
 }
 
-async function loadTutorialList() {
-  listLoading.value = true
-  try {
-    const data = await listTutorials({ page: 1, pageSize: 50 })
-    tutorials.value = data.items
-  } catch (e: any) {
-    const msg = e?.response?.data?.error || '加载教程列表失败'
-    ElMessage.error(msg)
-  } finally {
-    listLoading.value = false
-  }
-}
+
 
 async function onSelectTutorial(id: number) {
   try {
@@ -280,6 +237,10 @@ function goUpload() {
 
 function goTutorialLibrary() {
   router.push('/tutorials/library')
+}
+
+function goToTutorial(tutorialId: number) {
+  router.push(`/tutorials/library#${tutorialId}`)
 }
 
 function handleModeChange(command: string) {
@@ -304,7 +265,6 @@ async function onCreateTutorial() {
     newTitle.value = ''
     newDesc.value = ''
     newContent.value = ''
-    await loadTutorialList()
     if (data.id) {
       await onSelectTutorial(data.id)
     }
@@ -317,8 +277,19 @@ async function onCreateTutorial() {
   }
 }
 
+// function toggleResults() {
+//   showResults.value = !showResults.value
+// }
+
+// function handleSourcesChange(activeNames: string[]) {
+//   // 当展开"已读取文档"时，自动显示搜索结果
+//   if (activeNames.includes('sources') && !showResults.value) {
+//     showResults.value = true
+//   }
+// }
+
 onMounted(() => {
-  loadTutorialList()
+  // 不再需要加载教程列表
 })
 </script>
 
@@ -434,9 +405,16 @@ onMounted(() => {
   color: #9ca3af;
 }
 .rag-main {
-  display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.7fr);
-  gap: 16px;
+  display: flex;
+  justify-content: center;
+}
+.rag-column {
+  flex: 1;
+  max-width: 1000px;
+  border-radius: 16px;
+  padding: 12px 14px;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
 }
 @media (max-width: 900px) {
   .rag-header {
@@ -458,6 +436,21 @@ onMounted(() => {
   padding: 12px 14px;
   background: #ffffff;
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+}
+.section-title {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.toggle-icon {
+  transition: transform 0.3s;
+}
+.toggle-icon.rotated {
+  transform: rotate(90deg);
+}
+.full-width {
+  grid-column: span 2;
 }
 .search-results {
   display: flex;
@@ -486,8 +479,34 @@ onMounted(() => {
   color: var(--el-text-color-secondary);
 }
 .search-empty {
-  font-size: 13px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 200px;
+}
+.empty-state {
+  text-align: center;
+  max-width: 400px;
+}
+.empty-icon {
+  margin-bottom: 16px;
+  color: var(--el-color-info);
+}
+.empty-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 8px;
+  color: var(--el-text-color-primary);
+}
+.empty-desc {
+  font-size: 14px;
   color: var(--el-text-color-secondary);
+  margin: 0 0 20px;
+  line-height: 1.5;
+}
+.empty-actions {
+  display: flex;
+  justify-content: center;
 }
 .qa-box {
   margin-bottom: 12px;
@@ -511,13 +530,39 @@ onMounted(() => {
 .qa-text p:last-child {
   margin-bottom: 0;
 }
-.qa-sources {
-  margin-top: 8px;
+.qa-sources-collapsible {
+  margin-bottom: 12px;
+}
+.sources-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+}
+.sources-icon {
+  font-size: 16px;
+}
+.sources-list {
+  padding-left: 18px;
+  margin: 8px 0 0;
   font-size: 12px;
 }
-.qa-sources ul {
-  padding-left: 18px;
-  margin: 0;
+.source-link {
+  color: #409eff;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.source-link:hover {
+  color: #66b1ff;
+  text-decoration: underline;
+}
+.sources-list li {
+  margin-bottom: 6px;
+  line-height: 1.4;
+}
+.sources-list li:last-child {
+  margin-bottom: 0;
 }
 .doc-viewer {
   margin-top: 8px;

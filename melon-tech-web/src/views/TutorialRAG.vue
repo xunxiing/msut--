@@ -423,6 +423,7 @@ onMounted(() => {
   border-radius: 12px;
   border-color: #409eff;
   box-shadow: 0 0 0 1px #409eff;
+  font-size: 16px; /* 防止iOS自动放大 */
 }
 .rag-textarea :deep(.el-textarea__inner:focus) {
   border-color: #409eff;

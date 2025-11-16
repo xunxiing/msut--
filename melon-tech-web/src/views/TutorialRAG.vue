@@ -204,10 +204,7 @@ const splitAnswer = computed(() => {
   return answer.value.text.split(/\n+/).filter(Boolean)
 })
 
-const selectedLines = computed(() => {
-  if (!selectedTutorial.value) return []
-  return selectedTutorial.value.content.split(/\r?\n/).filter(Boolean)
-})
+
 
 async function onSearch() {
   const q = query.value.trim()

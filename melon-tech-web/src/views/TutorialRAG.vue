@@ -12,11 +12,11 @@
         <div class="rag-header-actions">
           <el-button @click="goUpload">上传文件</el-button>
           <el-button type="primary" plain @click="createDialogVisible = true">新增教程</el-button>
-          <el-button type="primary" link @click="goTutorialLibrary">打开教程文档库</el-button>
+          <el-button type="primary" @click="goTutorialLibrary">打开教程文档库</el-button>
         </div>
       </header>
 
-      <section class="rag-main">
+      <section class="rag-unified-container">
         <div class="rag-column rag-answer">
           <h2 class="section-title">教程内容 / AI 回答</h2>
 
@@ -49,26 +49,33 @@
             </div>
           </div>
 
-          <div v-if="selectedTutorial" class="doc-viewer">
-            <div class="doc-header">
-              <h3>{{ selectedTutorial.title }}</h3>
-              <p class="doc-desc">{{ selectedTutorial.description || '暂无简介' }}</p>
+          <div v-if="tutorialLoading" class="doc-loading">
+              <el-icon class="loading-icon"><Loading /></el-icon>
+              <p>正在加载教程...</p>
             </div>
-            <div class="doc-body">
-              <p v-for="(line, idx) in selectedLines" :key="idx">
-                {{ line }}
-              </p>
-            </div>
-          </div>
-
-          <div v-else-if="!answer" class="doc-placeholder">
-            <p>从左侧选择一篇教程，或在下方输入问题，让 AI 帮你解答。</p>
-          </div>
+            <transition v-else name="fade-slide" mode="out-in" :duration="{ enter: 100, leave: 0 }">
+              <div v-if="selectedTutorial" key="doc-viewer" class="doc-viewer">
+                <div class="doc-header">
+                  <h3>{{ selectedTutorial.title }}</h3>
+                  <p class="doc-desc">{{ selectedTutorial.description || '暂无简介' }}</p>
+                </div>
+                <div class="doc-body">
+                  <p v-for="(line, idx) in displayedLines" :key="idx" class="doc-line">
+                    {{ line }}
+                  </p>
+                </div>
+              </div>
+              <div v-else-if="!answer" key="doc-placeholder" class="doc-placeholder">
+                <p>从左侧选择一篇教程，或在下方输入问题，让 AI 帮你解答。</p>
+              </div>
+            </transition>
         </div>
+
       </section>
 
-      <section class="rag-query-card">
-        <div class="rag-input-container">
+      <div class="rag-fixed-input-container">
+        <div class="rag-query-card">
+          <div class="rag-input-container">
           <div class="rag-input-wrapper-expanded">
             <el-input
               v-model="query"
@@ -110,12 +117,13 @@
               </el-dropdown>
             </div>
           </div>
+          </div>
+          <div class="rag-query-info">
+            <span v-if="lastTookMs" class="hint">耗时：{{ lastTookMs }} ms</span>
+            <span v-if="!ragEnabled" class="hint weak">当前仅开启文档搜索（RAG 未配置）</span>
+          </div>
         </div>
-        <div class="rag-query-info">
-          <span v-if="lastTookMs" class="hint">耗时：{{ lastTookMs }} ms</span>
-          <span v-if="!ragEnabled" class="hint weak">当前仅开启文档搜索（RAG 未配置）</span>
-        </div>
-      </section>
+      </div>
 
       <el-dialog v-model="createDialogVisible" title="新增教程" width="640px">
         <p class="qc-intro">
@@ -181,6 +189,9 @@ const answer = ref<SearchAndAskResponse['answer'] | null>(null)
 // const listLoading = ref(false) // 已删除搜索结果功能，不再需要
 
 const selectedTutorial = ref<TutorialDetail | null>(null)
+const tutorialLoading = ref(false)
+const isDeletingText = ref(false)
+const displayedLines = ref<string[]>([])
 
 const newTitle = ref('')
 const newDesc = ref('')
@@ -222,12 +233,36 @@ async function onSearch() {
 
 
 async function onSelectTutorial(id: number) {
+  // 如果已有教程内容，先执行文字删除动画
+  if (selectedTutorial.value && !isDeletingText.value) {
+    isDeletingText.value = true
+    tutorialLoading.value = true
+    
+    // 获取当前显示的所有行
+    const currentLines = [...displayedLines.value]
+    
+    // 逐行删除文字
+    for (let i = currentLines.length - 1; i >= 0; i--) {
+      await new Promise(resolve => setTimeout(resolve, 50)) // 每50ms删除一行
+      displayedLines.value = currentLines.slice(0, i)
+    }
+    
+    // 清空教程内容
+    selectedTutorial.value = null
+    isDeletingText.value = false
+  }
+  
+  tutorialLoading.value = true
   try {
     const detail = await getTutorial(id)
     selectedTutorial.value = detail
+    // 加载完成后，立即显示新内容
+    displayedLines.value = detail.content.split(/\r?\n/).filter(Boolean)
   } catch (e: any) {
     const msg = e?.response?.data?.error || '加载教程失败'
     ElMessage.error(msg)
+  } finally {
+    tutorialLoading.value = false
   }
 }
 
@@ -289,7 +324,10 @@ async function onCreateTutorial() {
 // }
 
 onMounted(() => {
-  // 不再需要加载教程列表
+  // 初始化displayedLines
+  if (selectedTutorial.value) {
+    displayedLines.value = selectedTutorial.value.content.split(/\r?\n/).filter(Boolean)
+  }
 })
 </script>
 
@@ -302,7 +340,7 @@ onMounted(() => {
 }
 .rag-container {
   min-height: 100vh;
-  background: #f3f4f6;
+  background: #ffffff;
   padding: 16px;
 }
 .rag-inner {
@@ -330,14 +368,26 @@ onMounted(() => {
   gap: 8px;
   flex-shrink: 0;
 }
-.rag-query-card {
-  padding: 24px 32px;
-  border-radius: 24px;
+.rag-fixed-input-container {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
   background: #ffffff;
-  box-shadow: 0 8px 32px rgba(15, 23, 42, 0.08);
-  margin: 32px auto 0;
-  max-width: 800px;
-  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+  padding: 24px;
+  padding-bottom: 32px;
+  z-index: 100;
+  box-shadow: 0 -4px 12px rgba(15, 23, 42, 0.05);
+}
+.rag-query-card {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  margin: 0 auto;
+  max-width: 1000px;
+  border: none;
 }
 .rag-input-container {
   display: flex;
@@ -404,17 +454,58 @@ onMounted(() => {
 .hint.weak {
   color: #9ca3af;
 }
-.rag-main {
-  display: flex;
-  justify-content: center;
+.rag-unified-container {
+  padding: 24px 32px;
+  border-radius: 24px;
+  background: #ffffff;
+  box-shadow: none;
+  margin: 24px auto 80px;
+  max-width: 1000px;
+  border: none;
 }
 .rag-column {
-  flex: 1;
-  max-width: 1000px;
-  border-radius: 16px;
-  padding: 12px 14px;
-  background: #ffffff;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+  border-radius: 0;
+  padding: 0 0 24px 0;
+  background: transparent;
+  box-shadow: none;
+  max-width: 100%;
+}
+/* 过渡动画效果 - 移动设备优化 */
+.fade-slide-enter-active {
+  transition: opacity 0.1s ease-out;
+}
+.fade-slide-leave-active {
+  transition: none;
+  position: absolute;
+  width: 100%;
+}
+.fade-slide-enter-from {
+  opacity: 0;
+}
+.fade-slide-leave-to {
+  opacity: 0;
+}
+/* 加载状态样式 */
+.doc-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  color: var(--el-text-color-secondary);
+}
+.loading-icon {
+  font-size: 32px;
+  margin-bottom: 16px;
+  animation: rotating 2s linear infinite;
+}
+@keyframes rotating {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 @media (max-width: 900px) {
   .rag-header {
@@ -585,6 +676,19 @@ onMounted(() => {
 }
 .doc-body p {
   margin: 0 0 4px;
+  transition: all 0.3s ease;
+}
+
+.doc-line {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  margin-bottom: 4px;
+  min-height: 1.2em;
+}
+
+.doc-line:last-child {
+  margin-bottom: 0;
 }
 .doc-placeholder {
   font-size: 13px;

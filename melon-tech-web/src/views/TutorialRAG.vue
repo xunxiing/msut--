@@ -39,7 +39,6 @@
                 <template #title>
                   <div class="menu-item-content">
                     <span class="item-title">{{ tutorial.title }}</span>
-                    <span class="item-date">{{ formatDate(tutorial.created_at) }}</span>
                   </div>
                 </template>
               </el-menu-item>
@@ -61,17 +60,19 @@
                   </div>
                   <div class="doc-body" v-html="renderedMarkdown"></div>
                 </div>
-                <div v-if="chunks.length" class="doc-toc-sidebar">
+                <div v-if="tocItems.length" class="doc-toc-sidebar">
                   <h3 class="toc-title">内容导航</h3>
                   <ul class="toc-list">
                     <li
-                      v-for="chunk in chunks"
-                      :key="chunk.id"
+                      v-for="(item, idx) in tocItems"
+                      :key="idx"
                       class="toc-item"
-                      :class="{ active: chunk.id === activeChunkId }"
-                      @click="onSelectChunk(chunk.id)"
+                      :class="{ active: activeChunkId === item.slug }"
+                      @click="onSelectChunk(item.slug)"
                     >
-                      <a :href="`#chunk-${chunk.id}`">{{ chunk.title }}</a>
+                      <a :href="`#${item.slug}`" @click.prevent="onSelectChunk(item.slug)" :style="{ paddingLeft: (item.level - 1) * 12 + 10 + 'px' }">
+                        {{ item.text }}
+                      </a>
                     </li>
                   </ul>
                 </div>
@@ -120,13 +121,11 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { Search as SearchIcon, Loading } from '@element-plus/icons-vue'
-import { marked } from 'marked'
+import { marked, Renderer } from 'marked'
 import {
   createTutorial,
   getTutorial,
   type TutorialDetail,
-  getTutorialChunks,
-  type TutorialChunk,
   listTutorials,
   type TutorialItem,
 } from '../api/tutorials'
@@ -139,9 +138,8 @@ const allTutorials = ref<TutorialItem[]>([])
 const searchTerm = ref('')
 const selectedTutorial = ref<TutorialDetail | null>(null)
 const tutorialLoading = ref(false)
-const chunks = ref<TutorialChunk[]>([])
-const chunkLoading = ref(false) // Kept for potential future use
-const activeChunkId = ref<number | null>(null)
+const tocItems = ref<{ text: string; level: number; slug: string }[]>([])
+const activeChunkId = ref<string | null>(null)
 
 const newTitle = ref('')
 const newDesc = ref('')
@@ -162,10 +160,27 @@ const filteredTutorials = computed(() => {
 })
 
 const renderedMarkdown = computed(() => {
-  if (selectedTutorial.value?.content) {
-    return marked(selectedTutorial.value.content)
+  if (!selectedTutorial.value?.content) return ''
+  
+  const renderer = new Renderer()
+  const items: { text: string; level: number; slug: string }[] = []
+  
+  renderer.heading = ({ text, depth }: { text: string; depth: number }) => {
+    const level = depth
+    const slug = text.toLowerCase()
+      .replace(/[^\w\u4e00-\u9fa5]+/g, '-')
+      .replace(/^-+|-+$/g, '') || `heading-${items.length}`
+      
+    items.push({ text, level, slug })
+    return `<h${level} id="${slug}">${text}</h${level}>`
   }
-  return ''
+  
+  // Update tocItems as a side effect
+  setTimeout(() => {
+    tocItems.value = items
+  }, 0)
+
+  return marked.parse(selectedTutorial.value.content, { renderer })
 })
 
 async function fetchAllTutorials() {
@@ -187,7 +202,6 @@ async function handleSelectTutorial(id: string | number) {
 
   tutorialLoading.value = true
   selectedTutorial.value = null
-  chunks.value = []
   try {
     const detail = await getTutorial(numericId)
     selectedTutorial.value = detail
@@ -199,9 +213,9 @@ async function handleSelectTutorial(id: string | number) {
   }
 }
 
-function onSelectChunk(chunkId: number) {
-  activeChunkId.value = chunkId
-  const element = document.getElementById(`chunk-${chunkId}`)
+function onSelectChunk(slug: string) {
+  activeChunkId.value = slug
+  const element = document.getElementById(slug)
   if (element) {
     element.scrollIntoView({ behavior: 'smooth' })
   }
@@ -209,27 +223,10 @@ function onSelectChunk(chunkId: number) {
 
 watch(
   () => selectedTutorial.value?.id,
-  async (tutorialId) => {
-    if (!tutorialId) {
-      chunks.value = []
-      activeChunkId.value = null
-      return
-    }
-    chunkLoading.value = true
-    try {
-      const data = await getTutorialChunks(tutorialId)
-      chunks.value = data.chunks || []
-      if (chunks.value.length > 0 && chunks.value[0]) {
-        activeChunkId.value = chunks.value[0].id
-      }
-    } catch (e: any) {
-      // Non-critical error, just log it or show a subtle warning
-      console.error('加载分块结构失败:', e)
-      chunks.value = []
-      activeChunkId.value = null
-    } finally {
-      chunkLoading.value = false
-    }
+  () => {
+    // Reset TOC when tutorial changes
+    tocItems.value = []
+    activeChunkId.value = null
   }
 )
 
@@ -268,10 +265,7 @@ async function onCreateTutorial() {
   }
 }
 
-function formatDate(dateString: string) {
-  const date = new Date(dateString)
-  return date.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
-}
+
 
 onMounted(() => {
   fetchAllTutorials()
@@ -341,6 +335,7 @@ onMounted(() => {
   border-radius: 12px;
   overflow: hidden;
   border: 1px solid #e5e7eb;
+  min-height: 0; /* Important for nested flex scrolling */
 }
 .search-box {
   padding: 12px;
@@ -412,12 +407,12 @@ onMounted(() => {
   transition: background 0.2s, color 0.2s;
 }
 .toc-item a:hover {
-  background: #eef2ff;
-  color: #4f46e5;
+  background: #ecfdf5; /* Green 50 */
+  color: #10b981;    /* Green 500 */
 }
 .toc-item.active a {
-  background: #e0e7ff;
-  color: #4338ca;
+  background: #d1fae5; /* Green 100 */
+  color: #059669;    /* Green 600 */
   font-weight: 600;
 }
 
@@ -519,7 +514,7 @@ onMounted(() => {
   color: #6b7280;
 }
 .doc-body :deep(a) {
-  color: #4f46e5;
+  color: #3b82f6; /* Blue 500 */
   text-decoration: none;
   font-weight: 500;
 }

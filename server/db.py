@@ -192,6 +192,15 @@ def run_migrations(conn: Optional[sqlite3.Connection] = None) -> None:
             CREATE INDEX IF NOT EXISTS idx_tutorial_embeddings_tutorial ON tutorial_embeddings(tutorial_id);
             """
         )
+        # Extra columns for tutorial chunk optimization (idempotent)
+        cur.execute("PRAGMA table_info(tutorial_embeddings)")
+        cols = [row["name"] for row in cur.fetchall() or []]
+        if "chunk_title" not in cols:
+            cur.execute("ALTER TABLE tutorial_embeddings ADD COLUMN chunk_title TEXT")
+        if "optimized_chunk_text" not in cols:
+            cur.execute("ALTER TABLE tutorial_embeddings ADD COLUMN optimized_chunk_text TEXT")
+        if "optimized_at" not in cols:
+            cur.execute("ALTER TABLE tutorial_embeddings ADD COLUMN optimized_at TEXT")
         conn.commit()
     finally:
         if owns:

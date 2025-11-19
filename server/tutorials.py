@@ -1,19 +1,23 @@
+import asyncio
 import logging
 import math
 import time
 from typing import List, Optional, Sequence
 
-from fastapi import APIRouter, Body, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Body, Query, Request
 from fastapi.responses import JSONResponse
 
 from .auth import get_current_user
 from .db import get_connection
-from .rag_client import chat_answer, get_embedding, is_rag_configured
+from .rag_client import chat_answer, get_embedding, is_rag_configured, optimize_chunk_text, name_chunk_title
 from .utils import nanoid, slugify_str
 
 
 router = APIRouter()
 logger = logging.getLogger("msut.tutorials")
+
+# Limit concurrent LLM optimization tasks for tutorial chunks
+_CHUNK_OPT_SEMAPHORE = asyncio.Semaphore(2)
 
 
 def _require_user_id(request: Request) -> Optional[int]:
@@ -94,6 +98,7 @@ def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
 async def create_tutorial(
     request: Request,
     body: dict = Body(...),
+    background_tasks: BackgroundTasks = None,
 ):
     title = (body.get("title") or "").strip() if isinstance(body, dict) else ""
     description = (body.get("description") or "").strip() if isinstance(body, dict) else ""
@@ -137,6 +142,14 @@ async def create_tutorial(
             except Exception:
                 pass
     conn.commit()
+
+    # Schedule background LLM optimization of new chunks (best-effort, low concurrency)
+    try:
+        if background_tasks is not None and chunks and is_rag_configured():
+            background_tasks.add_task(_optimize_tutorial_chunks_async, tid)
+    except Exception:
+        # Do not block main flow on background scheduling issues
+        pass
 
     return {
         "id": tid,
@@ -208,11 +221,66 @@ def get_tutorial(tid: int):
     }
 
 
+@router.get("/api/tutorials/{tid}/chunks")
+def list_tutorial_chunks(tid: int):
+    """Return the chunk structure for a given tutorial for visualization/navigation."""
+    conn = get_connection()
+    cur = conn.cursor()
+    trow = cur.execute(
+        "SELECT id, slug, title FROM tutorials WHERE id = ?",
+        (tid,),
+    ).fetchone()
+    if not trow:
+        return JSONResponse(status_code=404, content={"error": "教程不存在"})
+
+    rows = cur.execute(
+        """
+        SELECT id,
+               chunk_index,
+               COALESCE(chunk_title, '') AS chunk_title,
+               COALESCE(optimized_chunk_text, chunk_text) AS text
+        FROM tutorial_embeddings
+        WHERE tutorial_id = ?
+        ORDER BY chunk_index
+        """,
+        (tid,),
+    ).fetchall()
+
+    chunks = []
+    for r in rows or []:
+        idx = int(r["chunk_index"])
+        title = (r["chunk_title"] or "").strip()
+        text = (r["text"] or "").strip()
+        if not title:
+            # Fallback: use the first line/words as a temporary title
+            first_line = text.splitlines()[0] if text else ""
+            title = first_line[:24] or f"片段 {idx + 1}"
+        preview = text[:80]
+        chunks.append(
+            {
+                "id": int(r["id"]),
+                "index": idx,
+                "title": title,
+                "preview": preview,
+            }
+        )
+
+    return {
+        "tutorialId": int(trow["id"]),
+        "slug": trow["slug"],
+        "title": trow["title"],
+        "chunks": chunks,
+    }
+
+
 def _load_all_embeddings(conn) -> List[dict]:
     cur = conn.cursor()
     rows = cur.execute(
         """
-        SELECT e.tutorial_id, e.chunk_index, e.chunk_text, e.embedding_json,
+        SELECT e.tutorial_id,
+               e.chunk_index,
+               COALESCE(e.optimized_chunk_text, e.chunk_text) AS chunk_text,
+               e.embedding_json,
                t.slug AS tutorial_slug, t.title AS tutorial_title
         FROM tutorial_embeddings e
         JOIN tutorials t ON t.id = e.tutorial_id
@@ -247,6 +315,120 @@ def json_dumps(obj) -> str:
         return json.dumps(obj, ensure_ascii=False)
     except Exception:
         return "[]"
+
+
+async def _optimize_tutorial_chunks_async(tutorial_id: int) -> None:
+    """Background job: use LLM to optimize newly created chunks for a tutorial.
+
+    - Runs with a global semaphore to limit concurrency.
+    - Best-effort: all errors are logged and do not affect main flows.
+    """
+    # If RAG is not configured, skip silently
+    if not is_rag_configured():
+        return
+
+    async with _CHUNK_OPT_SEMAPHORE:
+        conn = get_connection()
+        try:
+            cur = conn.cursor()
+            rows = cur.execute(
+                """
+                SELECT e.id,
+                       e.chunk_text,
+                       e.optimized_chunk_text,
+                       e.embedding_json,
+                       e.chunk_title,
+                       t.title AS tutorial_title
+                FROM tutorial_embeddings e
+                JOIN tutorials t ON t.id = e.tutorial_id
+                WHERE e.tutorial_id = ?
+                ORDER BY e.chunk_index
+                """,
+                (tutorial_id,),
+            ).fetchall()
+            if not rows:
+                return
+
+            for r in rows or []:
+                try:
+                    emb_id = int(r["id"])
+                    existing_opt = (r["optimized_chunk_text"] or "").strip()
+                    existing_title = (r["chunk_title"] or "").strip()
+                    raw_text = (r["chunk_text"] or "").strip()
+                    tutorial_title = (r["tutorial_title"] or "").strip()
+                except Exception:
+                    continue
+
+                if not raw_text:
+                    continue
+
+                optimized: Optional[str] = None
+                # Only call LLM for optimization if not done yet
+                if not existing_opt:
+                    try:
+                        # Run blocking LLM call in a thread to avoid blocking the event loop
+                        optimized = await asyncio.to_thread(optimize_chunk_text, raw_text)
+                    except Exception:
+                        optimized = None
+                else:
+                    optimized = existing_opt
+
+                # Generate a chunk title if missing
+                title_value: Optional[str] = None
+                if not existing_title:
+                    try:
+                        title_value = await asyncio.to_thread(name_chunk_title, raw_text, tutorial_title or None)
+                    except Exception:
+                        title_value = None
+
+                if not optimized and not title_value:
+                    # Nothing to update
+                    continue
+
+                # Optionally re-embed the optimized text; fall back to old embedding on failure
+                emb_json = None
+                if optimized and not existing_opt:
+                    try:
+                        new_vec = get_embedding(optimized) or None
+                    except Exception:
+                        new_vec = None
+                    if new_vec is not None:
+                        emb_json = json_dumps(new_vec)
+
+                try:
+                    cur.execute(
+                        """
+                        UPDATE tutorial_embeddings
+                        SET optimized_chunk_text = COALESCE(?, optimized_chunk_text),
+                            optimized_at = CASE
+                                WHEN ? IS NOT NULL THEN datetime('now')
+                                ELSE optimized_at
+                            END,
+                            embedding_json = COALESCE(?, embedding_json),
+                            chunk_title = COALESCE(?, chunk_title)
+                        WHERE id = ?
+                        """,
+                        (optimized, optimized, emb_json, title_value, emb_id),
+                    )
+                except Exception as e:
+                    try:
+                        logger.exception(
+                            "tutorials: optimize/naming chunk update failed tutorial_id=%s chunk_id=%s error=%s",
+                            tutorial_id,
+                            emb_id,
+                            e,
+                        )
+                    except Exception:
+                        pass
+            try:
+                conn.commit()
+            except Exception:
+                pass
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 @router.post("/api/tutorials/search-and-ask")

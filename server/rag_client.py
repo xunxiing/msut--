@@ -138,3 +138,106 @@ def chat_answer(question: str, contexts: Sequence[str]) -> Optional[str]:
         except Exception:
             pass
         return None
+
+
+def optimize_chunk_text(raw_chunk: str) -> Optional[str]:
+    """Use the LLM to lightly rewrite a tutorial chunk for better retrieval.
+
+    The goal is to keep semantics but make the text cleaner and more structured,
+    so it works better as a knowledge block in RAG.
+    """
+    if not is_rag_configured():
+        return None
+    text = (raw_chunk or "").strip()
+    if not text:
+        return None
+    system_prompt = (
+        "你是一个帮助整理技术教程文档的助手。"
+        "在保持技术含义不变的前提下，对给定片段进行适度改写："
+        "让结构更清晰、表述更规范，便于后续检索和问答。"
+        "不要凭空编造新的内容，也不要输出解释说明，只返回改写后的文本。"
+    )
+    user_prompt = (
+        "请对下面这一段教程内容做改写优化，使其更适合作为知识块：\n\n"
+        f"{text}"
+    )
+    body = {
+        "model": RAG_LLM_MODEL,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": 0.3,
+    }
+    url = f"{RAG_API_BASE}/chat/completions"
+    try:
+        resp = requests.post(url, headers=_auth_headers(), data=json.dumps(body), timeout=60)
+        resp.raise_for_status()
+        payload = resp.json()
+        choices = payload.get("choices") or []
+        if not choices:
+            return None
+        msg = choices[0].get("message") or {}
+        content = msg.get("content") or ""
+        cleaned = str(content).strip()
+        return cleaned or None
+    except Exception as e:
+        try:
+            logger.exception("rag: optimize_chunk_text failed: %s", e)
+        except Exception:
+            pass
+        return None
+
+
+def name_chunk_title(raw_chunk: str, tutorial_title: Optional[str] = None) -> Optional[str]:
+    """Generate a short, human-friendly title for a chunk using the LLM.
+
+    The title is intended for navigation UI (类似目录的小节标题), not for search.
+    """
+    if not is_rag_configured():
+        return None
+    text = (raw_chunk or "").strip()
+    if not text:
+        return None
+    system_prompt = (
+        "你是一个文档结构整理助手，负责为教程内容片段生成简短的小节标题。"
+        "要求：1）标题为简体中文；2）尽量不超过 16 个字；3）能概括该片段的主题；"
+        "4）不要添加序号或引号，不要输出解释说明，只返回标题本身。"
+    )
+    if tutorial_title:
+        user_prefix = f"整篇教程标题为「{tutorial_title}」。"
+    else:
+        user_prefix = ""
+    user_prompt = (
+        f"{user_prefix}下面是一段教程内容，请为这一段生成一个合适的小节标题：\n\n"
+        f"{text}"
+    )
+    body = {
+        "model": RAG_LLM_MODEL,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": 0.4,
+    }
+    url = f"{RAG_API_BASE}/chat/completions"
+    try:
+        resp = requests.post(url, headers=_auth_headers(), data=json.dumps(body), timeout=60)
+        resp.raise_for_status()
+        payload = resp.json()
+        choices = payload.get("choices") or []
+        if not choices:
+            return None
+        msg = choices[0].get("message") or {}
+        content = msg.get("content") or ""
+        title = str(content).strip()
+        # Best-effort length trim
+        if len(title) > 20:
+            title = title[:20].rstrip()
+        return title or None
+    except Exception as e:
+        try:
+            logger.exception("rag: name_chunk_title failed: %s", e)
+        except Exception:
+            pass
+        return None

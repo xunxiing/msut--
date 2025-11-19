@@ -49,8 +49,9 @@
             {{ selectedTutorial.description || '暂无简介' }}
           </p>
         </div>
-        <el-button size="small" @click="goBackToRAG">
-          返回 AI 搜索
+        <el-button class="ai-qna-button" size="default" type="primary" @click="goBackToRAG">
+          <el-icon class="ai-icon"><ChatDotRound /></el-icon>
+          AI 智能问答
         </el-button>
       </div>
 
@@ -73,7 +74,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
-import { Search } from '@element-plus/icons-vue'
+import { Search, ChatDotRound } from '@element-plus/icons-vue'
 import {
   listTutorials,
   getTutorial,
@@ -299,6 +300,31 @@ onMounted(() => {
   justify-content: center;
   color: #9ca3af;
   font-size: 14px;
+}
+
+.ai-qna-button {
+  background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+  border: none;
+  font-weight: 600;
+  padding: 10px 20px;
+  height: auto;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.ai-qna-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+  background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
+}
+
+.ai-qna-button:active {
+  transform: translateY(0);
+}
+
+.ai-icon {
+  margin-right: 6px;
+  font-size: 16px;
 }
 
 @media (max-width: 900px) {

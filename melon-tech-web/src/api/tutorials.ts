@@ -26,6 +26,13 @@ export type TutorialSearchResult = {
   score: number | null
 }
 
+export type TutorialChunk = {
+  id: number
+  index: number
+  title: string
+  preview: string
+}
+
 export type SearchAndAskResponse = {
   query: string
   mode: "search" | "qa" | "both"
@@ -47,6 +54,11 @@ export async function listTutorials(params: { q?: string; page?: number; pageSiz
 export async function getTutorial(id: number) {
   const { data } = await http.get(`/tutorials/${id}`)
   return data as TutorialDetail
+}
+
+export async function getTutorialChunks(id: number) {
+  const { data } = await http.get(`/tutorials/${id}/chunks`)
+  return data as { tutorialId: number; slug: string; title: string; chunks: TutorialChunk[] }
 }
 
 export async function searchAndAsk(params: { query: string; mode?: "search" | "qa" | "both"; limit?: number }) {

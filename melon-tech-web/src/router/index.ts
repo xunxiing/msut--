@@ -15,6 +15,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/dsl', name: 'dsl-tool', component: () => import('../views/DSLTool.vue') },
   { path: '/watermark', name: 'watermark', component: () => import('../views/Watermark.vue') },
   { path: '/share/:slug', name: 'resource-detail', component: () => import('../views/ResourceDetail.vue') },
+  { path: '/tutorials/ai', name: 'tutorials-ai', component: () => import('../views/TutorialAI.vue') },
 ]
 
 
@@ -27,7 +28,7 @@ router.beforeEach(async (to) => {
   const auth = useAuth()
   if (auth.user === null) {
     // 首次进入或刷新后尝试同步会话
-    await auth.fetchMe().catch(() => {})
+    await auth.fetchMe().catch(() => { })
   }
   if (to.meta.requiresAuth && !auth.user) {
     return { name: 'login', query: { redirect: to.fullPath } }

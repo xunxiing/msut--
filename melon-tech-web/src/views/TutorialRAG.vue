@@ -11,6 +11,7 @@
           </div>
           <div class="rag-header-actions">
             <el-button @click="goUpload">上传文件</el-button>
+            <el-button type="success" plain @click="goAI">AI 问答</el-button>
             <el-button type="primary" plain @click="createDialogVisible = true">新增教程</el-button>
           </div>
         </header>
@@ -338,6 +339,10 @@ watch(
 
 function goUpload() {
   router.push('/upload')
+}
+
+function goAI() {
+  router.push('/tutorials/ai')
 }
 
 async function onCreateTutorial() {

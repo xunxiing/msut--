@@ -53,7 +53,7 @@
                 <p>正在加载教程...</p>
               </div>
               <div v-else-if="selectedTutorial" key="viewer" class="doc-viewer-layout">
-                <div class="doc-main-content">
+                <div class="doc-main-content" ref="scrollContainerRef">
                   <div class="doc-header">
                     <h1>{{ selectedTutorial.title }}</h1>
                     <p class="doc-desc">{{ selectedTutorial.description || '暂无简介' }}</p>
@@ -62,19 +62,22 @@
                 </div>
                 <div v-if="tocItems.length" class="doc-toc-sidebar">
                   <h3 class="toc-title">内容导航</h3>
-                  <ul class="toc-list">
-                    <li
-                      v-for="(item, idx) in tocItems"
-                      :key="idx"
-                      class="toc-item"
-                      :class="{ active: activeChunkId === item.slug }"
-                      @click="onSelectChunk(item.slug)"
-                    >
-                      <a :href="`#${item.slug}`" @click.prevent="onSelectChunk(item.slug)" :style="{ paddingLeft: (item.level - 1) * 12 + 10 + 'px' }">
-                        {{ item.text }}
-                      </a>
-                    </li>
-                  </ul>
+                  <div class="toc-scroll-indicator-container">
+                    <div class="toc-scroll-indicator" :style="getScrollIndicatorStyle()"></div>
+                    <ul class="toc-list">
+                      <li
+                        v-for="(item, idx) in tocItems"
+                        :key="idx"
+                        class="toc-item"
+                        :class="{ active: activeChunkId === item.slug }"
+                        @click="onSelectChunk(item.slug)"
+                      >
+                        <a :href="`#${item.slug}`" @click.prevent="onSelectChunk(item.slug)" :style="{ paddingLeft: (item.level - 1) * 12 + 10 + 'px' }">
+                          {{ item.text }}
+                        </a>
+                      </li>
+                    </ul>
+                  </div>
                 </div>
               </div>
               <div v-else key="placeholder" class="doc-placeholder">
@@ -117,7 +120,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { Search as SearchIcon, Loading } from '@element-plus/icons-vue'
@@ -140,6 +143,7 @@ const selectedTutorial = ref<TutorialDetail | null>(null)
 const tutorialLoading = ref(false)
 const tocItems = ref<{ text: string; level: number; slug: string }[]>([])
 const activeChunkId = ref<string | null>(null)
+const scrollContainerRef = ref<HTMLElement | null>(null)
 
 const newTitle = ref('')
 const newDesc = ref('')
@@ -216,17 +220,119 @@ async function handleSelectTutorial(id: string | number) {
 function onSelectChunk(slug: string) {
   activeChunkId.value = slug
   const element = document.getElementById(slug)
-  if (element) {
-    element.scrollIntoView({ behavior: 'smooth' })
+  if (element && scrollContainerRef.value) {
+    const containerRect = scrollContainerRef.value.getBoundingClientRect()
+    const elementRect = element.getBoundingClientRect()
+    const scrollTop = scrollContainerRef.value.scrollTop
+    const targetScrollTop = scrollTop + (elementRect.top - containerRect.top) - 20 // 20px offset from top
+    
+    scrollContainerRef.value.scrollTo({
+      top: targetScrollTop,
+      behavior: 'smooth'
+    })
   }
 }
 
+function getScrollIndicatorStyle() {
+  if (!activeChunkId.value || tocItems.value.length === 0) {
+    return { display: 'none' }
+  }
+
+  const activeIndex = tocItems.value.findIndex(item => item.slug === activeChunkId.value)
+  if (activeIndex === -1) {
+    return { display: 'none' }
+  }
+
+  const itemHeight = 32 // Approximate height of each TOC item
+  const topPosition = activeIndex * itemHeight
+  
+  return {
+    transform: `translateY(${topPosition}px)`,
+    display: 'block'
+  }
+}
+
+function updateActiveSectionOnScroll() {
+  if (!scrollContainerRef.value || tocItems.value.length === 0) return
+
+  const container = scrollContainerRef.value
+  const containerRect = container.getBoundingClientRect()
+  const containerTop = containerRect.top + 100 // 100px offset to trigger earlier
+  const containerBottom = containerRect.bottom - 100
+
+  let currentActiveSlug: string | null = null
+  let maxVisibleArea = 0
+
+  // Find the most visible section
+  for (const item of tocItems.value) {
+    const element = document.getElementById(item.slug)
+    if (!element) continue
+
+    const elementRect = element.getBoundingClientRect()
+    const visibleTop = Math.max(elementRect.top, containerTop)
+    const visibleBottom = Math.min(elementRect.bottom, containerBottom)
+    
+    if (visibleTop < visibleBottom) {
+      const visibleArea = visibleBottom - visibleTop
+      if (visibleArea > maxVisibleArea) {
+        maxVisibleArea = visibleArea
+        currentActiveSlug = item.slug
+      }
+    }
+  }
+
+  // If no section is visible, find the closest one above the viewport
+  if (!currentActiveSlug) {
+    let minDistance = Infinity
+    for (const item of tocItems.value) {
+      const element = document.getElementById(item.slug)
+      if (!element) continue
+
+      const elementRect = element.getBoundingClientRect()
+      const distance = containerTop - elementRect.bottom
+      if (distance > 0 && distance < minDistance) {
+        minDistance = distance
+        currentActiveSlug = item.slug
+      }
+    }
+  }
+
+  if (currentActiveSlug && currentActiveSlug !== activeChunkId.value) {
+    activeChunkId.value = currentActiveSlug
+  }
+}
+
+// 当正文容器挂载/变更时，绑定滚动监听
 watch(
-  () => selectedTutorial.value?.id,
+  scrollContainerRef,
+  (el, oldEl) => {
+    if (oldEl) {
+      oldEl.removeEventListener('scroll', updateActiveSectionOnScroll)
+    }
+    if (el) {
+      el.addEventListener('scroll', updateActiveSectionOnScroll, { passive: true })
+      // 初次绑定时根据当前滚动位置计算一次
+      setTimeout(updateActiveSectionOnScroll, 50)
+    }
+  }
+)
+
+// 当目录项变化时，自动选中一个默认的激活项，并同步指示条
+watch(
+  tocItems,
   () => {
-    // Reset TOC when tutorial changes
-    tocItems.value = []
-    activeChunkId.value = null
+    if (!tocItems.value.length) {
+      activeChunkId.value = null
+      return
+    }
+
+    // 当前激活项无效或为空时，默认选中第一个小节
+    if (!activeChunkId.value || !tocItems.value.some(item => item.slug === activeChunkId.value)) {
+      activeChunkId.value = tocItems.value?.[0]?.slug ?? ''
+    }
+
+    // 目录变化后，根据当前滚动位置更新激活项（防止只停留在第一个）
+    setTimeout(updateActiveSectionOnScroll, 0)
   }
 )
 
@@ -265,10 +371,14 @@ async function onCreateTutorial() {
   }
 }
 
-
-
 onMounted(() => {
   fetchAllTutorials()
+})
+
+onUnmounted(() => {
+  if (scrollContainerRef.value) {
+    scrollContainerRef.value.removeEventListener('scroll', updateActiveSectionOnScroll)
+  }
 })
 </script>
 
@@ -386,11 +496,25 @@ onMounted(() => {
   border-left: 1px solid #e5e7eb;
   overflow-y: auto;
   background: #f9fafb;
+  position: relative;
 }
 .toc-title {
   margin: 0 0 12px;
   font-size: 14px;
   font-weight: 600;
+}
+.toc-scroll-indicator-container {
+  position: relative;
+}
+.toc-scroll-indicator {
+  position: absolute;
+  left: -16px;
+  width: 3px;
+  height: 32px;
+  background: #10b981; /* Green 500 */
+  border-radius: 0 3px 3px 0;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 1;
 }
 .toc-list {
   list-style: none;

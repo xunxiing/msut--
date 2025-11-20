@@ -23,7 +23,16 @@ def get_connection() -> sqlite3.Connection:
     _ensure_db_file()
     db_path = str(DB_FILE)
     try:
-        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
+        # Use a slightly more concurrency-friendly configuration:
+        # - check_same_thread=False: allow usage across async contexts
+        # - timeout: busy timeout in seconds when the DB is locked
+        # - isolation_level=None: autocommit by default; explicit BEGIN used where needed
+        conn = sqlite3.connect(
+            db_path,
+            check_same_thread=False,
+            timeout=30,
+            isolation_level=None,
+        )
     except sqlite3.OperationalError as e:
         # Extra diagnostics to help in containerized deployments
         try:
@@ -38,7 +47,23 @@ def get_connection() -> sqlite3.Connection:
         except Exception as _:
             pass
         # Final attempt using URI with rwc (read-write-create)
-        conn = sqlite3.connect(f"file:{db_path}?mode=rwc", uri=True, check_same_thread=False, timeout=30)
+        conn = sqlite3.connect(
+            f"file:{db_path}?mode=rwc",
+            uri=True,
+            check_same_thread=False,
+            timeout=30,
+            isolation_level=None,
+        )
+    # Per-connection pragmas for better concurrency and safety.
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+    except Exception:
+        # If WAL is not supported (e.g., network FS), continue with default.
+        pass
+    try:
+        conn.execute("PRAGMA foreign_keys=ON")
+    except Exception:
+        pass
     conn.row_factory = sqlite3.Row
     return conn
 

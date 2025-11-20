@@ -24,7 +24,7 @@
       <el-menu-item index="/watermark" class="nav-item">水印检测</el-menu-item>
       <el-menu-item index="/resources" class="nav-item">文件库</el-menu-item>
       <el-menu-item v-if="auth.user" index="/dashboard" class="nav-item">控制台</el-menu-item>
-      <el-menu-item v-if="auth.user" index="/my/resources" class="nav-item">我的存档</el-menu-item>
+      <el-menu-item v-if="auth.user" index="/my/resources" class="nav-item">作品管理</el-menu-item>
       <el-menu-item v-if="auth.user" index="/upload" class="nav-item">上传文件</el-menu-item>
 
       <div class="flex-spacer"></div>
@@ -133,7 +133,7 @@ const myItems = computed<MenuItem[]>(() => {
   if (auth.user) {
     return [
       { label: '控制台', icon: DataAnalysis, path: '/dashboard' },
-      { label: '我的存档', icon: Collection, path: '/my/resources' },
+      { label: '作品管理', icon: Collection, path: '/my/resources' },
       { label: '上传文件', icon: Upload, path: '/upload' },
       { label: '退出登录', icon: SwitchButton, key: 'logout', action: onLogout },
     ]

@@ -206,6 +206,188 @@ def list_tutorials(
     return {"items": items, "total": total, "page": page, "pageSize": pageSize}
 
 
+@router.get("/api/my/tutorials")
+def list_my_tutorials(request: Request):
+    """List tutorials created by the current user for management."""
+    uid = _require_user_id(request)
+    if uid is None:
+        return JSONResponse(status_code=401, content={"error": "未登录"})
+    conn = get_connection()
+    cur = conn.cursor()
+    rows = cur.execute(
+        """
+        SELECT id, slug, title, description, created_at, updated_at
+        FROM tutorials
+        WHERE created_by = ?
+        ORDER BY id DESC
+        """,
+        (uid,),
+    ).fetchall()
+    items: List[dict] = []
+    for r in rows or []:
+        items.append(
+            {
+                "id": int(r["id"]),
+                "slug": r["slug"],
+                "title": r["title"],
+                "description": r["description"] or "",
+                "created_at": r["created_at"],
+                "updated_at": r["updated_at"],
+            }
+        )
+    return {"items": items}
+
+
+@router.patch("/api/tutorials/{tid}")
+async def update_tutorial(
+    request: Request,
+    tid: int,
+    body: dict = Body(...),
+    background_tasks: BackgroundTasks = None,
+):
+    """Update a tutorial owned by the current user and refresh embeddings when content changes."""
+    uid = _require_user_id(request)
+    if uid is None:
+        return JSONResponse(status_code=401, content={"error": "未登录"})
+    if not isinstance(body, dict):
+        return JSONResponse(status_code=400, content={"error": "请求格式错误"})
+
+    conn = get_connection()
+    cur = conn.cursor()
+    row = cur.execute(
+        "SELECT id, slug, title, description, content, created_by FROM tutorials WHERE id = ?",
+        (tid,),
+    ).fetchone()
+    if not row:
+        return JSONResponse(status_code=404, content={"error": "教程不存在"})
+    try:
+        owner_id = int(row["created_by"]) if row["created_by"] is not None else None
+    except Exception:
+        owner_id = None
+    if owner_id is None or owner_id != uid:
+        return JSONResponse(status_code=403, content={"error": "无法操作其他用户的教程"})
+
+    title = body.get("title")
+    description = body.get("description")
+    content = body.get("content")
+
+    updates: List[str] = []
+    params: List[object] = []
+
+    if title is not None:
+        if not isinstance(title, str) or not title.strip():
+            return JSONResponse(status_code=400, content={"error": "标题必填"})
+        title = title.strip()
+        updates.append("title = ?")
+        params.append(title)
+    else:
+        title = row["title"]
+
+    if description is not None:
+        if not isinstance(description, str):
+            description = ""
+        description = str(description).strip()
+        updates.append("description = ?")
+        params.append(description)
+    else:
+        description = row["description"]
+
+    content_changed = False
+    if content is not None:
+        if not isinstance(content, str) or not content.strip():
+            return JSONResponse(status_code=400, content={"error": "内容不能为空"})
+        content = content.strip()
+        updates.append("content = ?")
+        params.append(content)
+        old_content = row["content"] or ""
+        content_changed = content != old_content
+
+    if not updates:
+        return JSONResponse(status_code=400, content={"error": "没有需要更新的字段"})
+
+    params.append(tid)
+    cur.execute(f"UPDATE tutorials SET {', '.join(updates)} WHERE id = ?", tuple(params))
+
+    chunks: List[str] = []
+    if content_changed:
+        # Rebuild chunk embeddings for RAG search
+        cur.execute("DELETE FROM tutorial_embeddings WHERE tutorial_id = ?", (tid,))
+        chunks = _chunk_content(content or "")
+        if chunks:
+            try:
+                for idx, chunk in enumerate(chunks):
+                    vec = get_embedding(chunk) or []
+                    cur.execute(
+                        """
+                        INSERT INTO tutorial_embeddings (tutorial_id, chunk_index, chunk_text, embedding_json)
+                        VALUES (?, ?, ?, ?)
+                        """,
+                        (tid, idx, chunk, json_dumps(vec)),
+                    )
+            except Exception as e:
+                try:
+                    logger.exception("tutorials: reindex embeddings failed tid=%s error=%s", tid, e)
+                except Exception:
+                    pass
+
+    try:
+        conn.commit()
+    except Exception:
+        pass
+
+    # Schedule background optimization of updated chunks
+    try:
+        if background_tasks is not None and content_changed and chunks and is_rag_configured():
+            background_tasks.add_task(_optimize_tutorial_chunks_async, tid)
+    except Exception:
+        pass
+
+    updated = cur.execute(
+        "SELECT id, slug, title, description, content, created_at, updated_at FROM tutorials WHERE id = ?",
+        (tid,),
+    ).fetchone()
+    if not updated:
+        return JSONResponse(status_code=404, content={"error": "教程不存在"})
+    return {
+        "id": int(updated["id"]),
+        "slug": updated["slug"],
+        "title": updated["title"],
+        "description": updated["description"] or "",
+        "content": updated["content"],
+        "created_at": updated["created_at"],
+        "updated_at": updated["updated_at"],
+    }
+
+
+@router.delete("/api/tutorials/{tid}")
+async def delete_tutorial(request: Request, tid: int):
+    """Delete a tutorial owned by the current user."""
+    uid = _require_user_id(request)
+    if uid is None:
+        return JSONResponse(status_code=401, content={"error": "未登录"})
+    conn = get_connection()
+    cur = conn.cursor()
+    row = cur.execute(
+        "SELECT id, created_by FROM tutorials WHERE id = ?",
+        (tid,),
+    ).fetchone()
+    if not row:
+        return JSONResponse(status_code=404, content={"error": "教程不存在"})
+    try:
+        owner_id = int(row["created_by"]) if row["created_by"] is not None else None
+    except Exception:
+        owner_id = None
+    if owner_id is None or owner_id != uid:
+        return JSONResponse(status_code=403, content={"error": "无法操作其他用户的教程"})
+
+    cur.execute("DELETE FROM tutorials WHERE id = ?", (tid,))
+    try:
+        conn.commit()
+    except Exception:
+        pass
+    return {"ok": True}
+
+
 @router.get("/api/tutorials/{tid}")
 def get_tutorial(tid: int):
     conn = get_connection()

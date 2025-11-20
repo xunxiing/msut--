@@ -73,7 +73,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { Search, ChatDotRound } from '@element-plus/icons-vue'
 import {
   listTutorials,
@@ -83,6 +83,7 @@ import {
 } from '../api/tutorials'
 
 const router = useRouter()
+const route = useRoute()
 
 const tutorials = ref<TutorialItem[]>([])
 const listLoading = ref(false)
@@ -118,11 +119,19 @@ async function loadTutorialList() {
   try {
     const data = await listTutorials({ page: 1, pageSize: 50 })
     tutorials.value = data.items
-    if (!selectedId.value && data.items.length > 0) {
-      const first = data.items[0]
-      if (first) {
-        await onSelectTutorial(first.id)
+    let initialId: number | null = null
+    const qid = route.query.id
+    if (typeof qid === 'string' && qid.trim()) {
+      const parsed = Number(qid)
+      if (!Number.isNaN(parsed)) {
+        initialId = parsed
       }
+    }
+    const target = initialId && data.items.some(i => i.id === initialId)
+      ? initialId
+      : data.items[0]?.id
+    if (target) {
+      await onSelectTutorial(target)
     }
   } catch (e: any) {
     const msg = e?.response?.data?.error || '加载教程列表失败'

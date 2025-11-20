@@ -28,6 +28,10 @@ Additional tool routes (non-breaking additions):
   - `POST /api/resources/:id/like` → like a resource (idempotent)
   - `DELETE /api/resources/:id/like` → remove like
  - Watermark check (anonymous): `POST /api/watermark/check` with multipart `file` (`.melsave`/`.zip`). Returns `{ watermark, length, embedded, matches: [{ fileId, resourceId, resourceSlug, resourceTitle, originalName, urlPath }] }`.
+- Tutorial management (authenticated, per-user):
+  - `GET /api/my/tutorials` → `{ items: [{ id, slug, title, description, created_at, updated_at }] }`
+  - `PATCH /api/tutorials/:id` → update title/description/content of a tutorial owned by the current user, and refresh its embeddings for RAG
+  - `DELETE /api/tutorials/:id` → delete a tutorial owned by the current user (cascades its RAG chunks)
 
 ## Environment & Config
 - `PORT` (dev 3000, Docker 3400), `JWT_SECRET`, `NODE_ENV`, `PUBLIC_BASE_URL`, `HTTPS_ENABLED`, `COOKIE_DOMAIN`.
@@ -75,4 +79,3 @@ Additional tool routes (non-breaking additions):
 
 ## Questions
 If you’re unsure about API parity or behavior, prefer maintaining the current FastAPI implementation’s behavior and return shapes, and leave a short note in PR/commit messages (or open an issue) before making behavioral changes.
-

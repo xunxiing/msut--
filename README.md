@@ -247,6 +247,7 @@ docker run -d \
 - `/about`：关于页  
 - `/resources`：资源文件列表  
 - `/upload`：上传文件（需要登录）  
+- `/my/resources`：作品管理中心（合并“我的存档”和“我的教程”管理，需登录）  
 - `/dsl`：DSL `.melsave` 生成工具  
 - `/watermark`：水印检测工具  
 - `/share/:slug`：资源详情分享页  
@@ -280,4 +281,3 @@ docker run -d \
 4. 推送分支并发起 Pull Request  
 
 如有问题或新需求（例如扩展 RAG 能力、接入不同的 LLM 提供方），欢迎在 Issues 中提出。感谢使用 MSUT 主站。 
-

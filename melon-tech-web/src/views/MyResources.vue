@@ -63,7 +63,7 @@
               :key="item.id"
               class="work-card"
             >
-              <div class="card-content" @click="$router.push(`/share/${item.slug}`)">
+              <div class="card-content" @click="openResourceAction(item)">
                 <div class="card-icon">
                   <el-icon><FolderOpened /></el-icon>
                 </div>
@@ -86,7 +86,7 @@
                     <el-icon><Link /></el-icon>
                   </el-button>
                 </el-tooltip>
-                <el-dropdown trigger="click" @command="(cmd) => handleResourceCommand(cmd, item)">
+                <el-dropdown trigger="click" @command="(cmd: string) => handleResourceCommand(cmd, item)">
                   <el-button text circle size="small" @click.stop>
                     <el-icon><MoreFilled /></el-icon>
                   </el-button>
@@ -132,7 +132,7 @@
               :key="t.id"
               class="work-card"
             >
-              <div class="card-content" @click="$router.push({ path: '/tutorials/library', query: { id: t.id } })">
+              <div class="card-content" @click="openTutorialAction(t)">
                 <div class="card-icon tutorial-icon">
                   <el-icon><Reading /></el-icon>
                 </div>
@@ -151,7 +151,7 @@
                 <el-button text circle size="small" @click.stop="$router.push({ path: '/tutorials/library', query: { id: t.id } })">
                   <el-icon><View /></el-icon>
                 </el-button>
-                <el-dropdown trigger="click" @command="(cmd) => handleTutorialCommand(cmd, t)">
+                <el-dropdown trigger="click" @command="(cmd: string) => handleTutorialCommand(cmd, t)">
                   <el-button text circle size="small" @click.stop>
                     <el-icon><MoreFilled /></el-icon>
                   </el-button>
@@ -168,6 +168,75 @@
           </div>
         </template>
       </template>
+
+      <!-- 资源操作选择弹窗 -->
+      <el-dialog
+        v-model="resourceAction.visible"
+        title="请选择操作"
+        width="900px"
+        align-center
+        class="custom-dialog"
+      >
+        <div class="action-select">
+          <el-button
+            type="primary"
+            plain
+            class="action-btn"
+            @click="handleResourceAction('view')"
+          >
+            <el-icon class="action-icon"><View /></el-icon>
+            查看作品
+          </el-button>
+          <el-button
+            type="success"
+            plain
+            class="action-btn"
+            @click="handleResourceAction('edit')"
+          >
+            <el-icon class="action-icon"><EditPen /></el-icon>
+            编辑信息
+          </el-button>
+          <el-button
+            type="info"
+            plain
+            class="action-btn"
+            @click="handleResourceAction('addFile')"
+          >
+            <el-icon class="action-icon"><Upload /></el-icon>
+            添加文件
+          </el-button>
+        </div>
+      </el-dialog>
+
+      <!-- 教程操作选择弹窗 -->
+      <el-dialog
+        v-model="tutorialAction.visible"
+        title="请选择操作"
+        width="900px"
+        align-center
+        class="custom-dialog"
+      >
+        <div class="action-select">
+          <el-button
+            type="primary"
+            plain
+            class="action-btn"
+            @click="handleTutorialActionSelect('view')"
+          >
+            <el-icon class="action-icon"><View /></el-icon>
+            查看文档
+          </el-button>
+          <el-button
+            type="success"
+            plain
+            class="action-btn"
+            @click="handleTutorialActionSelect('edit')"
+          >
+            <el-icon class="action-icon"><EditPen /></el-icon>
+            编辑内容
+          </el-button>
+        </div>
+      </el-dialog>
 
       <!-- 资源信息编辑弹窗 -->
       <el-dialog v-model="edit.visible" title="编辑信息" width="520px" @closed="resetEdit" align-center class="custom-dialog">
@@ -343,6 +412,22 @@ const tutorialEdit = reactive({
   content: '',
 })
 
+const resourceAction = reactive<{
+  visible: boolean
+  item: MyResourceItem | null
+}>({
+  visible: false,
+  item: null,
+})
+
+const tutorialAction = reactive<{
+  visible: boolean
+  item: MyTutorialItem | null
+}>({
+  visible: false,
+  item: null,
+})
+
 async function fetchResources() {
   resourcesLoading.value = true
   try {
@@ -422,6 +507,28 @@ function handleResourceCommand(command: string, item: MyResourceItem) {
   }
 }
 
+function openResourceAction(item: MyResourceItem) {
+  resourceAction.visible = true
+  resourceAction.item = item
+}
+
+function handleResourceAction(action: 'view' | 'edit' | 'addFile') {
+  const item = resourceAction.item
+  if (!item) return
+  resourceAction.visible = false
+  switch (action) {
+    case 'view':
+      router.push(`/share/${item.slug}`)
+      break
+    case 'edit':
+      openEdit(item)
+      break
+    case 'addFile':
+      openUpload(item)
+      break
+  }
+}
+
 function handleTutorialCommand(command: string, item: MyTutorialItem) {
   switch (command) {
     case 'view':
@@ -432,6 +539,25 @@ function handleTutorialCommand(command: string, item: MyTutorialItem) {
       break
     case 'delete':
       confirmTutorialRemove(item)
+      break
+  }
+}
+
+function openTutorialAction(item: MyTutorialItem) {
+  tutorialAction.visible = true
+  tutorialAction.item = item
+}
+
+function handleTutorialActionSelect(action: 'view' | 'edit') {
+  const item = tutorialAction.item
+  if (!item) return
+  tutorialAction.visible = false
+  switch (action) {
+    case 'view':
+      router.push({ path: '/tutorials/library', query: { id: item.id } })
+      break
+    case 'edit':
+      openTutorialEdit(item)
       break
   }
 }
@@ -841,8 +967,13 @@ onBeforeUnmount(() => {
   color: #606266;
   line-height: 1.5;
   display: -webkit-box;
+  display: -moz-box;
+  display: box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
+  -moz-box-orient: vertical;
+  box-orient: vertical;
   overflow: hidden;
 }
 
@@ -864,6 +995,21 @@ onBeforeUnmount(() => {
 .empty-state {
   padding: 60px 0;
   text-align: center;
+}
+
+.action-select {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.action-btn {
+  justify-content: flex-start;
+  width: 100%;
+}
+
+.action-icon {
+  margin-right: 8px;
 }
 
 @media (max-width: 768px) {

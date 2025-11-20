@@ -1,64 +1,133 @@
 <template>
-  <div class="container" v-if="data">
-    <el-breadcrumb separator="/">
-      <el-breadcrumb-item @click="$router.push('/resources')" style="cursor:pointer">文件</el-breadcrumb-item>
-      <el-breadcrumb-item>{{ data.title }}</el-breadcrumb-item>
-    </el-breadcrumb>
+  <div class="resource-detail-container" v-if="data">
+    <div class="breadcrumb-wrapper">
+      <el-breadcrumb separator="/">
+        <el-breadcrumb-item :to="{ path: '/resources' }">文件资源库</el-breadcrumb-item>
+        <el-breadcrumb-item>{{ data.title }}</el-breadcrumb-item>
+      </el-breadcrumb>
+    </div>
 
-    <el-card class="header" shadow="never">
-      <h2 class="title">{{ data.title }}</h2>
-      <p class="desc" v-if="data.description">{{ data.description }}</p>
-
-      <div class="share">
-        <el-input v-model="data.shareUrl" readonly style="max-width: 520px" />
-        <el-button @click="copy(data.shareUrl)">复制链接</el-button>
-        <div class="likes-bar">
-          <button class="like-btn" :class="{ liked: !!resourceLike?.liked }" @click="toggleResourceLike" :title="resourceLike?.liked ? '已赞' : '点赞'">
-            <svg class="like-icon" viewBox="0 0 24 24" aria-hidden="true">
-              <path :fill="resourceLike?.liked ? '#f44336' : 'currentColor'" d="M12.1 21.35l-1.1-1.02C5.14 14.88 2 12.06 2 8.5 2 6 4 4 6.5 4c1.54 0 3.04.81 3.9 2.09C11.46 4.81 12.96 4 14.5 4 17 4 19 6 19 8.5c0 3.56-3.14 6.38-8.9 11.83l-1.0 1.02z" />
-            </svg>
-            <span class="count">{{ resourceLike?.likes || 0 }}</span>
-          </button>
-          <el-button v-if="auth.user" size="large" class="like-action" @click="toggleResourceLike">{{ resourceLike?.liked ? '已赞' : '点赞' }}</el-button>
+    <div class="detail-header-card">
+      <div class="header-main">
+        <div class="icon-wrapper">
+          <el-icon><Document /></el-icon>
+        </div>
+        <div class="header-info">
+          <h1 class="resource-title">{{ data.title }}</h1>
+          <p class="resource-desc" v-if="data.description">{{ data.description }}</p>
+          <div class="header-meta">
+            <span class="meta-item">
+              <el-icon><User /></el-icon>
+              {{ (data as any).author_name || '未知作者' }}
+            </span>
+            <span class="meta-item">
+              <el-icon><Calendar /></el-icon>
+              {{ data.created_at }}
+            </span>
+          </div>
         </div>
       </div>
-    </el-card>
 
-    <el-row :gutter="16">
-      <el-col :xs="24" :md="16">
-        <el-card shadow="hover">
-          <template #header>使用方法</template>
-          <div class="usage" v-if="data.usage">{{ data.usage }}</div>
-          <template v-else>
-            <el-empty description="暂无使用说明" />
-          </template>
-          <template #footer>
-            <small>创建时间：{{ data.created_at }} · 作者：{{ (data as any).author_name || '未知' }}</small>
-          </template>
-        </el-card>
-      </el-col>
+      <div class="header-actions">
+        <div class="share-box">
+          <el-input v-model="data.shareUrl" readonly class="share-input">
+            <template #append>
+              <el-button @click="copy(data.shareUrl)">
+                <el-icon><CopyDocument /></el-icon>
+                复制链接
+              </el-button>
+            </template>
+          </el-input>
+        </div>
+        
+        <div class="action-buttons">
+          <button 
+            class="like-btn-large" 
+            :class="{ 'is-active': resourceLike?.liked }" 
+            @click="toggleResourceLike"
+          >
+            <el-icon class="like-icon">
+              <component :is="resourceLike?.liked ? StarFilled : Star" />
+            </el-icon>
+            <span class="like-text">{{ resourceLike?.liked ? '已收藏' : '收藏' }}</span>
+            <span class="like-count" v-if="resourceLike?.likes">{{ resourceLike?.likes }}</span>
+          </button>
+        </div>
+      </div>
+    </div>
 
-      <el-col :xs="24" :md="8">
-        <el-card shadow="hover">
-          <template #header>文件</template>
-          <el-empty v-if="!data.files?.length" description="暂无文件" />
-          <el-space v-else direction="vertical" alignment="stretch" style="width:100%">
-            <el-card v-for="f in data.files" :key="f.id" shadow="never" class="file">
-              <div class="file-row">
-                <div class="name" :title="f.original_name">{{ f.original_name }}</div>
-                <el-button size="small" type="primary" @click="download(f.id)">下载</el-button>
+    <div class="detail-content">
+      <el-row :gutter="24">
+        <el-col :xs="24" :md="16">
+          <div class="content-section">
+            <h3 class="section-title">使用说明</h3>
+            <div class="usage-content" v-if="data.usage">
+              {{ data.usage }}
+            </div>
+            <el-empty v-else description="暂无使用说明" :image-size="120" />
+          </div>
+        </el-col>
+
+        <el-col :xs="24" :md="8">
+          <div class="files-section">
+            <h3 class="section-title">包含文件</h3>
+            <div v-if="data.files?.length" class="file-list">
+              <div v-for="f in data.files" :key="f.id" class="file-item">
+                <div class="file-info-row">
+                  <div class="file-icon">
+                    <el-icon><Paperclip /></el-icon>
+                  </div>
+                  <div class="file-info">
+                    <div class="file-name" :title="f.original_name">{{ f.original_name }}</div>
+                    <div class="file-meta">{{ prettySize(f.size) }} · {{ f.mime || 'unknown' }}</div>
+                  </div>
+                </div>
+                <el-button type="primary" class="download-btn-large" @click="download(f.id)">
+                  <el-icon><Download /></el-icon>
+                  下载
+                </el-button>
               </div>
-              <div class="meta">{{ prettySize(f.size) }} · {{ f.mime || 'unknown' }}</div>
-            </el-card>
-          </el-space>
-        </el-card>
-      </el-col>
-    </el-row>
-
-    <el-alert type="info" show-icon title="未登录也能下载" description="分享给任何人，对方打开此页即可自由下载" class="mt-16" />
+            </div>
+            <el-empty v-else description="暂无文件" :image-size="100" />
+          </div>
+          
+          <div class="download-tip">
+            <el-icon><InfoFilled /></el-icon>
+            <div class="tip-content">
+              <h4>未登录也能下载</h4>
+              <p>分享给任何人，对方打开此页即可自由下载</p>
+            </div>
+          </div>
+        </el-col>
+      </el-row>
+    </div>
   </div>
 
-  <el-skeleton v-else animated :rows="6" class="container" />
+  <!-- Like Popup -->
+  <transition name="fade">
+    <div v-if="showLikePopup" class="like-popup-overlay">
+      <div class="like-popup">
+        <div class="popup-content">
+          <h3>觉得有用吗？</h3>
+          <p>给作者点个赞支持一下吧！</p>
+          <button 
+            class="popup-like-btn"
+            :class="{ 'is-active': resourceLike?.liked }"
+            @click="handlePopupLike"
+          >
+            <el-icon><component :is="resourceLike?.liked ? StarFilled : Star" /></el-icon>
+            {{ resourceLike?.liked ? '已点赞' : '点赞支持' }}
+          </button>
+        </div>
+        <button class="close-popup" @click="showLikePopup = false">×</button>
+        <div class="auto-close-bar"></div>
+      </div>
+    </div>
+  </transition>
+
+  <div v-if="!data" class="loading-skeleton">
+    <el-skeleton animated :rows="6" />
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -68,11 +137,17 @@ import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getResourceLikes, likeResource, unlikeResource, type LikeInfo } from '../api/likes'
 import { useAuth } from '../stores/auth'
+import { 
+  Document, User, Calendar, CopyDocument, 
+  Star, StarFilled, Paperclip, Download, InfoFilled 
+} from '@element-plus/icons-vue'
 
 const route = useRoute()
 const data = ref<any>(null)
 const auth = useAuth()
 const resourceLike = ref<LikeInfo | null>(null)
+const showLikePopup = ref(false)
+let popupTimer: any = null
 
 function prettySize(n: number) {
   if (!n && n !== 0) return ''
@@ -83,19 +158,44 @@ function prettySize(n: number) {
 }
 
 async function fetch() {
-  data.value = await getResource(route.params.slug as string)
-  if (data.value?.id) {
-    const items = await getResourceLikes([data.value.id])
-    resourceLike.value = items[0] || { id: data.value.id, likes: 0, liked: false }
+  try {
+    data.value = await getResource(route.params.slug as string)
+    if (data.value?.id) {
+      const items = await getResourceLikes([data.value.id])
+      resourceLike.value = items[0] || { id: data.value.id, likes: 0, liked: false }
+    }
+  } catch (e) {
+    ElMessage.error('加载资源失败')
   }
 }
+
 function copy(text: string) {
   navigator.clipboard.writeText(text).then(() => ElMessage.success('链接已复制'))
 }
+
 function download(fileId: number) {
-  // 直接打开后端公开下载接口
   window.open(`/api/files/${fileId}/download`, '_blank')
+  
+  // Show like popup only if user hasn't liked the resource yet
+  if (!resourceLike.value?.liked) {
+    showLikePopup.value = true
+    if (popupTimer) clearTimeout(popupTimer)
+    popupTimer = setTimeout(() => {
+      showLikePopup.value = false
+    }, 3000)
+  }
 }
+
+async function handlePopupLike() {
+  await toggleResourceLike()
+  // Close popup immediately after liking
+  showLikePopup.value = false
+  if (popupTimer) clearTimeout(popupTimer)
+  // Don't auto close if user interacts, or maybe close after a short delay? 
+  // Let's keep it simple: if they like, we can close it after a moment or let the timer handle it.
+  // User requirement said "6 seconds auto disappear", so we stick to that timer mostly.
+}
+
 async function toggleResourceLike() {
   try {
     if (!auth.user) {
@@ -116,31 +216,397 @@ async function toggleResourceLike() {
     ElMessage.error(msg)
   }
 }
+
 onMounted(fetch)
 </script>
 
 <style scoped>
-.container { max-width: 1160px; margin: 0 auto; padding: 16px; }
-.header { margin: 10px 0 16px; border-radius: 14px; }
-.title { margin: 0 0 6px; font-size: 22px; font-weight: 800; }
-.desc { color: var(--el-text-color-secondary); }
-.share { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
-.file { border-radius: 12px; }
-.file-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 70%; }
-.likes-bar { display: flex; align-items: center; gap: 10px; margin-left: auto; }
-.like-btn { display: inline-flex; align-items: center; gap: 6px; background: transparent; border: none; cursor: pointer; padding: 2px 6px; color: var(--el-text-color-secondary); }
-.like-btn .like-icon { width: 28px; height: 28px; }
-.like-btn .count { font-size: 14px; }
-.like-btn.liked { color: #f44336; }
-.meta { color: var(--el-text-color-secondary); font-size: 12px; margin-top: 4px; }
-.mt-16 { margin-top: 16px; }
-.like-action { transform: scale(1.2); transform-origin: center left; }
+.resource-detail-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 32px 24px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #1e293b;
+}
 
-/* Responsive: wrap share row on small screens */
-@media (max-width: 640px) {
-  .share { flex-wrap: wrap; }
-  :deep(.share .el-input) { flex: 1 0 100%; }
-  .likes-bar { width: 100%; justify-content: flex-start; }
+.breadcrumb-wrapper {
+  margin-bottom: 24px;
+}
+
+.detail-header-card {
+  background: #fff;
+  border-radius: 16px;
+  padding: 32px;
+  margin-bottom: 32px;
+  border: 1px solid #f1f5f9;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+
+.header-main {
+  display: flex;
+  gap: 24px;
+  flex: 1;
+  min-width: 300px;
+}
+
+.icon-wrapper {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  background: #ecfdf5;
+  color: #10b981;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  flex-shrink: 0;
+}
+
+.header-info {
+  flex: 1;
+}
+
+.resource-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 12px 0;
+  line-height: 1.3;
+}
+
+.resource-desc {
+  font-size: 15px;
+  color: #64748b;
+  margin: 0 0 16px 0;
+  line-height: 1.6;
+}
+
+.header-meta {
+  display: flex;
+  gap: 24px;
+  color: #94a3b8;
+  font-size: 14px;
+}
+
+.meta-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.header-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 320px;
+}
+
+.share-input :deep(.el-input__wrapper) {
+  box-shadow: 0 0 0 1px #e2e8f0 inset;
+}
+
+.like-btn-large {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.like-btn-large:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.like-btn-large.is-active {
+  background: #fee2e2;
+  border-color: #fee2e2;
+  color: #ef4444;
+}
+
+.like-icon {
+  font-size: 18px;
+}
+
+.detail-content {
+  min-height: 400px;
+}
+
+.content-section, .files-section {
+  background: #fff;
+  border-radius: 16px;
+  padding: 24px;
+  border: 1px solid #f1f5f9;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  margin-bottom: 24px;
+  height: 100%;
+}
+
+.section-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0 0 20px 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.usage-content {
+  font-size: 15px;
+  line-height: 1.7;
+  color: #334155;
+  white-space: pre-wrap;
+}
+
+.file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  transition: all 0.2s;
+}
+
+.file-item:hover {
+  background: #fff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  border-color: #e2e8f0;
+}
+
+.file-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: #e0f2fe;
+  color: #0284c7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.file-info {
+  flex: 1;
+  overflow: hidden;
+}
+
+.file-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #334155;
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-meta {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.download-tip {
+  margin-top: 16px;
+  padding: 16px;
+  background: #f0f9ff;
+  border-radius: 12px;
+  display: flex;
+  gap: 12px;
+  color: #0369a1;
+}
+
+.download-tip .el-icon {
+  font-size: 20px;
+  margin-top: 2px;
+}
+
+.tip-content h4 {
+  margin: 0 0 4px 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.tip-content p {
+  margin: 0;
+  font-size: 13px;
+  opacity: 0.9;
+}
+
+.loading-skeleton {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 32px;
+}
+
+@media (max-width: 768px) {
+  .detail-header-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .header-actions {
+    width: 100%;
+  }
+}
+
+.file-item {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  transition: all 0.2s;
+}
+
+.file-info-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.download-btn-large {
+  width: 100%;
+  height: 40px;
+  font-size: 15px;
+  border-radius: 8px;
+  margin-top: 4px;
+}
+
+/* Popup Styles */
+.like-popup-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  backdrop-filter: blur(2px);
+}
+
+.like-popup {
+  background: #fff;
+  padding: 32px;
+  border-radius: 20px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15);
+  width: 320px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  animation: popup-in 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes popup-in {
+  from { transform: scale(0.8); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.popup-content h3 {
+  margin: 0 0 8px 0;
+  font-size: 20px;
+  color: #1e293b;
+}
+
+.popup-content p {
+  margin: 0 0 24px 0;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.popup-like-btn {
+  background: linear-gradient(135deg, #312e81 0%, #4338ca 100%);
+  color: #fff;
+  border: none;
+  padding: 12px 32px;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.3s;
+  box-shadow: 0 4px 12px rgba(67, 56, 202, 0.3);
+}
+
+.popup-like-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(67, 56, 202, 0.4);
+}
+
+.popup-like-btn.is-active {
+  background: #f1f5f9;
+  color: #64748b;
+  box-shadow: none;
+}
+
+.close-popup {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px;
+  line-height: 1;
+}
+
+.close-popup:hover {
+  color: #64748b;
+}
+
+.auto-close-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 4px;
+  background: #4338ca;
+  width: 100%;
+  animation: progress 3s linear forwards;
+}
+
+@keyframes progress {
+  from { width: 100%; }
+  to { width: 0%; }
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>

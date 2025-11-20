@@ -186,8 +186,7 @@ async def upload_to_resource(
         return JSONResponse(status_code=400, content={"error": "没有文件"})
     saved = []
     do_wm = parse_bool(saveWatermark, False)
-    # Begin a transaction to ensure DB rollback on failure
-    cur.execute("BEGIN")
+    # 使用 autocommit，每条语句独立事务，避免长时间持有写锁
     created_file_paths: List[Path] = []
     try:
         for uf in files[:10]:

@@ -33,13 +33,19 @@ def _require_user_id(request: Request) -> Optional[int]:
 def _make_slug(title: str) -> str:
     base = slugify_str(title) or f"tutorial-{nanoid()}"
     conn = get_connection()
-    cur = conn.cursor()
-    slug = base
-    i = 1
-    while cur.execute("SELECT 1 FROM tutorials WHERE slug = ?", (slug,)).fetchone():
-        slug = f"{base}-{i}"
-        i += 1
-    return slug
+    try:
+        cur = conn.cursor()
+        slug = base
+        i = 1
+        while cur.execute("SELECT 1 FROM tutorials WHERE slug = ?", (slug,)).fetchone():
+            slug = f"{base}-{i}"
+            i += 1
+        return slug
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 
 def _chunk_content(content: str, max_len: int = 500) -> List[str]:

@@ -1,56 +1,94 @@
 <template>
-  <div class="container">
-    <div class="header">
-      <h2>文件列表</h2>
-      <div class="actions">
-        <el-input v-model="q" placeholder="搜索主题内容" clearable @clear="fetch" @keyup.enter="fetch" style="max-width: 320px" />
-        <el-button type="primary" @click="$router.push('/upload')">上传文件</el-button>
+  <div class="file-library-container">
+    <!-- Header Section -->
+    <div class="library-header">
+      <div class="header-content">
+        <h2 class="page-title">文件资源库</h2>
+        <p class="page-subtitle">探索、分享和管理您的所有文档资源</p>
+      </div>
+      <div class="header-actions">
+        <el-input
+          v-model="q"
+          placeholder="搜索资源..."
+          class="search-input"
+          clearable
+          @clear="fetch"
+          @keyup.enter="fetch"
+        >
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
+        <el-button type="primary" class="upload-btn" @click="$router.push('/upload')">
+          <el-icon><Upload /></el-icon>
+          <span>上传文件</span>
+        </el-button>
       </div>
     </div>
 
-    <el-row :gutter="16">
-      <el-col v-for="r in items" :key="r.slug" :xs="24" :md="12" :lg="8">
-        <el-card class="card" shadow="hover" @click="$router.push(`/share/${r.slug}`)" style="cursor:pointer">
-          <div class="title">{{ r.title }}</div>
-          <div class="desc">{{ r.description || '暂无描述' }}</div>
-          <div class="meta">
-            <el-tag size="small">{{ r.created_at }}</el-tag>
-            <span class="author" v-if="(r as any).author_name">作者：{{ (r as any).author_name }}</span>
-            <button
-              class="like-btn"
-              :class="{ liked: !!likesMap[r.id]?.liked }"
-              title="点赞"
-              @click.stop="toggleLike(r.id)"
-            >
-              <svg class="like-icon" viewBox="0 0 24 24" aria-hidden="true">
-                <path
-                  :fill="likesMap[r.id]?.liked ? '#f44336' : 'currentColor'"
-                  d="M12.1 21.35l-1.1-1.02C5.14 14.88 2 12.06 2 8.5 2 6 4 4 6.5 4c1.54 0 3.04.81 3.9 2.09C11.46 4.81 12.96 4 14.5 4 17 4 19 6 19 8.5c0 3.56-3.14 6.38-8.9 11.83l-1.0 1.02z"
-                />
-              </svg>
-              <span class="count">{{ likesMap[r.id]?.likes || 0 }}</span>
-            </button>
-          </div>
-        </el-card>
-      </el-col>
-    </el-row>
+    <!-- Content Section -->
+    <div class="library-content" v-loading="loading">
+      <div v-if="items.length > 0" class="resource-grid">
+        <div
+          v-for="r in items"
+          :key="r.id"
+          class="resource-card-wrapper"
+          @click="$router.push(`/share/${r.slug}`)"
+        >
+          <el-card class="resource-card" shadow="hover">
+            <div class="card-body">
+              <div class="card-icon">
+                <el-icon><Document /></el-icon>
+              </div>
+              <div class="card-info">
+                <h3 class="resource-title" :title="r.title">{{ r.title }}</h3>
+                <p class="resource-desc">{{ r.description || '暂无描述' }}</p>
+              </div>
+            </div>
+            <div class="card-footer">
+              <div class="author-info">
+                <el-avatar :size="24" class="author-avatar">{{ (r as any).author_name?.[0]?.toUpperCase() || 'U' }}</el-avatar>
+                <span class="author-name">{{ (r as any).author_name || 'Unknown' }}</span>
+              </div>
+              <div class="card-meta">
+                <span class="date">{{ formatDate(r.created_at) }}</span>
+                <div 
+                  class="like-action" 
+                  :class="{ 'is-active': likesMap[r.id]?.liked }"
+                  @click.stop="toggleLike(r.id)"
+                >
+                  <el-icon>
+                    <component :is="likesMap[r.id]?.liked ? StarFilled : Star" />
+                  </el-icon>
+                  <span class="like-count">{{ likesMap[r.id]?.likes || 0 }}</span>
+                </div>
+              </div>
+            </div>
+          </el-card>
+        </div>
+      </div>
 
-    <div class="pager">
-      <el-pagination
-        background
-        layout="prev, pager, next"
-        :page-size="pageSize"
-        :current-page="page"
-        :total="total"
-        @current-change="(p: number) => { page = p; fetch() }"
-      />
+      <el-empty v-else description="暂无资源" :image-size="200" />
+
+      <!-- Pagination -->
+      <div class="pagination-wrapper" v-if="total > 0">
+        <el-pagination
+          background
+          layout="prev, pager, next"
+          :page-size="pageSize"
+          :current-page="page"
+          :total="total"
+          @current-change="handlePageChange"
+        />
+      </div>
     </div>
   </div>
-  </template>
+</template>
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { Search, Upload, Document, Star, StarFilled } from '@element-plus/icons-vue'
 import { listResources, type ResourceItem } from '../api/resources'
 import { getResourceLikes, likeResource, unlikeResource, type LikeInfo } from '../api/likes'
 import { useAuth } from '../stores/auth'
@@ -60,18 +98,41 @@ const items = ref<ResourceItem[]>([])
 const page = ref(1)
 const pageSize = ref(12)
 const total = ref(0)
+const loading = ref(false)
 const likesMap = ref<Record<number, LikeInfo>>({})
 const auth = useAuth()
 
 async function fetch() {
-  const data = await listResources({ q: q.value, page: page.value, pageSize: pageSize.value })
-  items.value = data.items
-  total.value = data.total
-  const ids = (items.value || []).map(r => r.id)
-  const likes = await getResourceLikes(ids)
-  const m: Record<number, LikeInfo> = {}
-  likes.forEach(i => { m[i.id] = i })
-  likesMap.value = m
+  loading.value = true
+  try {
+    const data = await listResources({ q: q.value, page: page.value, pageSize: pageSize.value })
+    items.value = data.items
+    total.value = data.total
+    
+    if (items.value.length > 0) {
+      const ids = items.value.map(r => r.id)
+      const likes = await getResourceLikes(ids)
+      const m: Record<number, LikeInfo> = {}
+      likes.forEach(i => { m[i.id] = i })
+      likesMap.value = m
+    }
+  } catch (error) {
+    ElMessage.error('获取资源列表失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+function handlePageChange(p: number) {
+  page.value = p
+  fetch()
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+function formatDate(dateStr: string) {
+  if (!dateStr) return ''
+  const date = new Date(dateStr)
+  return date.toLocaleDateString()
 }
 
 async function toggleLike(id: number) {
@@ -98,58 +159,285 @@ onMounted(fetch)
 </script>
 
 <style scoped>
-.container {
-  max-width: 1160px;
+.file-library-container {
+  max-width: 1280px;
   margin: 0 auto;
-  padding: 16px;
-  position: relative;
-  /* 让背景可以延伸到容器外，避免两侧留白 */
-  overflow: visible;
-  isolation: isolate;
+  padding: 32px;
+  min-height: 80vh;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #1e293b;
 }
-/* 让顶部背景满屏延伸，内容仍保持定宽居中 */
-.container::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 100vw;
-  height: 100%;
-  background:
-    radial-gradient(1400px 700px at 50% -220px, var(--el-color-success-light-7), transparent 72%),
-    linear-gradient(180deg, rgba(16,185,129,.06), rgba(255,255,255,0));
-  z-index: -2;
-}
-.container::after {
-  content: '';
-  position: absolute;
-  left: 0; right: 0; top: 0;
-  height: 320px;
-  background:
-    radial-gradient(400px 200px at 15% -30px, rgba(16,185,129,.12), transparent 70%),
-    radial-gradient(400px 200px at 85% -30px, rgba(16,185,129,.12), transparent 70%);
-  filter: blur(20px);
-  pointer-events: none;
-  z-index: -1;
-}
-.header { display: flex; align-items: center; justify-content: space-between; margin: 8px 0 16px; }
-.title { font-weight: 700; font-size: 16px; margin-bottom: 6px; }
-.desc { color: var(--el-text-color-secondary); min-height: 40px; }
-.meta { margin-top: 8px; display: flex; align-items: center; gap: 10px; }
-.author { color: var(--el-text-color-secondary); font-size: 13px; }
-.card { border-radius: 14px; }
-.pager { display: flex; justify-content: center; margin: 18px 0; }
-.actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-.like-btn { display: inline-flex; align-items: center; gap: 6px; background: transparent; border: none; cursor: pointer; padding: 2px 6px; color: var(--el-text-color-secondary); }
-.like-btn .like-icon { width: 24px; height: 24px; }
-.like-btn .count { font-size: 14px; }
-.like-btn.liked { color: #f44336; }
 
-/* Responsive for header actions */
-@media (max-width: 640px) {
-  .actions { justify-content: flex-start; }
-  :deep(.actions .el-input) { flex: 1 0 100%; }
+.library-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 48px;
+  flex-wrap: wrap;
+  gap: 24px;
+}
+
+.header-content .page-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 8px 0;
+  letter-spacing: -0.02em;
+}
+
+.header-content .page-subtitle {
+  font-size: 15px;
+  color: #64748b;
+  margin: 0;
+  font-weight: 400;
+}
+
+.header-actions {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.search-input {
+  width: 280px;
+  transition: width 0.3s ease;
+}
+
+.search-input:focus-within {
+  width: 320px;
+}
+
+:deep(.el-input__wrapper) {
+  box-shadow: 0 0 0 1px #e2e8f0 inset;
+  border-radius: 10px;
+  padding: 8px 12px;
+  background-color: #f8fafc;
+}
+
+:deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 2px var(--el-color-success) inset;
+  background-color: #fff;
+}
+
+.upload-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: #10b981;
+  border-color: #10b981;
+  border-radius: 10px;
+  padding: 10px 20px;
+  font-weight: 500;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+  transition: all 0.2s ease;
+}
+
+.upload-btn:hover {
+  background-color: #059669;
+  border-color: #059669;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.3);
+}
+
+.resource-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 24px;
+}
+
+.resource-card-wrapper {
+  height: 100%;
+}
+
+.resource-card {
+  height: 100%;
+  border: 1px solid #f1f5f9;
+  border-radius: 16px;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  background: #fff;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.resource-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.08);
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+.resource-card :deep(.el-card__body) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 24px;
+}
+
+.card-body {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 20px;
+  flex: 1;
+}
+
+.card-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: #ecfdf5;
+  color: #10b981;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  flex-shrink: 0;
+  transition: transform 0.3s ease;
+}
+
+.resource-card:hover .card-icon {
+  transform: scale(1.05);
+  background: #d1fae5;
+}
+
+.card-info {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.resource-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0 0 6px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.resource-desc {
+  font-size: 14px;
+  color: #64748b;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.5;
+}
+
+.card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 20px;
+  border-top: 1px solid #f1f5f9;
+  margin-top: auto;
+}
+
+.author-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.author-avatar {
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px #e2e8f0;
+}
+
+.author-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #475569;
+}
+
+.card-meta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.date {
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.like-action {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  color: #94a3b8;
+  padding: 6px 12px;
+  border-radius: 20px;
+  background: #f8fafc;
+  border: 1px solid transparent;
+}
+
+.like-action:hover {
+  background: linear-gradient(135deg, #e0f2fe 0%, #f0f9ff 100%);
+  color: #0ea5e9;
+  transform: translateY(-1px);
+}
+
+.like-action.is-active {
+  background: linear-gradient(135deg, #312e81 0%, #4338ca 100%);
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.3);
+  box-shadow: 0 4px 12px rgba(67, 56, 202, 0.3);
+}
+
+.like-action.is-active .el-icon {
+  filter: drop-shadow(0 0 4px rgba(251, 191, 36, 0.5));
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+.like-count {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pagination-wrapper {
+  display: flex;
+  justify-content: center;
+  margin-top: 64px;
+}
+
+@media (max-width: 768px) {
+  .library-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 20px;
+  }
+  
+  .header-actions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .search-input {
+    width: 100%;
+  }
+  
+  .search-input:focus-within {
+    width: 100%;
+  }
 }
 </style>
-

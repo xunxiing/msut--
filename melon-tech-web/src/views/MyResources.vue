@@ -1,196 +1,177 @@
 <template>
   <div class="page-bg">
+    <WelcomeGuide />
     <div class="container">
-      <el-card shadow="never" class="outer-card">
-        <template #header>
-          <div class="card-header">
-            <span>作品管理中心</span>
-            <div class="card-header-right">
-              <el-radio-group v-model="activeTab" size="small" class="tab-switch">
-                <el-radio-button label="resources">存档文件</el-radio-button>
-                <el-radio-button label="tutorials">教程文档</el-radio-button>
-              </el-radio-group>
-              <el-button
-                size="small"
-                @click="onRefresh"
-                :loading="activeTab === 'resources' ? resourcesLoading : tutorialsLoading"
-              >
-                刷新
+      <div class="header-section">
+        <div class="header-left">
+          <h1>作品管理中心</h1>
+          <p class="subtitle">管理您的存档文件与教程文档</p>
+        </div>
+        <div class="header-right">
+          <div class="tab-switch-wrapper">
+            <div 
+              class="tab-item" 
+              :class="{ active: activeTab === 'resources' }"
+              @click="activeTab = 'resources'"
+            >
+              <el-icon><Folder /></el-icon>
+              <span>存档文件</span>
+            </div>
+            <div 
+              class="tab-item" 
+              :class="{ active: activeTab === 'tutorials' }"
+              @click="activeTab = 'tutorials'"
+            >
+              <el-icon><Document /></el-icon>
+              <span>教程文档</span>
+            </div>
+          </div>
+          <el-button
+            circle
+            :loading="activeTab === 'resources' ? resourcesLoading : tutorialsLoading"
+            @click="onRefresh"
+          >
+            <el-icon><Refresh /></el-icon>
+          </el-button>
+        </div>
+      </div>
+
+      <!-- 资源存档管理 -->
+      <template v-if="activeTab === 'resources'">
+        <el-skeleton v-if="resourcesLoading" animated :rows="4" class="grid-skeleton" />
+        <template v-else>
+          <div v-if="!resourceItems.length" class="empty-state">
+            <el-empty description="暂时没有上传的存档">
+              <el-button type="primary" size="large" @click="$router.push('/upload')">
+                <el-icon class="el-icon--left"><Upload /></el-icon>
+                立即上传
               </el-button>
+            </el-empty>
+          </div>
+          
+          <div v-else class="works-grid">
+            <!-- 新增卡片 -->
+            <div class="work-card add-card" @click="$router.push('/upload')">
+              <div class="add-icon">
+                <el-icon><Plus /></el-icon>
+              </div>
+              <span>上传新存档</span>
+            </div>
+
+            <div
+              v-for="item in resourceItems"
+              :key="item.id"
+              class="work-card"
+            >
+              <div class="card-content" @click="$router.push(`/share/${item.slug}`)">
+                <div class="card-icon">
+                  <el-icon><FolderOpened /></el-icon>
+                </div>
+                <div class="card-info">
+                  <h3 class="work-title" :title="item.title">{{ item.title }}</h3>
+                  <div class="work-meta">
+                    <span>{{ item.files.length }} 个文件</span>
+                    <span class="separator">•</span>
+                    <span>{{ formatDate(item.created_at) }}</span>
+                  </div>
+                  <div class="work-desc" :title="item.description || '暂无简介'">
+                    {{ item.description || '暂无简介' }}
+                  </div>
+                </div>
+              </div>
+              
+              <div class="card-actions">
+                <el-tooltip content="复制链接" placement="top">
+                  <el-button text circle size="small" @click.stop="copy(item.shareUrl)">
+                    <el-icon><Link /></el-icon>
+                  </el-button>
+                </el-tooltip>
+                <el-dropdown trigger="click" @command="(cmd) => handleResourceCommand(cmd, item)">
+                  <el-button text circle size="small" @click.stop>
+                    <el-icon><MoreFilled /></el-icon>
+                  </el-button>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item command="preview">预览详情</el-dropdown-item>
+                      <el-dropdown-item command="addFile">添加文件</el-dropdown-item>
+                      <el-dropdown-item command="edit">编辑信息</el-dropdown-item>
+                      <el-dropdown-item command="delete" divided style="color: var(--el-color-danger)">删除</el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
+              </div>
             </div>
           </div>
         </template>
+      </template>
 
-        <!-- 资源存档管理 -->
-        <template v-if="activeTab === 'resources'">
-          <el-skeleton v-if="resourcesLoading" animated :rows="4" />
-          <template v-else>
-            <el-empty v-if="!resourceItems.length" description="暂时没有上传的存档">
-              <el-button type="primary" @click="$router.push('/upload')">去上传</el-button>
-            </el-empty>
-            <el-space
-              v-else
-              direction="vertical"
-              alignment="stretch"
-              style="width: 100%"
-              size="large"
-            >
-              <el-card
-                v-for="item in resourceItems"
-                :key="item.id"
-                shadow="hover"
-                class="resource-card"
-              >
-                <template #header>
-                  <div class="resource-header">
-                    <div>
-                      <div class="title">{{ item.title }}</div>
-                      <div class="meta">
-                        创建于 {{ item.created_at }} · 文件 {{ item.files.length }} 个
-                      </div>
-                    </div>
-                    <el-space size="small" wrap class="actions">
-                      <el-button size="small" @click="copy(item.shareUrl)">复制链接</el-button>
-                      <el-button size="small" @click="$router.push(`/share/${item.slug}`)">预览</el-button>
-                      <el-button size="small" @click="openUpload(item)">添加文件</el-button>
-                      <el-button size="small" type="primary" @click="openEdit(item)">编辑信息</el-button>
-                      <el-button
-                        size="small"
-                        type="danger"
-                        :loading="resourceDeletingId === item.id"
-                        @click="confirmRemove(item)"
-                      >
-                        删除
-                      </el-button>
-                    </el-space>
-                  </div>
-                </template>
-
-                <div class="section">
-                  <div class="section-title">简介</div>
-                  <div v-if="item.description" class="section-content">{{ item.description }}</div>
-                  <el-empty v-else description="暂无简介" />
-                </div>
-
-                <div class="section">
-                  <div class="section-title">使用说明</div>
-                  <div v-if="item.usage" class="section-content">{{ item.usage }}</div>
-                  <el-empty v-else description="暂无使用说明" />
-                </div>
-
-                <div class="section">
-                  <div class="section-title">分享链接</div>
-                  <div class="share-row">
-                    <el-input v-model="item.shareUrl" readonly />
-                    <el-button size="small" @click="copy(item.shareUrl)">复制</el-button>
-                    <el-button size="small" @click="$router.push(`/share/${item.slug}`)">打开</el-button>
-                  </div>
-                </div>
-
-                <div class="section">
-                  <div class="section-title">文件列表</div>
-                  <el-empty v-if="!item.files.length" description="暂无文件" />
-                  <el-table v-else :data="item.files" size="small" border>
-                    <el-table-column prop="original_name" label="文件名" min-width="220">
-                      <template #default="scope">
-                        <span :title="scope.row.original_name">{{ scope.row.original_name }}</span>
-                      </template>
-                    </el-table-column>
-                    <el-table-column label="大小" width="120">
-                      <template #default="scope">
-                        {{ prettySize(scope.row.size) }}
-                      </template>
-                    </el-table-column>
-                    <el-table-column prop="mime" label="类型" width="160" />
-                    <el-table-column label="上传时间" width="180">
-                      <template #default="scope">
-                        {{ scope.row.created_at || '' }}
-                      </template>
-                    </el-table-column>
-                    <el-table-column label="操作" width="120">
-                      <template #default="scope">
-                        <el-button size="small" @click="download(scope.row.id)">下载</el-button>
-                      </template>
-                    </el-table-column>
-                  </el-table>
-                </div>
-              </el-card>
-            </el-space>
-          </template>
-        </template>
-
-        <!-- 教程文档管理 -->
+      <!-- 教程文档管理 -->
+      <template v-else>
+        <el-skeleton v-if="tutorialsLoading" animated :rows="4" class="grid-skeleton" />
         <template v-else>
-          <el-skeleton v-if="tutorialsLoading" animated :rows="4" />
-          <template v-else>
-            <el-empty v-if="!tutorialItems.length" description="暂时没有创建的教程">
-              <el-button type="primary" @click="openTutorialCreate">新增教程</el-button>
-            </el-empty>
-            <el-space
-              v-else
-              direction="vertical"
-              alignment="stretch"
-              style="width: 100%"
-              size="large"
-            >
-              <el-card
-                v-for="t in tutorialItems"
-                :key="t.id"
-                shadow="hover"
-                class="resource-card"
-              >
-                <template #header>
-                  <div class="resource-header">
-                    <div>
-                      <div class="title">{{ t.title }}</div>
-                      <div class="meta">
-                        创建于 {{ t.created_at }}
-                        <span v-if="t.updated_at && t.updated_at !== t.created_at">
-                          · 更新于 {{ t.updated_at }}
-                        </span>
-                      </div>
-                    </div>
-                    <el-space size="small" wrap class="actions">
-                      <el-button
-                        size="small"
-                        @click="$router.push({ path: '/tutorials/library', query: { id: t.id } })"
-                      >
-                        查看
-                      </el-button>
-                      <el-button size="small" type="primary" @click="openTutorialEdit(t)">
-                        编辑
-                      </el-button>
-                      <el-button
-                        size="small"
-                        type="danger"
-                        :loading="tutorialDeletingId === t.id"
-                        @click="confirmTutorialRemove(t)"
-                      >
-                        删除
-                      </el-button>
-                    </el-space>
-                  </div>
-                </template>
-
-                <div class="section">
-                  <div class="section-title">简介</div>
-                  <div v-if="t.description" class="section-content">{{ t.description }}</div>
-                  <el-empty v-else description="暂无简介" />
-                </div>
-              </el-card>
-            </el-space>
-            <div class="tutorial-footer-actions">
-              <el-button type="primary" plain size="small" @click="openTutorialCreate">
-                新增教程
+          <div v-if="!tutorialItems.length" class="empty-state">
+            <el-empty description="暂时没有创建的教程">
+              <el-button type="primary" size="large" @click="openTutorialCreate">
+                <el-icon class="el-icon--left"><EditPen /></el-icon>
+                开始创作
               </el-button>
+            </el-empty>
+          </div>
+          
+          <div v-else class="works-grid">
+            <!-- 新增卡片 -->
+            <div class="work-card add-card" @click="openTutorialCreate">
+              <div class="add-icon">
+                <el-icon><EditPen /></el-icon>
+              </div>
+              <span>新建教程</span>
             </div>
-          </template>
+
+            <div
+              v-for="t in tutorialItems"
+              :key="t.id"
+              class="work-card"
+            >
+              <div class="card-content" @click="$router.push({ path: '/tutorials/library', query: { id: t.id } })">
+                <div class="card-icon tutorial-icon">
+                  <el-icon><Reading /></el-icon>
+                </div>
+                <div class="card-info">
+                  <h3 class="work-title" :title="t.title">{{ t.title }}</h3>
+                  <div class="work-meta">
+                    <span>{{ formatDate(t.created_at) }}</span>
+                  </div>
+                  <div class="work-desc" :title="t.description || '暂无简介'">
+                    {{ t.description || '暂无简介' }}
+                  </div>
+                </div>
+              </div>
+
+              <div class="card-actions">
+                <el-button text circle size="small" @click.stop="$router.push({ path: '/tutorials/library', query: { id: t.id } })">
+                  <el-icon><View /></el-icon>
+                </el-button>
+                <el-dropdown trigger="click" @command="(cmd) => handleTutorialCommand(cmd, t)">
+                  <el-button text circle size="small" @click.stop>
+                    <el-icon><MoreFilled /></el-icon>
+                  </el-button>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item command="view">查看文档</el-dropdown-item>
+                      <el-dropdown-item command="edit">编辑内容</el-dropdown-item>
+                      <el-dropdown-item command="delete" divided style="color: var(--el-color-danger)">删除</el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
+              </div>
+            </div>
+          </div>
         </template>
-      </el-card>
+      </template>
 
       <!-- 资源信息编辑弹窗 -->
-      <el-dialog v-model="edit.visible" title="编辑信息" width="520px" @closed="resetEdit">
-        <el-form :model="edit" label-width="84px" ref="editFormRef">
+      <el-dialog v-model="edit.visible" title="编辑信息" width="520px" @closed="resetEdit" align-center class="custom-dialog">
+        <el-form :model="edit" label-position="top" ref="editFormRef">
           <el-form-item label="简介">
             <el-input
               v-model="edit.description"
@@ -198,17 +179,16 @@
               :rows="3"
               maxlength="300"
               show-word-limit
+              placeholder="请输入简介"
             />
           </el-form-item>
           <el-form-item label="使用说明">
-            <el-input v-model="edit.usage" type="textarea" :rows="6" />
+            <el-input v-model="edit.usage" type="textarea" :rows="6" placeholder="请输入使用说明" />
           </el-form-item>
         </el-form>
         <template #footer>
-          <el-space>
-            <el-button @click="edit.visible = false">取消</el-button>
-            <el-button type="primary" :loading="edit.loading" @click="submitEdit">保存</el-button>
-          </el-space>
+          <el-button @click="edit.visible = false">取消</el-button>
+          <el-button type="primary" :loading="edit.loading" @click="submitEdit">保存</el-button>
         </template>
       </el-dialog>
 
@@ -218,6 +198,8 @@
         :title="`向 ${upload.title} 添加文件`"
         width="560px"
         @closed="resetUpload"
+        align-center
+        class="custom-dialog"
       >
         <el-upload
           ref="uploadRef"
@@ -239,12 +221,10 @@
           </template>
         </el-upload>
         <template #footer>
-          <el-space>
-            <el-button @click="upload.visible = false">取消</el-button>
-            <el-button type="primary" :loading="upload.submitting" @click="submitUpload">
-              开始上传
-            </el-button>
-          </el-space>
+          <el-button @click="upload.visible = false">取消</el-button>
+          <el-button type="primary" :loading="upload.submitting" @click="submitUpload">
+            开始上传
+          </el-button>
         </template>
       </el-dialog>
 
@@ -252,12 +232,14 @@
       <el-dialog
         v-model="tutorialEdit.visible"
         :title="tutorialEdit.isCreating ? '新增教程' : '编辑教程'"
-        width="640px"
+        width="800px"
         @closed="resetTutorialEdit"
+        align-center
+        class="custom-dialog"
       >
         <el-form label-position="top" @submit.prevent>
           <el-form-item label="标题">
-            <el-input v-model="tutorialEdit.title" placeholder="例如：甜瓜游乐场模组安装全流程" />
+            <el-input v-model="tutorialEdit.title" placeholder="例如：甜瓜游乐场模组安装全流程" size="large" />
           </el-form-item>
           <el-form-item label="简介（可选）">
             <el-input
@@ -269,18 +251,17 @@
             <el-input
               v-model="tutorialEdit.content"
               type="textarea"
-              :autosize="{ minRows: 8, maxRows: 16 }"
+              :autosize="{ minRows: 12, maxRows: 24 }"
               placeholder="在这里粘贴或编写完整教程文本（支持 Markdown 格式）"
+              class="content-editor"
             />
           </el-form-item>
         </el-form>
         <template #footer>
-          <el-space>
-            <el-button @click="tutorialEdit.visible = false">取消</el-button>
-            <el-button type="primary" :loading="tutorialEdit.loading" @click="submitTutorialEdit">
-              {{ tutorialEdit.isCreating ? '保存为教程' : '保存修改' }}
-            </el-button>
-          </el-space>
+          <el-button @click="tutorialEdit.visible = false">取消</el-button>
+          <el-button type="primary" :loading="tutorialEdit.loading" @click="submitTutorialEdit">
+            {{ tutorialEdit.isCreating ? '保存为教程' : '保存修改' }}
+          </el-button>
         </template>
       </el-dialog>
     </div>
@@ -289,7 +270,7 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref, onBeforeUnmount } from 'vue'
-import { onBeforeRouteLeave } from 'vue-router'
+import { onBeforeRouteLeave, useRouter } from 'vue-router'
 import type { FormInstance, UploadInstance, UploadUserFile } from 'element-plus'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -306,8 +287,24 @@ import {
   updateTutorial,
   type MyTutorialItem,
 } from '../api/tutorials'
-import { UploadFilled } from '@element-plus/icons-vue'
+import { 
+  UploadFilled, 
+  Folder, 
+  Document, 
+  Refresh, 
+  Plus, 
+  FolderOpened, 
+  Link, 
+  MoreFilled, 
+  Upload,
+  Reading,
+  EditPen,
+  View
+} from '@element-plus/icons-vue'
+import WelcomeGuide from '../components/WelcomeGuide.vue'
+import dayjs from 'dayjs'
 
+const router = useRouter()
 const activeTab = ref<'resources' | 'tutorials'>('resources')
 
 const resourceItems = ref<MyResourceItem[]>([])
@@ -381,16 +378,9 @@ onMounted(() => {
   fetchTutorials()
 })
 
-function prettySize(n: number) {
-  if (n === null || n === undefined) return ''
-  const units = ['B', 'KB', 'MB', 'GB']
-  let idx = 0
-  let value = n
-  while (value >= 1024 && idx < units.length - 1) {
-    value /= 1024
-    idx++
-  }
-  return `${value.toFixed(1)} ${units[idx]}`
+function formatDate(dateStr: string) {
+  if (!dateStr) return ''
+  return dayjs(dateStr).format('YYYY-MM-DD')
 }
 
 async function copy(text: string) {
@@ -412,6 +402,37 @@ async function copy(text: string) {
     ElMessage.success('链接已复制')
   } catch {
     ElMessage.error('复制失败')
+  }
+}
+
+function handleResourceCommand(command: string, item: MyResourceItem) {
+  switch (command) {
+    case 'preview':
+      router.push(`/share/${item.slug}`)
+      break
+    case 'addFile':
+      openUpload(item)
+      break
+    case 'edit':
+      openEdit(item)
+      break
+    case 'delete':
+      confirmRemove(item)
+      break
+  }
+}
+
+function handleTutorialCommand(command: string, item: MyTutorialItem) {
+  switch (command) {
+    case 'view':
+      router.push({ path: '/tutorials/library', query: { id: item.id } })
+      break
+    case 'edit':
+      openTutorialEdit(item)
+      break
+    case 'delete':
+      confirmTutorialRemove(item)
+      break
   }
 }
 
@@ -512,10 +533,6 @@ function handleUploadSuccess(_response: any, _file: UploadUserFile, uploadFiles:
 function handleUploadError() {
   upload.submitting = false
   ElMessage.error('上传失败')
-}
-
-function download(id: number) {
-  window.open(`/api/files/${id}/download`, '_blank')
 }
 
 function openTutorialCreate() {
@@ -644,140 +661,225 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .page-bg {
-  background: var(--el-color-success-light-9);
+  background: #f5f7fa;
   min-height: 100vh;
+  padding-bottom: 40px;
 }
 
 .container {
-  max-width: 1160px;
+  max-width: 1200px;
   margin: 0 auto;
-  padding: 16px;
-  position: relative;
-  overflow: visible;
-  isolation: isolate;
+  padding: 24px;
 }
 
-.container::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 100vw;
-  height: 100%;
-  background:
-    radial-gradient(1200px 600px at 50% -200px, var(--el-color-success-light-7), transparent 70%),
-    linear-gradient(180deg, rgba(16,185,129,.06), rgba(255,255,255,0));
-  z-index: -2;
-}
-
-.container::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  height: 360px;
-  background:
-    radial-gradient(400px 200px at 15% -30px, rgba(16,185,129,.12), transparent 70%),
-    radial-gradient(400px 200px at 85% -30px, rgba(16,185,129,.12), transparent 70%);
-  filter: blur(20px);
-  pointer-events: none;
-  z-index: -1;
-}
-
-.outer-card {
-  border-radius: 14px;
-}
-
-.card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.card-header-right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.tab-switch {
-  margin-right: 4px;
-}
-
-.resource-card {
-  border-radius: 14px;
-}
-
-.resource-header {
+.header-section {
   display: flex;
   justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
+  align-items: flex-end;
+  margin-bottom: 32px;
 }
 
-.title {
-  font-size: 18px;
+.header-left h1 {
+  font-size: 28px;
   font-weight: 700;
+  color: #1a1a1a;
+  margin: 0 0 8px 0;
 }
 
-.meta {
-  color: var(--el-text-color-secondary);
-  font-size: 13px;
+.subtitle {
+  color: #909399;
+  font-size: 14px;
+  margin: 0;
 }
 
-.section {
-  margin-top: 16px;
-}
-
-.section-title {
-  font-weight: 600;
-  margin-bottom: 6px;
-}
-
-.section-content {
-  line-height: 1.6;
-  white-space: pre-wrap;
-}
-
-.share-row {
+.header-right {
   display: flex;
-  gap: 8px;
   align-items: center;
+  gap: 16px;
 }
 
-.tutorial-footer-actions {
-  margin-top: 12px;
-  text-align: right;
+.tab-switch-wrapper {
+  background: white;
+  padding: 4px;
+  border-radius: 12px;
+  display: flex;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
 }
 
-@media (max-width: 640px) {
-  .resource-header {
+.tab-item {
+  padding: 8px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #606266;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.tab-item.active {
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+}
+
+.tab-item:hover:not(.active) {
+  background: #f5f7fa;
+}
+
+.works-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 24px;
+}
+
+.work-card {
+  background: white;
+  border-radius: 16px;
+  padding: 20px;
+  transition: all 0.3s ease;
+  border: 1px solid transparent;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 200px;
+}
+
+.work-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(0,0,0,0.06);
+  border-color: var(--el-color-primary-light-8);
+}
+
+.add-card {
+  border: 2px dashed #e4e7ed;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: #909399;
+}
+
+.add-card:hover {
+  border-color: var(--el-color-primary);
+  color: var(--el-color-primary);
+  background: var(--el-color-primary-light-9);
+  transform: translateY(-4px);
+}
+
+.add-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #f0f2f5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  transition: all 0.3s ease;
+}
+
+.add-card:hover .add-icon {
+  background: white;
+  color: var(--el-color-primary);
+}
+
+.card-content {
+  flex: 1;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+}
+
+.card-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  margin-bottom: 16px;
+}
+
+.card-icon.tutorial-icon {
+  background: var(--el-color-warning-light-9);
+  color: var(--el-color-warning);
+}
+
+.card-info {
+  flex: 1;
+  overflow: hidden;
+}
+
+.work-title {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.work-meta {
+  font-size: 12px;
+  color: #909399;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.work-desc {
+  font-size: 13px;
+  color: #606266;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.card-actions {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #f0f2f5;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.work-card:hover .card-actions {
+  opacity: 1;
+}
+
+.empty-state {
+  padding: 60px 0;
+  text-align: center;
+}
+
+@media (max-width: 768px) {
+  .header-section {
+    flex-direction: column;
     align-items: flex-start;
+    gap: 16px;
   }
-  .actions {
+  
+  .header-right {
     width: 100%;
-    justify-content: flex-start;
+    justify-content: space-between;
   }
-  :deep(.actions .el-space__item) {
-    flex: 1 1 calc(33.333% - 8px);
-  }
-  :deep(.actions .el-button) {
-    width: 100%;
-  }
-
-  .share-row {
-    flex-wrap: wrap;
-  }
-  :deep(.share-row .el-input) {
-    flex: 1 0 100%;
-  }
-}
-
-@media (max-width: 420px) {
-  :deep(.actions .el-space__item) {
-    flex: 1 1 calc(50% - 8px);
+  
+  .card-actions {
+    opacity: 1;
   }
 }
 </style>

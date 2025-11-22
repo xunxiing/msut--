@@ -40,6 +40,7 @@ _load_env_from_file(BASE_DIR / ".env")
 _load_env_from_file(BASE_DIR / "server" / ".env")
 
 
+from .agent_api import router as agent_router
 from .auth import router as auth_router, get_current_user, is_https_enabled
 from .db import run_migrations, DB_FILE
 from .files import router as files_router
@@ -88,6 +89,7 @@ app.mount("/uploads", StaticFiles(directory=str(uploads_path), html=False, check
 app.include_router(auth_router)
 app.include_router(files_router)
 app.include_router(melsave_router)
+app.include_router(agent_router)
 app.include_router(tutorials_router)
 
 

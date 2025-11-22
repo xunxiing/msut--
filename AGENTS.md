@@ -5,7 +5,7 @@ Scope: This AGENTS.md applies to the entire repository.
 ## Backend Overview
 - The backend has been fully migrated to Python/FastAPI. Do NOT re-enable the legacy Node/Express implementation under `server/src` or `server/dist`.
 - App entry: `server/app.py`
-- Routes: defined in `server/auth.py`, `server/files.py`, `server/melsave.py`, and `server/tutorials.py` (tutorial docs + RAG).
+- Routes: defined in `server/auth.py`, `server/files.py`, `server/melsave.py`, `server/tutorials.py` (tutorial docs + RAG), and `server/agent_api.py` (agent chat + melsave tool calls).
 - DB/migrations: `server/db.py` (SQLite, file at `server/data.sqlite`)
 - Static uploads: `server/uploads/` mounted at `/uploads`
 - Utilities: `server/utils.py` (cookie options, boolean env parsing, slug/nanoid)
@@ -29,9 +29,15 @@ Additional tool routes (non-breaking additions):
   - `DELETE /api/resources/:id/like` → remove like
  - Watermark check (anonymous): `POST /api/watermark/check` with multipart `file` (`.melsave`/`.zip`). Returns `{ watermark, length, embedded, matches: [{ fileId, resourceId, resourceSlug, resourceTitle, originalName, urlPath }] }`.
 - Tutorial management (authenticated, per-user):
-  - `GET /api/my/tutorials` → `{ items: [{ id, slug, title, description, created_at, updated_at }] }`
-  - `PATCH /api/tutorials/:id` → update title/description/content of a tutorial owned by the current user, and refresh its embeddings for RAG
+ - `GET /api/my/tutorials` → `{ items: [{ id, slug, title, description, created_at, updated_at }] }`
+ - `PATCH /api/tutorials/:id` → update title/description/content of a tutorial owned by the current user, and refresh its embeddings for RAG
   - `DELETE /api/tutorials/:id` → delete a tutorial owned by the current user (cascades its RAG chunks)
+ - Agent chat + generation (authenticated):
+  - `POST /api/agent/sessions` → create a session
+  - `GET /api/agent/sessions` → list own sessions
+  - `GET /api/agent/sessions/{id}/messages` → pull session history
+  - `POST /api/agent/ask` → send a user message (optionally with `sessionId`), starts an async run that may call the melsave generator tool
+  - `GET /api/agent/runs/{runId}` → poll run status/result (download URL for generated `.melsave`)
 
 ## Environment & Config
 - `PORT` (dev 3000, Docker 3400), `JWT_SECRET`, `NODE_ENV`, `PUBLIC_BASE_URL`, `HTTPS_ENABLED`, `COOKIE_DOMAIN`.
@@ -41,6 +47,10 @@ Additional tool routes (non-breaking additions):
   - `RAG_LLM_MODEL` – chat model name (e.g. `deepseek-ai/DeepSeek-V3.2-Exp`).
   - `RAG_EMBED_MODEL` – embedding model name (e.g. `BAAI/bge-m3`).
   - `RAG_EMBED_DIM` – embedding dimension (e.g. `1024`), used for sanity logging.
+- Agent LLM (for multi-turn `.melsave` generation):
+  - `AGENT_API_BASE`/`AGENT_API_KEY` – OpenAI-compatible gateway for the agent; defaults to the RAG values.
+  - `AGENT_MODEL` – chat model used for tool calls (default filled with `moonshotai/Kimi-K2-Thinking`).
+  - Prompt files live under `server/agent/全自动生成.txt` (agent guidance) and `server/agent/芯片教程.txt` (domain tutorial); the agent reads both before tool calls.
 - HSTS should only apply if `HTTPS_ENABLED` evaluates to true (see `utils.parse_bool`).
 - DB and uploads are relative to `server/` and must not be relocated without updating the Docker volumes and README.
   - The SQLite DB location is controlled by `DATA_DIR` (default `server/data/`) with the file `data.sqlite`. Do not change without adjusting Docker volumes and README.

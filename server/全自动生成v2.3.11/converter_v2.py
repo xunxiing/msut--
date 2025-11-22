@@ -127,6 +127,22 @@ class Converter(ast.NodeVisitor):
         self.unresolved: List[Tuple[str, str, str, str]] = []  # (up_var, up_port, to_nid, to_port)
         # NEW: 端口别名表（变量 -> (上游变量名, 端口名)）
         self.alias_outputs: Dict[str, Tuple[str, str]] = {}
+    
+    def _emit_constant_node(self, lit) -> str:
+        nid = self.g.next_id("Constant")
+        attrs = {"value": lit}
+        node_rec = {
+            "id": nid,
+            "type": "Constant",
+            "label": _auto_label("Constant", attrs),
+            "attrs": attrs,
+            "inputs": [],
+            "outputs": []
+        }
+        self.g.add_node(node_rec)
+        self.inputs_seen.setdefault(nid, [])
+        self.outputs_seen.setdefault(nid, set())
+        return nid
 
     # 仅处理最常见的顶层赋值： x = FUNC(...) 或 x = some_var['PORT']（端口别名）
     def visit_Assign(self, node: ast.Assign):
@@ -155,6 +171,18 @@ class Converter(ast.NodeVisitor):
                 if isinstance(up_port, str):
                     # 记录别名映射；此处不要求 up_var 已经定义，后续连边阶段会统一解析
                     self.alias_outputs[target] = (up_var, up_port)
+        # 情形 3：x = 123 / "xyz" / {"x":1,"y":2,"z":3}
+        elif len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            try:
+                lit = ast.literal_eval(node.value)
+            except Exception:
+                lit = None
+            is_ok = isinstance(lit, (int, float, str)) or (isinstance(lit, dict) and all(k in lit for k in ("x", "y", "z")))
+            if is_ok:
+                var = node.targets[0].id
+                nid = self._emit_constant_node(lit)
+                if var not in self.var2node:
+                    self.var2node[var] = nid
         # 继续遍历（以便处理嵌套结构里可能出现的 Call）
         self.generic_visit(node)
 
@@ -219,6 +247,20 @@ class Converter(ast.NodeVisitor):
         for port_name, expr in conns:
             if _ast_is_none(expr):
                 seen_inputs.append(port_name)
+            elif isinstance(expr, ast.Subscript) and isinstance(expr.value, ast.Call):
+                inline_call = expr.value
+                up_nid = self._emit_call_as_node(inline_call)
+                sl = expr.slice
+                if isinstance(sl, ast.Constant) and isinstance(sl.value, str):
+                    up_port = sl.value
+                else:
+                    try:
+                        up_port = ast.literal_eval(sl)
+                    except Exception:
+                        raise TypeError(f"{type_name}.{port_name}: 端口下标必须是字符串字面量")
+                self.g.add_edge(up_nid, up_port, nid, port_name)
+                self.outputs_seen.setdefault(up_nid, set()).add(up_port)
+                seen_inputs.append(port_name)
                 continue
             # 期望形态： Name['PORT']
             if isinstance(expr, ast.Subscript) and isinstance(expr.value, ast.Name):
@@ -254,8 +296,27 @@ class Converter(ast.NodeVisitor):
                     self.unresolved.append((up_var, up_port, nid, port_name))
                 seen_inputs.append(port_name)
             else:
-                # 不做自动 Constant、不做句柄直传；你明确要求"必须通过下标"，这里就硬报错。
-                raise TypeError(f"{type_name}.{port_name}: 只接受 node['PORT']、端口别名变量或 None，禁止直接传普通变量/字面量/调用结果")
+                # 字面量直传：OUTPUT(INPUT="...") / ADD(A=1.2) / MOVE(V={"x":0,"y":1,"z":0})
+                lit_ok = False
+                try:
+                    lit = ast.literal_eval(expr)
+                    lit_ok = isinstance(lit, (int, float, str)) or (isinstance(lit, dict) and all(k in lit for k in ("x", "y", "z")))
+                except Exception:
+                    lit_ok = False
+                
+                if lit_ok:
+                    up_nid = self._emit_constant_node(lit)
+                    # Constant 只有一个输出端口，叫 "Output"；下游那边只有一个输入或按名匹配
+                    self.g.add_edge(up_nid, "Output", nid, port_name)
+                    self.outputs_seen.setdefault(up_nid, set()).add("Output")
+                    seen_inputs.append(port_name)
+                else:
+                    raise TypeError(f"{type_name}.{port_name}: 参数必须是以下形式之一：\n"
+                                  f"  • node['端口名']  - 连接其他节点的输出端口\n"
+                                  f"  • 端口别名变量   - 通过别名引用端口\n"
+                                  f"  • None          - 空输入\n"
+                                  f"  • 字面量        - 数字、字符串或{x,y,z}向量\n"
+                                  f"当前表达式不被支持：{ast.unparse(expr) if hasattr(ast, 'unparse') else str(expr)}")
 
         # 补齐 node.inputs（按出现顺序）
         node_rec["inputs"] = [{"name": p, "type": ""} for p in seen_inputs]
@@ -296,7 +357,24 @@ def convert_dsl_to_graph(dsl_script_path: Path, output_path: Path) -> None:
         cvt.resolve_unresolved()
         cvt.finalize_outputs()
     except Exception as e:
-        sys.exit(f"Error executing DSL: {e}")
+        # 提供更详细的错误信息
+        error_msg = str(e)
+        if "name" in error_msg and "is not defined" in error_msg:
+            # 提取未定义的变量名
+            import re
+            match = re.search(r"name '(\w+)' is not defined", error_msg)
+            if match:
+                undefined_var = match.group(1)
+                sys.exit(f"DSL语法错误: 变量 '{undefined_var}' 未定义\n"
+                        f"提示: 在使用变量前，请先通过函数调用或赋值来定义它\n"
+                        f"例如: {undefined_var} = SOME_FUNCTION(...)")
+        
+        # 对于TypeError，我们已经有了详细的格式说明
+        if isinstance(e, TypeError):
+            sys.exit(f"DSL参数错误: {error_msg}")
+        
+        # 其他错误保持原样
+        sys.exit(f"DSL执行错误: {error_msg}")
 
     try:
         out = {"nodes": cvt.g.nodes, "edges": cvt.g.edges}
@@ -305,14 +383,24 @@ def convert_dsl_to_graph(dsl_script_path: Path, output_path: Path) -> None:
         sys.exit(f"Failed to write graph JSON '{output_path}': {e}")
 
 if __name__ == "__main__":
-    # 示例：把 demo_v2.py 转为 graph.json
-    DSL_PATH = Path("demo_v2.py")
-    OUT_PATH = Path("graph.json")
+    import sys
+    
+    # 支持命令行参数：python converter_v2.py [输入文件] [输出文件]
+    if len(sys.argv) >= 3:
+        DSL_PATH = Path(sys.argv[1])
+        OUT_PATH = Path(sys.argv[2])
+    else:
+        # 默认行为：使用 demo_v2.py
+        DSL_PATH = Path("demo_v2.py")
+        OUT_PATH = Path("graph.json")
 
     if not DSL_PATH.exists():
-        # 写入一个可运行的示例 DSL
-        DSL_PATH.write_text(
-            """
+        if len(sys.argv) >= 3:
+            sys.exit(f"输入文件 '{DSL_PATH}' 不存在")
+        else:
+            # 写入一个可运行的示例 DSL
+            DSL_PATH.write_text(
+                """
 # demo_v2.py — 纯 AST 转换器 DSL 样例
 # 时间源
 t = TIME()
@@ -328,9 +416,9 @@ xyz = Split(Vector=player_pos["OUT"])
 out_dt = OUTPUT(INPUT=t["DELTA TIME"], attrs={"name": "#deltaTime", "data_type": 2})
 out_g  = OUTPUT(INPUT=greet["OUT"],    attrs={"name": "#greeting",  "data_type": 4})
 out_x  = OUTPUT(INPUT=xyz["X"],        attrs={"name": "#playerX",   "data_type": 2})
-        """.strip(),
-            encoding="utf-8",
-        )
+            """.strip(),
+                encoding="utf-8",
+            )
 
     convert_dsl_to_graph(DSL_PATH, OUT_PATH)
     print(f"Graph saved -> {OUT_PATH}")

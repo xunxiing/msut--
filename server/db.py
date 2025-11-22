@@ -226,6 +226,65 @@ def run_migrations(conn: Optional[sqlite3.Connection] = None) -> None:
             cur.execute("ALTER TABLE tutorial_embeddings ADD COLUMN optimized_chunk_text TEXT")
         if "optimized_at" not in cols:
             cur.execute("ALTER TABLE tutorial_embeddings ADD COLUMN optimized_at TEXT")
+        # Agent chat storage (sessions, runs, messages)
+        cur.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS agent_sessions (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              user_id INTEGER NOT NULL,
+              title TEXT,
+              last_status TEXT DEFAULT 'idle',
+              last_error TEXT,
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+              FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+
+            CREATE TRIGGER IF NOT EXISTS trg_agent_sessions_updated_at
+            AFTER UPDATE ON agent_sessions
+            FOR EACH ROW BEGIN
+              UPDATE agent_sessions SET updated_at = datetime('now') WHERE id = OLD.id;
+            END;
+
+            CREATE TABLE IF NOT EXISTS agent_runs (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              session_id INTEGER NOT NULL,
+              user_id INTEGER NOT NULL,
+              status TEXT NOT NULL,
+              model TEXT,
+              result_path TEXT,
+              result_name TEXT,
+              error TEXT,
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+              FOREIGN KEY (session_id) REFERENCES agent_sessions(id) ON DELETE CASCADE,
+              FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+
+            CREATE TRIGGER IF NOT EXISTS trg_agent_runs_updated_at
+            AFTER UPDATE ON agent_runs
+            FOR EACH ROW BEGIN
+              UPDATE agent_runs SET updated_at = datetime('now') WHERE id = OLD.id;
+            END;
+
+            CREATE TABLE IF NOT EXISTS agent_messages (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              session_id INTEGER NOT NULL,
+              run_id INTEGER,
+              role TEXT NOT NULL,
+              content TEXT NOT NULL,
+              tool_name TEXT,
+              tool_args TEXT,
+              tool_call_id TEXT,
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              FOREIGN KEY (session_id) REFERENCES agent_sessions(id) ON DELETE CASCADE,
+              FOREIGN KEY (run_id) REFERENCES agent_runs(id) ON DELETE SET NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_agent_messages_session ON agent_messages(session_id, id);
+            CREATE INDEX IF NOT EXISTS idx_agent_runs_session ON agent_runs(session_id);
+            """
+        )
         conn.commit()
     finally:
         if owns:

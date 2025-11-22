@@ -2,8 +2,7 @@
   <div class="tutorial-layout">
     <aside class="tutorial-sidebar">
       <div class="sidebar-header">
-        <h1 class="sidebar-title">教程中心 · 文档库</h1>
-        <p class="sidebar-subtitle">集中浏览与管理所有教程</p>
+        
       </div>
 
       <el-input

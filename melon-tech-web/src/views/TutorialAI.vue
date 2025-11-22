@@ -4,10 +4,6 @@
       <div class="ai-inner">
         <header class="ai-header">
           <div class="ai-title-block">
-            <h1>教程中心 · AI 问答助手</h1>
-            <p class="ai-subtitle">
-              基于文档库的智能问答，为您解答关于教程的疑问
-            </p>
           </div>
           <div class="ai-header-actions">
             <el-button @click="goBack">返回教程列表</el-button>
@@ -21,11 +17,11 @@
               <h3>有什么可以帮您？</h3>
               <p>您可以询问关于教程的任何问题，例如：</p>
               <div class="suggestion-chips">
-                <el-tag 
-                  v-for="q in suggestions" 
-                  :key="q" 
-                  class="suggestion-chip" 
-                  effect="plain" 
+                <el-tag
+                  v-for="q in suggestions"
+                  :key="q"
+                  class="suggestion-chip"
+                  effect="plain"
                   round
                   @click="ask(q)"
                 >
@@ -34,9 +30,9 @@
               </div>
             </div>
 
-            <div 
-              v-for="(msg, index) in messages" 
-              :key="index" 
+            <div
+              v-for="(msg, index) in messages"
+              :key="index"
               class="message-row"
               :class="{ 'user-row': msg.role === 'user', 'ai-row': msg.role === 'ai' }"
             >
@@ -61,7 +57,7 @@
               </div>
             </div>
 
-            <div v-if="loading" class="message-row ai-row">
+            <div v-if="loading && !streaming" class="message-row ai-row">
               <div class="message-avatar">
                 <div class="ai-avatar">
                   <el-icon><Service /></el-icon>
@@ -97,11 +93,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { ChatDotRound, UserFilled, Service, Position } from '@element-plus/icons-vue'
 import { marked } from 'marked'
-import { searchAndAsk, type TutorialSearchResult } from '../api/tutorials'
+import { searchAndAsk, searchAndAskStream, type TutorialSearchResult } from '../api/tutorials'
 import { ElMessage } from 'element-plus'
 
 const router = useRouter()
@@ -115,13 +111,19 @@ type Message = {
 const messages = ref<Message[]>([])
 const inputQuery = ref('')
 const loading = ref(false)
+const streaming = ref(false)
 const messagesContainer = ref<HTMLElement | null>(null)
+const streamController = ref<AbortController | null>(null)
 
 const suggestions = [
   '如何安装模组？',
   '怎么制作自定义人物？',
   '游戏崩溃了怎么办？'
 ]
+
+onBeforeUnmount(() => {
+  streamController.value?.abort()
+})
 
 function goBack() {
   router.push('/tutorials')
@@ -139,35 +141,94 @@ function scrollToBottom() {
   })
 }
 
+async function tryStreamAnswer(query: string, aiMsg: Message) {
+  streamController.value?.abort()
+  const controller = new AbortController()
+  streamController.value = controller
+
+  streaming.value = true
+  let hasContent = false
+  let streamError = false
+
+  try {
+    const result = await searchAndAskStream(
+      { query, mode: 'qa' },
+      {
+        signal: controller.signal,
+        onEvent: (evt) => {
+          const type = (evt as Record<string, unknown>).event
+          if (type === 'meta' && Array.isArray((evt as any).sources)) {
+            aiMsg.sources = (evt as any).sources
+          } else if (type === 'token') {
+            const chunk = (evt as any).text
+            if (chunk) {
+              aiMsg.content += String(chunk)
+              hasContent = true
+              scrollToBottom()
+            }
+          } else if (type === 'error') {
+            streamError = true
+          }
+        },
+      },
+    )
+
+    if (streamError) {
+      return false
+    }
+
+    if (!result.streamed) {
+      if (result.data?.answer) {
+        aiMsg.content = result.data.answer.text
+        aiMsg.sources = result.data.answer.sources || []
+      } else {
+        aiMsg.content = '抱歉，我没有找到相关的答案。'
+      }
+      return true
+    }
+
+    if (!hasContent) {
+      aiMsg.content = '抱歉，我没有找到相关的答案。'
+    }
+    return true
+  } catch (err: any) {
+    if (err?.name === 'AbortError') {
+      return true
+    }
+    return false
+  } finally {
+    streaming.value = false
+  }
+}
+
 async function ask(query: string) {
   if (loading.value) return
-  
+
   messages.value.push({ role: 'user', content: query })
   scrollToBottom()
-  
+
+  const aiMsg: Message = { role: 'ai', content: '' }
+  messages.value.push(aiMsg)
+  scrollToBottom()
+
   loading.value = true
   try {
-    const res = await searchAndAsk({ query, mode: 'qa' })
-    if (res.answer) {
-      messages.value.push({
-        role: 'ai',
-        content: res.answer.text,
-        sources: res.answer.sources
-      })
-    } else {
-      messages.value.push({
-        role: 'ai',
-        content: '抱歉，我没有找到相关的答案。'
-      })
+    const handled = await tryStreamAnswer(query, aiMsg)
+    if (!handled || !aiMsg.content) {
+      const res = await searchAndAsk({ query, mode: 'qa' })
+      if (res.answer) {
+        aiMsg.content = res.answer.text
+        aiMsg.sources = res.answer.sources
+      } else {
+        aiMsg.content = '抱歉，我没有找到相关的答案。'
+      }
     }
   } catch (e: any) {
     ElMessage.error('请求失败，请稍后重试')
-    messages.value.push({
-      role: 'ai',
-      content: '抱歉，发生了一些错误，请稍后重试。'
-    })
+    aiMsg.content = '抱歉，发生了一些错误，请稍后重试。'
   } finally {
     loading.value = false
+    streaming.value = false
     scrollToBottom()
   }
 }
@@ -188,17 +249,21 @@ function handleEnter(e: KeyboardEvent) {
 
 <style scoped>
 .ai-page {
-  height: 100vh;
+  min-height: calc(100vh - 56px);
+  height: calc(100vh - 56px);
   overflow: hidden;
   background: #f3f4f6;
   display: flex;
   flex-direction: column;
+  padding: 12px 12px 24px;
+  box-sizing: border-box;
 }
 .ai-container {
   flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-height: 0;
 }
 .ai-inner {
   max-width: 1000px;
@@ -210,6 +275,7 @@ function handleEnter(e: KeyboardEvent) {
   flex: 1;
   overflow: hidden;
   box-sizing: border-box;
+  min-height: 0;
 }
 .ai-header {
   display: flex;
@@ -239,6 +305,7 @@ function handleEnter(e: KeyboardEvent) {
   overflow: hidden;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   max-width: 100%;
+  min-height: 0;
 }
 
 .chat-messages {
@@ -248,6 +315,7 @@ function handleEnter(e: KeyboardEvent) {
   display: flex;
   flex-direction: column;
   gap: 24px;
+  min-height: 0;
 }
 
 .empty-state {

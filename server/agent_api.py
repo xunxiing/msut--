@@ -164,6 +164,33 @@ def _agent_headers() -> Dict[str, str]:
     return headers
 
 
+def _flatten_content(value) -> str:
+    """Extract plain text from an OpenAI-style content or delta field."""
+    parts: List[str] = []
+    if isinstance(value, str):
+        parts.append(value)
+    elif isinstance(value, list):
+        for item in value:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                text = item.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+    return "".join(parts)
+
+
+def _extract_delta_text(delta: dict) -> str:
+    """Extract visible text from a streaming delta payload."""
+    if not isinstance(delta, dict):
+        return ""
+    # Prefer normal assistant content; fall back to reasoning/thinking text if present.
+    text = _flatten_content(delta.get("content"))
+    if not text:
+        text = _flatten_content(delta.get("reasoning_content"))
+    return text
+
+
 def _call_llm(messages: List[dict]) -> dict:
     if not AGENT_API_BASE or not AGENT_MODEL:
         raise RuntimeError("agent LLM 未配置")
@@ -179,6 +206,62 @@ def _call_llm(messages: List[dict]) -> dict:
     url = f"{AGENT_API_BASE}/chat/completions"
     resp = requests.post(url, headers=_agent_headers(), data=json.dumps(body, ensure_ascii=False), timeout=120)
     resp.raise_for_status()
+    payload = resp.json()
+    choices = payload.get("choices") or []
+    if not choices:
+        raise RuntimeError("LLM 无返回")
+    msg = choices[0].get("message") or {}
+    return msg
+
+
+def _call_llm_v2(messages: List[dict]) -> dict:
+    """Call the agent LLM with SiliconFlow/OpenAI-compatible payload."""
+    if not AGENT_API_BASE or not AGENT_MODEL:
+        raise RuntimeError("agent LLM 未配置")
+
+    # SiliconFlow /chat/completions 要求 messages 长度在 1-10 之间
+    max_messages = 10
+    trimmed = messages
+    if len(trimmed) > max_messages:
+        # 保留第一个（通常是 system），只截取最后若干条历史，避免超限
+        trimmed = [trimmed[0]] + trimmed[-(max_messages - 1) :]
+
+    body = {
+        "model": AGENT_MODEL,
+        "messages": trimmed,
+        "tools": TOOL_SCHEMA,
+        "tool_choice": "auto",
+        "temperature": 0.35,
+    }
+
+    # deepseek-ai/DeepSeek-V3.1 系列在使用 function calling 时需要关闭 thinking
+    model_lower = AGENT_MODEL.lower()
+    if "deepseek-v3.1" in model_lower:
+        body["enable_thinking"] = False
+
+    url = f"{AGENT_API_BASE}/chat/completions"
+    resp = None
+    try:
+        resp = requests.post(
+            url,
+            headers=_agent_headers(),
+            data=json.dumps(body, ensure_ascii=False),
+            timeout=120,
+        )
+        resp.raise_for_status()
+    except Exception as e:
+        err_text = ""
+        if resp is not None:
+            try:
+                err_text = resp.text
+            except Exception:
+                err_text = ""
+        try:
+            logger.error("agent LLM request failed: %s %s", e, err_text)
+        except Exception:
+            pass
+        raise
+
     payload = resp.json()
     choices = payload.get("choices") or []
     if not choices:
@@ -209,6 +292,227 @@ def _store_tool_file(dsl: str) -> dict:
     }
 
 
+def _call_llm_stream(
+    conn,
+    session_id: int,
+    run_id: int,
+    messages: List[dict],
+) -> dict:
+    """Call the agent LLM with SiliconFlow streaming, updating DB incrementally."""
+    if not AGENT_API_BASE or not AGENT_MODEL:
+        raise RuntimeError("agent LLM 未配置")
+
+    # SiliconFlow /chat/completions 要求 messages 长度�?1-10 之间
+    max_messages = 10
+    trimmed = messages
+    if len(trimmed) > max_messages:
+        # 保留第一个（通常�?system），只截取最后若干条历史，避免超�?
+        trimmed = [trimmed[0]] + trimmed[-(max_messages - 1) :]
+
+    body: Dict[str, object] = {
+        "model": AGENT_MODEL,
+        "messages": trimmed,
+        "tools": TOOL_SCHEMA,
+        "tool_choice": "auto",
+        "temperature": 0.35,
+        "stream": True,
+    }
+
+    # deepseek-ai/DeepSeek-V3.1 系列在使�?function calling 时需要关�?thinking
+    model_lower = AGENT_MODEL.lower()
+    if "deepseek-v3.1" in model_lower:
+        body["enable_thinking"] = False
+
+    url = f"{AGENT_API_BASE}/chat/completions"
+    resp = None
+
+    role = "assistant"
+    full_content: str = ""
+    assistant_msg_id: Optional[int] = None
+
+    # 累积流式 function calling 的 tool_calls 片段
+    tool_calls_acc: List[dict] = []
+
+    def _ensure_assistant_row() -> int:
+        nonlocal assistant_msg_id
+        if assistant_msg_id is None:
+            assistant_msg_id = _insert_message(
+                conn,
+                session_id,
+                role,
+                full_content,
+                tool_name=None,
+                tool_args=None,
+                tool_call_id=None,
+                run_id=run_id,
+            )
+            conn.commit()
+        return assistant_msg_id
+
+    try:
+        resp = requests.post(
+            url,
+            headers=_agent_headers(),
+            data=json.dumps(body, ensure_ascii=False),
+            stream=True,
+            timeout=120,
+        )
+        resp.raise_for_status()
+        resp.encoding = "utf-8"
+
+        for raw_line in resp.iter_lines(decode_unicode=False):
+            if not raw_line:
+                continue
+            try:
+                line = raw_line.decode("utf-8", errors="ignore").strip()
+            except Exception:
+                continue
+            if not line:
+                continue
+            if line.startswith("data:"):
+                line = line[5:].strip()
+            if not line or line == "[DONE]":
+                if line == "[DONE]":
+                    break
+                continue
+            try:
+                payload = json.loads(line)
+            except Exception:
+                continue
+
+            choices = payload.get("choices") or []
+            if not choices:
+                continue
+            choice = choices[0] or {}
+            delta = choice.get("delta") or {}
+            if not isinstance(delta, dict):
+                continue
+
+            r = delta.get("role")
+            if isinstance(r, str) and r:
+                role = r
+
+            chunk_text = _extract_delta_text(delta)
+
+            delta_tool_calls = delta.get("tool_calls") or []
+            has_tool_delta = bool(delta_tool_calls)
+
+            if delta_tool_calls:
+                for tc in delta_tool_calls:
+                    if not isinstance(tc, dict):
+                        continue
+                    idx = tc.get("index", 0) or 0
+                    if not isinstance(idx, int) or idx < 0:
+                        idx = 0
+                    while len(tool_calls_acc) <= idx:
+                        tool_calls_acc.append(
+                            {
+                                "id": None,
+                                "type": None,
+                                "function": {"name": None, "arguments": ""},
+                            }
+                        )
+                    acc = tool_calls_acc[idx]
+                    if not isinstance(acc, dict):
+                        continue
+                    tc_id = tc.get("id")
+                    if isinstance(tc_id, str) and tc_id:
+                        acc["id"] = tc_id
+                    tc_type = tc.get("type")
+                    if isinstance(tc_type, str) and tc_type:
+                        acc["type"] = tc_type
+                    fn_delta = tc.get("function") or {}
+                    if isinstance(fn_delta, dict):
+                        fn_name = fn_delta.get("name")
+                        if isinstance(fn_name, str) and fn_name:
+                            acc_fn = acc.get("function") or {}
+                            if not isinstance(acc_fn, dict):
+                                acc_fn = {"name": None, "arguments": ""}
+                            acc_fn["name"] = fn_name
+                            args_part = fn_delta.get("arguments")
+                            if isinstance(args_part, str):
+                                prev = acc_fn.get("arguments") or ""
+                                acc_fn["arguments"] = f"{prev}{args_part}"
+                            elif args_part is not None:
+                                prev = acc_fn.get("arguments") or ""
+                                acc_fn["arguments"] = f"{prev}{json.dumps(args_part, ensure_ascii=False)}"
+                            acc["function"] = acc_fn
+
+            updated = False
+            if chunk_text:
+                full_content += chunk_text
+                updated = True
+
+            if updated or has_tool_delta:
+                msg_id = _ensure_assistant_row()
+                cur = conn.cursor()
+                cur.execute(
+                    "UPDATE agent_messages SET content = ? WHERE id = ?",
+                    (full_content, msg_id),
+                )
+                conn.commit()
+
+    except Exception as e:
+        err_text = ""
+        if resp is not None:
+            try:
+                err_text = resp.text
+            except Exception:
+                err_text = ""
+        try:
+            logger.error("agent LLM stream request failed: %s %s", e, err_text)
+        except Exception:
+            pass
+        raise
+
+    msg_id = _ensure_assistant_row()
+
+    tool_calls: List[dict] = []
+    for acc in tool_calls_acc:
+        if not isinstance(acc, dict):
+            continue
+        fn_info = acc.get("function") or {}
+        if not isinstance(fn_info, dict):
+            continue
+        fn_name = fn_info.get("name")
+        if not isinstance(fn_name, str) or not fn_name:
+            continue
+        args_str = fn_info.get("arguments") or ""
+        if not isinstance(args_str, str):
+            args_str = str(args_str)
+        tc = {
+            "id": acc.get("id") or f"call_{nanoid(6)}",
+            "type": acc.get("type") or "function",
+            "function": {
+                "name": fn_name,
+                "arguments": args_str,
+            },
+        }
+        tool_calls.append(tc)
+
+    tool_args_json: Optional[str] = None
+    if tool_calls:
+        try:
+            tool_args_json = json.dumps(tool_calls, ensure_ascii=False)
+        except Exception:
+            tool_args_json = None
+
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE agent_messages SET tool_args = ? WHERE id = ?",
+        (tool_args_json, msg_id),
+    )
+    conn.commit()
+
+    msg: dict = {
+        "role": role,
+        "content": full_content,
+    }
+    if tool_calls:
+        msg["tool_calls"] = tool_calls
+    return msg
+
+
 def _run_agent_once(conn, session_id: int, run_id: int) -> Dict[str, Optional[str]]:
     cur = conn.cursor()
     prompt = _load_prompt()
@@ -221,18 +525,29 @@ def _run_agent_once(conn, session_id: int, run_id: int) -> Dict[str, Optional[st
     loop = 0
     while loop < MAX_TOOL_LOOPS:
         loop += 1
-        msg = _call_llm(messages)
+        # 优先使用流式接口，这样前端轮询消息时可以看到逐步生成的内容；
+        # 如果网关或模型不支持流式 function calling，则回退到非流式调用。
+        try:
+            msg = _call_llm_stream(conn, session_id, run_id, messages)
+        except Exception:
+            try:
+                logger.exception("agent: streaming call failed, falling back to non-streaming")
+            except Exception:
+                pass
+            msg = _call_llm_v2(messages)
+            tool_calls_for_row = msg.get("tool_calls") or []
+            content_for_row = msg.get("content") or ""
+            _insert_message(
+                conn,
+                session_id,
+                "assistant",
+                content_for_row,
+                tool_name=None,
+                tool_args=json.dumps(tool_calls_for_row, ensure_ascii=False) if tool_calls_for_row else None,
+                run_id=run_id,
+            )
+
         tool_calls = msg.get("tool_calls") or []
-        content = msg.get("content") or ""
-        _insert_message(
-            conn,
-            session_id,
-            "assistant",
-            content,
-            tool_name=None,
-            tool_args=json.dumps(tool_calls, ensure_ascii=False) if tool_calls else None,
-            run_id=run_id,
-        )
         messages.append(msg)
 
         if not tool_calls:

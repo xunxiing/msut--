@@ -65,3 +65,6 @@ MANIFEST
 *.sln
 *.sw?
 server/data/data.sqlite
+
+# Melsave files
+*.melsave

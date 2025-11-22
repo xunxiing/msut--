@@ -21,6 +21,12 @@ class GenSource:
     main_path: Path
 
 
+@dataclass
+class MelsaveResult:
+    filename: str
+    data: bytes
+
+
 def _find_generator_dir() -> Optional[GenSource]:
     base = Path(__file__).resolve().parent
     # Prefer folder that ends with the known version marker and contains main.py
@@ -102,38 +108,40 @@ def _encode_filename_header(filename: str) -> str:
     return f"attachment; filename*=UTF-8''{quote(filename)}"
 
 
-@router.post("/api/melsave/generate")
-def generate_melsave(body: dict):
-    # Accept body with { dsl: string }
-    dsl_code = body.get("dsl") if isinstance(body, dict) else None
+def generate_melsave_bytes(dsl_code: str) -> MelsaveResult:
+    """Run the generator pipeline and return the produced .melsave bytes."""
     if not isinstance(dsl_code, str) or not dsl_code.strip():
-        return JSONResponse(status_code=400, content={"error": "DSL 内容不能为空"})
+        raise ValueError("DSL 内容不能为空")
 
     src = _find_generator_dir()
     if not src:
-        return JSONResponse(status_code=500, content={"error": "找不到生成器目录"})
+        raise RuntimeError("找不到生成器目录")
 
-    # Create isolated working dir
     base_tmp = Path(tempfile.mkdtemp(prefix="melsave_", dir=str(Path(__file__).resolve().parent)))
     try:
         _copy_tree(src.base_dir, base_tmp)
-        # Write DSL to input.py expected by the pipeline
         (base_tmp / "input.py").write_text(dsl_code, encoding="utf-8")
-
-        # Run the pipeline
         out_path = _run_pipeline(base_tmp)
-
-        # Load bytes and respond for download
         data = out_path.read_bytes()
-        headers = {
-            "Content-Disposition": _encode_filename_header(out_path.name)
-        }
-        return Response(content=data, media_type="application/octet-stream", headers=headers)
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"error": f"生成失败: {e}"})
+        return MelsaveResult(filename=out_path.name, data=data)
     finally:
-        # Cleanup temp directory
         try:
             shutil.rmtree(base_tmp, ignore_errors=True)
         except Exception:
             pass
+
+
+@router.post("/api/melsave/generate")
+def generate_melsave(body: dict):
+    # Accept body with { dsl: string }
+    dsl_code = body.get("dsl") if isinstance(body, dict) else None
+    try:
+        result = generate_melsave_bytes(dsl_code)
+        headers = {
+            "Content-Disposition": _encode_filename_header(result.filename)
+        }
+        return Response(content=result.data, media_type="application/octet-stream", headers=headers)
+    except ValueError as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": f"生成失败: {e}"})

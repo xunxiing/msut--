@@ -64,3 +64,4 @@ MANIFEST
 *.njsproj
 *.sln
 *.sw?
+server/data/data.sqlite

@@ -4,10 +4,7 @@
       <div class="rag-inner">
         <header class="rag-header">
           <div class="rag-title-block">
-            <h1>教程中心 · 文档库</h1>
-            <p class="rag-subtitle">
-              集中浏览与管理所有教程
-            </p>
+
           </div>
           <div class="rag-header-actions">
             <el-button @click="goUpload">上传文件</el-button>
@@ -16,9 +13,13 @@
           </div>
         </header>
 
+        <p v-if="isMobile" class="mobile-hint">
+          手机端默认收起左侧“教程列表”和右侧“内容导航”，可通过下方按钮随时展开查看。
+        </p>
+
         <div class="content-layout">
           <!-- Left side: Tutorial List -->
-          <div class="tutorial-list-column">
+          <div v-if="!isMobile" class="tutorial-list-column">
             <div class="search-box">
               <el-input
                 v-model="searchTerm"
@@ -48,12 +49,29 @@
 
           <!-- Right side: Tutorial Viewer -->
           <div class="tutorial-viewer-column">
+            <div v-if="isMobile" class="mobile-toolbar">
+              <el-button size="small" @click="mobileListOpen = true">
+                打开教程列表
+              </el-button>
+              <el-button
+                size="small"
+                v-if="tocItems.length"
+                @click="mobileTocOpen = true"
+              >
+                打开内容导航
+              </el-button>
+            </div>
             <transition name="fade-slide" mode="out-in">
               <div v-if="tutorialLoading" key="loading" class="doc-loading">
                 <el-icon class="loading-icon"><Loading /></el-icon>
                 <p>正在加载教程...</p>
               </div>
-              <div v-else-if="selectedTutorial" key="viewer" class="doc-viewer-layout">
+              <div
+                v-else-if="selectedTutorial"
+                key="viewer"
+                class="doc-viewer-layout"
+                :class="{ 'doc-viewer-mobile': isMobile }"
+              >
                 <div class="doc-main-content" ref="scrollContainerRef">
                   <div class="doc-header">
                     <h1>{{ selectedTutorial.title }}</h1>
@@ -61,11 +79,11 @@
                   </div>
                   <div class="doc-body" v-html="renderedMarkdown"></div>
                 </div>
-                <div v-if="tocItems.length" class="doc-toc-sidebar">
+                <div v-if="!isMobile && tocItems.length" class="doc-toc-sidebar">
                   <h3 class="toc-title">内容导航</h3>
                   <div class="toc-scroll-indicator-container">
                     <div class="toc-scroll-indicator" :style="getScrollIndicatorStyle()"></div>
-                    <ul class="toc-list">
+                    <ul class="toc-list" ref="tocListRef">
                       <li
                         v-for="(item, idx) in tocItems"
                         :key="idx"
@@ -87,6 +105,88 @@
             </transition>
           </div>
         </div>
+
+        <!-- Mobile: tutorial list overlay -->
+        <transition name="fade-slide">
+          <div
+            v-if="isMobile && mobileListOpen"
+            class="mobile-panel-overlay"
+            @click.self="mobileListOpen = false"
+          >
+            <div class="mobile-panel">
+              <div class="mobile-panel-header">
+                <span class="mobile-panel-title">教程列表</span>
+                <button class="mobile-panel-close" type="button" @click="mobileListOpen = false">
+                  关闭
+                </button>
+              </div>
+              <div class="mobile-panel-body">
+                <div class="search-box">
+                  <el-input
+                    v-model="searchTerm"
+                    placeholder="搜索教程标题或简�?"
+                    clearable
+                    :prefix-icon="SearchIcon"
+                  />
+                </div>
+                <el-menu
+                  :default-active="selectedTutorial ? String(selectedTutorial.id) : ''"
+                  class="tutorial-menu"
+                  @select="handleSelectTutorial"
+                >
+                  <el-menu-item
+                    v-for="tutorial in filteredTutorials"
+                    :key="tutorial.id"
+                    :index="String(tutorial.id)"
+                  >
+                    <template #title>
+                      <div class="menu-item-content">
+                        <span class="item-title">{{ tutorial.title }}</span>
+                      </div>
+                    </template>
+                  </el-menu-item>
+                </el-menu>
+              </div>
+            </div>
+          </div>
+        </transition>
+
+        <!-- Mobile: TOC overlay -->
+        <transition name="fade-slide">
+          <div
+            v-if="isMobile && mobileTocOpen && tocItems.length"
+            class="mobile-panel-overlay"
+            @click.self="mobileTocOpen = false"
+          >
+            <div class="mobile-panel">
+              <div class="mobile-panel-header">
+                <span class="mobile-panel-title">内容导航</span>
+                <button class="mobile-panel-close" type="button" @click="mobileTocOpen = false">
+                  关闭
+                </button>
+              </div>
+              <div class="mobile-panel-body">
+                <ul class="toc-list">
+                  <li
+                    v-for="(item, idx) in tocItems"
+                    :key="idx"
+                    class="toc-item"
+                    :class="{ active: activeChunkId === item.slug }"
+                    @click="onSelectChunk(item.slug); mobileTocOpen = false"
+                  >
+                    <a
+                      :href="`#${item.slug}`"
+                      @click.prevent="onSelectChunk(item.slug); mobileTocOpen = false"
+                      :style="{ paddingLeft: (item.level - 1) * 12 + 10 + 'px' }"
+                    >
+                      {{ item.text }}
+                    </a>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </transition>
       </div>
     </div>
 
@@ -140,11 +240,15 @@ const router = useRouter()
 
 const allTutorials = ref<TutorialItem[]>([])
 const searchTerm = ref('')
+const isMobile = ref(false)
+const mobileListOpen = ref(false)
+const mobileTocOpen = ref(false)
 const selectedTutorial = ref<TutorialDetail | null>(null)
 const tutorialLoading = ref(false)
 const tocItems = ref<{ text: string; level: number; slug: string }[]>([])
 const activeChunkId = ref<string | null>(null)
 const scrollContainerRef = ref<HTMLElement | null>(null)
+const tocListRef = ref<HTMLElement | null>(null)
 
 const newTitle = ref('')
 const newDesc = ref('')
@@ -188,6 +292,18 @@ const renderedMarkdown = computed(() => {
   return marked.parse(selectedTutorial.value.content, { renderer })
 })
 
+function updateIsMobile() {
+  if (typeof window === 'undefined') return
+  isMobile.value = window.innerWidth <= 900
+}
+
+watch(isMobile, (val) => {
+  if (!val) {
+    mobileListOpen.value = false
+    mobileTocOpen.value = false
+  }
+})
+
 async function fetchAllTutorials() {
   try {
     const data = await listTutorials()
@@ -205,6 +321,7 @@ async function handleSelectTutorial(id: string | number) {
   const numericId = Number(id)
   if (selectedTutorial.value?.id === numericId) return
 
+  mobileListOpen.value = false
   tutorialLoading.value = true
   selectedTutorial.value = null
   try {
@@ -235,7 +352,7 @@ function onSelectChunk(slug: string) {
 }
 
 function getScrollIndicatorStyle() {
-  if (!activeChunkId.value || tocItems.value.length === 0) {
+  if (!activeChunkId.value || tocItems.value.length === 0 || !tocListRef.value) {
     return { display: 'none' }
   }
 
@@ -244,11 +361,20 @@ function getScrollIndicatorStyle() {
     return { display: 'none' }
   }
 
-  const itemHeight = 32 // Approximate height of each TOC item
-  const topPosition = activeIndex * itemHeight
+  const listEl = tocListRef.value
+  const items = listEl.querySelectorAll<HTMLElement>('.toc-item')
+  const activeEl = items[activeIndex]
+  if (!activeEl) {
+    return { display: 'none' }
+  }
+
+  const listRect = listEl.getBoundingClientRect()
+  const itemRect = activeEl.getBoundingClientRect()
+  const topPosition = itemRect.top - listRect.top
   
   return {
     transform: `translateY(${topPosition}px)`,
+    height: `${itemRect.height}px`,
     display: 'block'
   }
 }
@@ -377,10 +503,17 @@ async function onCreateTutorial() {
 }
 
 onMounted(() => {
+  updateIsMobile()
+  if (typeof window !== 'undefined') {
+    window.addEventListener('resize', updateIsMobile)
+  }
   fetchAllTutorials()
 })
 
 onUnmounted(() => {
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('resize', updateIsMobile)
+  }
   if (scrollContainerRef.value) {
     scrollContainerRef.value.removeEventListener('scroll', updateActiveSectionOnScroll)
   }
@@ -434,6 +567,12 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
+.mobile-hint {
+  margin: 4px 0 10px;
+  font-size: 12px;
+  color: #6b7280;
+}
+
 .content-layout {
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);
@@ -441,6 +580,13 @@ onUnmounted(() => {
   flex: 1;
   overflow: hidden;
   height: calc(100vh - 120px); /* Adjust based on header height */
+}
+
+@media (max-width: 900px) {
+  .content-layout {
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+  }
 }
 
 .tutorial-list-column {
@@ -491,6 +637,9 @@ onUnmounted(() => {
   gap: 24px;
   height: 100%;
   overflow: hidden;
+}
+.doc-viewer-layout.doc-viewer-mobile {
+  grid-template-columns: minmax(0, 1fr);
 }
 .doc-main-content {
   padding: 24px 32px;
@@ -661,5 +810,66 @@ onUnmounted(() => {
   justify-content: flex-end;
   gap: 8px;
   margin-top: 8px;
+}
+
+.mobile-toolbar {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px 0;
+}
+
+.mobile-panel-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.35);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 12px;
+  z-index: 3000;
+}
+
+.mobile-panel {
+  width: 100%;
+  max-width: 520px;
+  max-height: 80vh;
+  background: #ffffff;
+  border-radius: 16px 16px 12px 12px;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.25);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.mobile-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.mobile-panel-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.mobile-panel-close {
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  color: #6b7280;
+  padding: 4px 8px;
+  border-radius: 999px;
+}
+
+.mobile-panel-close:hover {
+  background: #f3f4f6;
+}
+
+.mobile-panel-body {
+  padding: 10px 12px 12px;
+  flex: 1;
+  overflow-y: auto;
 }
 </style>

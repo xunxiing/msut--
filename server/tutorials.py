@@ -1,15 +1,16 @@
 import asyncio
+import json
 import logging
 import math
 import time
 from typing import List, Optional, Sequence
 
 from fastapi import APIRouter, BackgroundTasks, Body, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from .auth import get_current_user
 from .db import get_connection
-from .rag_client import chat_answer, get_embedding, is_rag_configured, optimize_chunk_text, name_chunk_title
+from .rag_client import chat_answer, chat_answer_stream, get_embedding, is_rag_configured, name_chunk_title, optimize_chunk_text
 from .utils import nanoid, slugify_str
 
 
@@ -98,6 +99,15 @@ def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
     if na <= 0 or nb <= 0:
         return 0.0
     return dot / math.sqrt(na * nb)
+
+
+def _sse(data: dict) -> str:
+    """Format data as an SSE data message."""
+    try:
+        payload = json.dumps(data, ensure_ascii=False)
+    except Exception:
+        payload = "{}"
+    return f"data: {payload}\n\n"
 
 
 @router.post("/api/tutorials")
@@ -639,12 +649,15 @@ async def search_and_ask(body: dict = Body(...)):
         k = 5
     if k > 10:
         k = 10
+    stream_requested = bool(body.get("stream"))
 
     conn = get_connection()
     start = time.time()
+    rag_enabled = is_rag_configured()
 
     # If RAG not configured, fall back to simple LIKE search only
-    if not is_rag_configured():
+    if not rag_enabled:
+        stream_requested = False
         cur = conn.cursor()
         like = f"%{raw_query}%"
         rows = cur.execute(
@@ -702,9 +715,43 @@ async def search_and_ask(body: dict = Body(...)):
 
     took_ms = int((time.time() - start) * 1000)
 
+    contexts: List[str] = [it["chunk_text"] for it in top]
+    can_answer = mode in {"qa", "both"} and bool(contexts)
+
+    if stream_requested and can_answer:
+        def event_stream():
+            yield _sse(
+                {
+                    "event": "meta",
+                    "query": raw_query,
+                    "sources": search_items,
+                    "tookMs": took_ms,
+                }
+            )
+            stream_iter = chat_answer_stream(raw_query, contexts)
+            if stream_iter is None:
+                yield _sse({"event": "error", "message": "流式回答不可用"})
+                return
+            has_token = False
+            try:
+                for chunk in stream_iter:
+                    if not chunk:
+                        continue
+                    has_token = True
+                    yield _sse({"event": "token", "text": chunk})
+            except Exception as e:
+                try:
+                    logger.exception("tutorials: streaming answer failed query=%s error=%s", raw_query, e)
+                except Exception:
+                    pass
+                yield _sse({"event": "error", "message": "生成回答时出错，请稍后重试"})
+                return
+            yield _sse({"event": "done", "hasAnswer": has_token, "sources": search_items})
+
+        return StreamingResponse(event_stream(), media_type="text/event-stream; charset=utf-8")
+
     answer_payload = None
-    if mode in {"qa", "both"} and top:
-        contexts: List[str] = [it["chunk_text"] for it in top]
+    if can_answer:
         answer = chat_answer(raw_query, contexts) or ""
         if answer:
             answer_payload = {

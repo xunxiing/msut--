@@ -1,7 +1,7 @@
 import json
 import logging
 import os
-from typing import List, Optional, Sequence
+from typing import Iterator, List, Optional, Sequence
 
 import requests
 
@@ -11,7 +11,7 @@ logger = logging.getLogger("msut.rag")
 
 RAG_API_BASE = (os.getenv("RAG_API_BASE") or os.getenv("RAG_APIBASE") or "").strip().rstrip("/")
 RAG_API_KEY = (os.getenv("RAG_API_KEY") or os.getenv("RAG_APIKEY") or "").strip()
-# 独立的 LLM 模型与 Embedding 模型，保持对旧变量 RAG_MODEL 的兼容
+# Separate LLM and embedding model config to stay compatible with legacy env names.
 RAG_LLM_MODEL = (
     os.getenv("RAG_LLM_MODEL")
     or os.getenv("RAG_MODEL")
@@ -37,21 +37,79 @@ def is_rag_configured() -> bool:
 
 
 def _auth_headers() -> dict:
-    headers = {
+    return {
         "Authorization": f"Bearer {RAG_API_KEY}",
         "Content-Type": "application/json",
     }
-    return headers
+
+
+def _flatten_content(value) -> str:
+    """Extract plain text from an OpenAI-style content field."""
+    parts: List[str] = []
+    if isinstance(value, str):
+        parts.append(value)
+    elif isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        for item in value:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                txt = item.get("text")
+                if isinstance(txt, str):
+                    parts.append(txt)
+    return "".join(parts)
+
+
+def _extract_message_text(message: dict) -> str:
+    if not isinstance(message, dict):
+        return ""
+    content = message.get("content")
+    return _flatten_content(content).strip()
+
+
+def _extract_delta_text(delta: dict) -> str:
+    if not isinstance(delta, dict):
+        return ""
+    # SiliconFlow reasoning models may emit reasoning_content; prefer normal content first.
+    text = _flatten_content(delta.get("content"))
+    if not text:
+        text = _flatten_content(delta.get("reasoning_content"))
+    return text
+
+
+def _build_chat_body(question: str, contexts: Sequence[str], *, stream: bool = False) -> Optional[dict]:
+    q = (question or "").strip()
+    if not q:
+        return None
+    ctx_text = ""
+    for i, chunk in enumerate(contexts):
+        if not chunk:
+            continue
+        ctx_text += f"\n[片段 {i + 1}]\n{chunk}\n"
+    system_prompt = (
+        "你是一个基于教程文档回答问题的中文助手。"
+        "请严格依赖给定的教程内容进行回答，如果资料中没有相关信息，直接说明“文档里没有明确说明”。"
+    )
+    user_prompt = (
+        f"用户问题：{q}\n\n以下是与问题相关的教程片段，仅供参考：\n"
+        f"{ctx_text}\n请用简体中文回答。"
+    )
+    body = {
+        "model": RAG_LLM_MODEL,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": 0.2,
+        # Disable thinking mode so streaming returns direct content tokens on SiliconFlow.
+        "enable_thinking": False,
+    }
+    if stream:
+        body["stream"] = True
+    return body
 
 
 def get_embedding(text: str) -> Optional[List[float]]:
-    """Call an OpenAI-compatible embeddings endpoint and return the vector.
-
-    This assumes the provider exposes POST {base}/embeddings with the usual schema:
-      { "model": "...", "input": "..." }
-    and responds with:
-      { "data": [{ "embedding": [...] }] }
-    """
+    """Call an OpenAI-compatible embeddings endpoint and return the vector."""
     if not is_rag_configured():
         return None
     if not text.strip():
@@ -61,7 +119,7 @@ def get_embedding(text: str) -> Optional[List[float]]:
         resp = requests.post(
             url,
             headers=_auth_headers(),
-            data=json.dumps({"model": RAG_EMBED_MODEL, "input": text}),
+            data=json.dumps({"model": RAG_EMBED_MODEL, "input": text}, ensure_ascii=False),
             timeout=30,
         )
         resp.raise_for_status()
@@ -93,45 +151,23 @@ def get_embedding(text: str) -> Optional[List[float]]:
 
 
 def chat_answer(question: str, contexts: Sequence[str]) -> Optional[str]:
-    """Call an OpenAI-compatible chat completion endpoint with RAG contexts.
-
-    Expects POST {base}/chat/completions with:
-      { "model": "...", "messages": [...] }
-    """
+    """Call an OpenAI-compatible chat completion endpoint with RAG contexts."""
     if not is_rag_configured():
         return None
-    q = (question or "").strip()
-    if not q:
+    body = _build_chat_body(question, contexts, stream=False)
+    if body is None:
         return None
-    system_prompt = (
-        "你是一个基于教程文档回答问题的中文助手。"
-        "请严格依赖给定的教程内容进行回答，如果资料中没有相关信息，直接说明“文档里没有明确说明”。"
-    )
-    ctx_text = ""
-    for i, chunk in enumerate(contexts):
-        if not chunk:
-            continue
-        ctx_text += f"\n[片段 {i + 1}]\n{chunk}\n"
-    user_prompt = f"用户问题：{q}\n\n以下是与问题相关的教程片段，仅供参考：\n{ctx_text}\n请用简体中文回答。"
-    body = {
-        "model": RAG_LLM_MODEL,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        "temperature": 0.2,
-    }
     url = f"{RAG_API_BASE}/chat/completions"
     try:
-        resp = requests.post(url, headers=_auth_headers(), data=json.dumps(body), timeout=60)
+        resp = requests.post(url, headers=_auth_headers(), data=json.dumps(body, ensure_ascii=False), timeout=60)
         resp.raise_for_status()
         payload = resp.json()
         choices = payload.get("choices") or []
         if not choices:
             return None
         msg = choices[0].get("message") or {}
-        content = msg.get("content") or ""
-        return str(content).strip() or None
+        content = _extract_message_text(msg)
+        return content or None
     except Exception as e:
         try:
             logger.exception("rag: chat request failed: %s", e)
@@ -140,12 +176,63 @@ def chat_answer(question: str, contexts: Sequence[str]) -> Optional[str]:
         return None
 
 
-def optimize_chunk_text(raw_chunk: str) -> Optional[str]:
-    """Use the LLM to lightly rewrite a tutorial chunk for better retrieval.
+def chat_answer_stream(question: str, contexts: Sequence[str]) -> Optional[Iterator[str]]:
+    """Stream chat completion tokens for a question + context."""
+    if not is_rag_configured():
+        return None
+    body = _build_chat_body(question, contexts, stream=True)
+    if body is None:
+        return None
+    url = f"{RAG_API_BASE}/chat/completions"
 
-    The goal is to keep semantics but make the text cleaner and more structured,
-    so it works better as a knowledge block in RAG.
-    """
+    def _iter() -> Iterator[str]:
+        try:
+            resp = requests.post(
+                url,
+                headers=_auth_headers(),
+                data=json.dumps(body, ensure_ascii=False),
+                stream=True,
+                timeout=60,
+            )
+            resp.raise_for_status()
+            resp.encoding = "utf-8"
+            for raw_line in resp.iter_lines(decode_unicode=False):
+                if not raw_line:
+                    continue
+                try:
+                    line = raw_line.decode("utf-8", errors="ignore").strip()
+                except Exception:
+                    continue
+                if not line:
+                    continue
+                if line.startswith("data:"):
+                    line = line[5:].strip()
+                if not line or line == "[DONE]":
+                    if line == "[DONE]":
+                        break
+                    continue
+                try:
+                    payload = json.loads(line)
+                except Exception:
+                    continue
+                choices = payload.get("choices") or []
+                if not choices:
+                    continue
+                delta = choices[0].get("delta") or {}
+                chunk = _extract_delta_text(delta)
+                if chunk:
+                    yield chunk
+        except Exception as e:
+            try:
+                logger.exception("rag: chat stream failed: %s", e)
+            except Exception:
+                pass
+
+    return _iter()
+
+
+def optimize_chunk_text(raw_chunk: str) -> Optional[str]:
+    """Use the LLM to lightly rewrite a tutorial chunk for better retrieval."""
     if not is_rag_configured():
         return None
     text = (raw_chunk or "").strip()
@@ -153,7 +240,7 @@ def optimize_chunk_text(raw_chunk: str) -> Optional[str]:
         return None
     system_prompt = (
         "你是一个帮助整理技术教程文档的助手。"
-        "在保持技术含义不变的前提下，对给定片段进行适度改写："
+        "在保持技术含义不变的前提下，对给定片段进行适度改写，"
         "让结构更清晰、表述更规范，便于后续检索和问答。"
         "不要凭空编造新的内容，也不要输出解释说明，只返回改写后的文本。"
     )
@@ -171,15 +258,15 @@ def optimize_chunk_text(raw_chunk: str) -> Optional[str]:
     }
     url = f"{RAG_API_BASE}/chat/completions"
     try:
-        resp = requests.post(url, headers=_auth_headers(), data=json.dumps(body), timeout=60)
+        resp = requests.post(url, headers=_auth_headers(), data=json.dumps(body, ensure_ascii=False), timeout=60)
         resp.raise_for_status()
         payload = resp.json()
         choices = payload.get("choices") or []
         if not choices:
             return None
         msg = choices[0].get("message") or {}
-        content = msg.get("content") or ""
-        cleaned = str(content).strip()
+        content = _extract_message_text(msg)
+        cleaned = content.strip()
         return cleaned or None
     except Exception as e:
         try:
@@ -190,10 +277,7 @@ def optimize_chunk_text(raw_chunk: str) -> Optional[str]:
 
 
 def name_chunk_title(raw_chunk: str, tutorial_title: Optional[str] = None) -> Optional[str]:
-    """Generate a short, human-friendly title for a chunk using the LLM.
-
-    The title is intended for navigation UI (类似目录的小节标题), not for search.
-    """
+    """Generate a short, human-friendly title for a chunk using the LLM."""
     if not is_rag_configured():
         return None
     text = (raw_chunk or "").strip()
@@ -222,16 +306,14 @@ def name_chunk_title(raw_chunk: str, tutorial_title: Optional[str] = None) -> Op
     }
     url = f"{RAG_API_BASE}/chat/completions"
     try:
-        resp = requests.post(url, headers=_auth_headers(), data=json.dumps(body), timeout=60)
+        resp = requests.post(url, headers=_auth_headers(), data=json.dumps(body, ensure_ascii=False), timeout=60)
         resp.raise_for_status()
         payload = resp.json()
         choices = payload.get("choices") or []
         if not choices:
             return None
         msg = choices[0].get("message") or {}
-        content = msg.get("content") or ""
-        title = str(content).strip()
-        # Best-effort length trim
+        title = _extract_message_text(msg)
         if len(title) > 20:
             title = title[:20].rstrip()
         return title or None

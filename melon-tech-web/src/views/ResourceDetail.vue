@@ -82,10 +82,16 @@
                     <div class="file-meta">{{ prettySize(f.size) }} · {{ f.mime || 'unknown' }}</div>
                   </div>
                 </div>
-                <el-button type="primary" class="download-btn-large" @click="download(f.id)">
+                <DownloadButton
+                  :href="`/api/files/${f.id}/download`"
+                  :download-name="f.original_name"
+                  class="download-btn-large"
+                  type="primary"
+                  @downloaded="handleFileDownloaded"
+                >
                   <el-icon><Download /></el-icon>
                   下载
-                </el-button>
+                </DownloadButton>
               </div>
             </div>
             <el-empty v-else description="暂无文件" :image-size="100" />
@@ -141,6 +147,7 @@ import {
   Document, User, Calendar, CopyDocument, 
   Star, StarFilled, Paperclip, Download, InfoFilled 
 } from '@element-plus/icons-vue'
+import DownloadButton from '../components/DownloadButton.vue'
 
 const route = useRoute()
 const data = ref<any>(null)
@@ -173,9 +180,7 @@ function copy(text: string) {
   navigator.clipboard.writeText(text).then(() => ElMessage.success('链接已复制'))
 }
 
-function download(fileId: number) {
-  window.open(`/api/files/${fileId}/download`, '_blank')
-  
+function handleFileDownloaded() {
   // Show like popup only if user hasn't liked the resource yet
   if (!resourceLike.value?.liked) {
     showLikePopup.value = true

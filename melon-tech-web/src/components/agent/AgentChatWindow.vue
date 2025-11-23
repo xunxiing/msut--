@@ -22,11 +22,23 @@
               <el-icon><Service /></el-icon>
             </div>
           </div>
-          
+
           <div class="content-wrapper">
-            <div class="bubble" v-html="renderMarkdown(msg.content)"></div>
+            <div class="bubble" v-html="renderMarkdown(getDisplayContent(msg))"></div>
             <div v-if="msg.role === 'tool'" class="tool-output">
-              <el-tag size="small" type="info">工具调用: {{ msg.toolName }}</el-tag>
+              <el-tag size="small" type="info">工具调用: {{ msg.toolName || getToolName(msg) }}</el-tag>
+              <div v-if="getToolFile(msg)" class="tool-file-row">
+                <span class="tool-filename">
+                  {{ getToolFile(msg)?.filename || '生成文件.melsave' }}
+                </span>
+                <DownloadButton
+                  :href="getToolFile(msg)?.url || ''"
+                  as="link"
+                  class="tool-download-link"
+                >
+                  下载文件
+                </DownloadButton>
+              </div>
             </div>
             <div
               v-if="msg.role === 'assistant' && hasThinking(msg)"
@@ -94,6 +106,7 @@ import { ref, nextTick, watch } from 'vue'
 import { UserFilled, Service, Position } from '@element-plus/icons-vue'
 import { marked } from 'marked'
 import type { AgentMessage } from '../../api/agent'
+import DownloadButton from '../DownloadButton.vue'
 
 const props = defineProps<{
   messages: AgentMessage[]
@@ -113,13 +126,17 @@ function getRowClass(msg: AgentMessage) {
   return 'ai-row'
 }
 
+function getPayload(msg: AgentMessage): any | undefined {
+  return (msg as any).payload
+}
+
 function hasThinking(msg: AgentMessage) {
-  const payload: any = (msg as any).payload
+  const payload = getPayload(msg)
   return !!(payload && typeof payload === 'object' && payload.thinking)
 }
 
 function getThinkingText(msg: AgentMessage) {
-  const payload: any = (msg as any).payload
+  const payload = getPayload(msg)
   const thinking = payload && typeof payload === 'object' ? payload.thinking : ''
   if (typeof thinking === 'string') return thinking
   if (!thinking) return ''
@@ -139,6 +156,38 @@ function toggleThinking(msg: AgentMessage) {
   const id = msg.id || 0
   if (!id) return
   thinkingExpanded.value[id] = !thinkingExpanded.value[id]
+}
+
+function getToolName(msg: AgentMessage) {
+  const payload = getPayload(msg)
+  if (payload && typeof payload === 'object' && typeof payload.toolName === 'string') {
+    return payload.toolName
+  }
+  return 'generate_melsave'
+}
+
+function getToolFile(msg: AgentMessage): { filename?: string; url?: string } | null {
+  const payload = getPayload(msg)
+  if (!payload || typeof payload !== 'object') return null
+  const file = (payload as any).file
+  if (!file || typeof file !== 'object') return null
+  const url = (file as any).url
+  if (!url || typeof url !== 'string') return null
+  return {
+    filename: (file as any).filename,
+    url,
+  }
+}
+
+function getDisplayContent(msg: AgentMessage) {
+  // 对工具消息，优先展示 payload 中的 message 字段，避免直接把 JSON 串渲染出来
+  if (msg.role === 'tool') {
+    const payload = getPayload(msg)
+    if (payload && typeof payload === 'object' && typeof (payload as any).message === 'string') {
+      return (payload as any).message as string
+    }
+  }
+  return msg.content || ''
 }
 
 function renderMarkdown(text: string) {
@@ -317,6 +366,31 @@ watch(() => props.thinking, scrollToBottom)
 .tool-output {
   font-size: 12px;
   opacity: 0.8;
+}
+
+.tool-file-row {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tool-filename {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-download-link {
+  font-size: 12px;
+  color: #3b82f6;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.tool-download-link:hover {
+  text-decoration: underline;
 }
 
 .thinking-debug {

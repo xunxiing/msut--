@@ -19,9 +19,21 @@
           <el-steps direction="vertical" :active="activeStep" finish-status="success">
             <el-step title="接收指令" />
             <el-step title="思考与规划" />
-            <el-step title="执行工具" description="生成代码/检索信息" />
+            <el-step title="执行工具" description="生成代码 / 检索信息" />
             <el-step title="完成任务" />
           </el-steps>
+        </div>
+
+        <div
+          v-if="toolPreview && status !== 'idle'"
+          class="tool-preview-card"
+        >
+          <h4>工具输入</h4>
+          <div class="tool-preview-meta">
+            <span class="tool-preview-label">工具：</span>
+            <span class="tool-preview-name">{{ toolPreview.name }}</span>
+          </div>
+          <pre class="tool-preview-body">{{ toolPreview.arguments }}</pre>
         </div>
 
         <div v-if="resultUrl" class="result-card">
@@ -54,17 +66,18 @@ const props = defineProps<{
   currentRunId?: number
   resultUrl?: string
   resultName?: string
+  toolPreview?: { name: string; arguments: string } | null
 }>()
 
 const activeStep = computed(() => {
   if (!props.currentRunId) return 0
-  switch (props.status) {
-    case 'pending': return 1
-    case 'running': return 2
-    case 'succeeded': return 4
-    case 'failed': return 4 // Show as finished but failed
-    default: return 0
+  if (props.status === 'pending') return 1
+  if (props.status === 'running') {
+    // 当已经开始构造工具参数时，把步骤推进到“执行工具”。
+    return props.toolPreview ? 3 : 2
   }
+  if (props.status === 'succeeded' || props.status === 'failed') return 4
+  return 0
 })
 
 function getStatusType(status: string) {
@@ -137,6 +150,57 @@ function getStatusText(status: string) {
   color: #6b7280;
 }
 
+.status-steps {
+  margin-bottom: 8px;
+}
+
+.tool-preview-card {
+  margin-top: 8px;
+  background: #f9fafb;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px dashed #e5e7eb;
+  font-size: 12px;
+  color: #374151;
+}
+
+.tool-preview-card h4 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.tool-preview-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.tool-preview-label {
+  color: #6b7280;
+}
+
+.tool-preview-name {
+  font-weight: 500;
+}
+
+.tool-preview-body {
+  margin: 0;
+  padding: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+  border-radius: 6px;
+  background: #111827;
+  color: #e5e7eb;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+}
+
 .result-card {
   background: #f9fafb;
   padding: 16px;
@@ -170,6 +234,7 @@ function getStatusText(status: string) {
   text-decoration: none;
   font-weight: 500;
 }
+
 .download-link:hover {
   text-decoration: underline;
 }

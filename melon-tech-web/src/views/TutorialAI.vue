@@ -53,6 +53,7 @@
         :current-run-id="currentRunId"
         :result-url="resultUrl"
         :result-name="resultName"
+        :tool-preview="currentToolPreview"
       />
     </div>
   </div>
@@ -93,6 +94,13 @@ const runStatus = ref('idle')
 const resultUrl = ref('')
 const resultName = ref('')
 let pollTimer: number | undefined
+const AGENT_STATE_KEY = 'msut-agent-state'
+const currentToolPreview = ref<{ name: string; arguments: string } | null>(null)
+
+interface PersistedAgentState {
+  sessionId?: number
+  runId?: number
+}
 
 function checkMobile() {
   const mobile = window.innerWidth < 768
@@ -126,6 +134,128 @@ async function loadSessions() {
   }
 }
 
+function extractToolPreview(allMessages: AgentMessage[]): { name: string; arguments: string } | null {
+  // 从最新消息往前找，优先使用 assistant 的 tool_calls，再退回到 tool 消息里的 tool_args。
+  for (let i = allMessages.length - 1; i >= 0; i--) {
+    const msg = allMessages[i]
+
+    if (msg.role === 'assistant') {
+      const payload: any = (msg as any).payload
+      const toolCalls = payload && Array.isArray(payload.tool_calls) ? payload.tool_calls : []
+      if (toolCalls.length > 0) {
+        const first = toolCalls[0] || {}
+        const fnInfo = first.function || {}
+        const name = typeof fnInfo.name === 'string' ? fnInfo.name : ''
+        let args: any = fnInfo.arguments ?? ''
+        if (!name) continue
+        if (typeof args === 'string' && args) {
+          try {
+            const parsed = JSON.parse(args)
+            if (parsed && typeof parsed.dsl === 'string') {
+              args = parsed.dsl
+            }
+          } catch {
+            // ignore JSON parse errors, keep raw string
+          }
+        }
+        if (typeof args === 'string' && args.trim()) {
+          return { name, arguments: args }
+        }
+      }
+    }
+
+    if (msg.role === 'tool') {
+      const name = msg.toolName || 'generate_melsave'
+      let args: any = msg.toolArgs ?? ''
+      if (typeof args === 'string' && args) {
+        try {
+          const parsed = JSON.parse(args)
+          if (parsed && typeof parsed.dsl === 'string') {
+            args = parsed.dsl
+          }
+        } catch {
+          // ignore
+        }
+      }
+      if (name && typeof args === 'string' && args.trim()) {
+        return { name, arguments: args }
+      }
+    }
+  }
+  return null
+}
+
+function persistAgentState(partial?: Partial<PersistedAgentState>) {
+  if (typeof window === 'undefined') return
+  const current: PersistedAgentState = {
+    sessionId: currentSessionId.value,
+    runId: currentRunId.value
+  }
+  const next: PersistedAgentState = { ...current, ...partial }
+  try {
+    window.localStorage.setItem(AGENT_STATE_KEY, JSON.stringify(next))
+  } catch {
+    // ignore storage errors
+  }
+}
+
+async function restoreAgentState() {
+  if (typeof window === 'undefined') return
+  let raw: string | null = null
+  try {
+    raw = window.localStorage.getItem(AGENT_STATE_KEY)
+  } catch {
+    raw = null
+  }
+  if (!raw) return
+
+  let parsed: PersistedAgentState | null = null
+  try {
+    parsed = JSON.parse(raw) as PersistedAgentState
+  } catch {
+    parsed = null
+  }
+  if (!parsed || !parsed.sessionId) return
+
+  const sessionId = parsed.sessionId
+  // Ensure the session still exists
+  if (!sessions.value.some((s) => s.id === sessionId)) {
+    return
+  }
+
+  currentSessionId.value = sessionId
+  try {
+    messages.value = await getSessionMessages(sessionId)
+    currentToolPreview.value = extractToolPreview(messages.value)
+  } catch (e) {
+    console.error('Failed to restore messages', e)
+  }
+
+  const runId = parsed.runId
+  if (!runId) return
+
+  try {
+    const status = await getRunStatus(runId)
+    currentRunId.value = status.runId
+    runStatus.value = status.status
+    resultUrl.value = status.resultUrl || ''
+    resultName.value = status.resultName || ''
+
+    // If the run is still in progress, resume polling and show thinking indicator
+    if (status.status === 'pending' || status.status === 'running') {
+      isThinking.value = true
+      startPolling(status.runId)
+    }
+  } catch (e) {
+    console.error('Failed to restore run status', e)
+    try {
+      window.localStorage.removeItem(AGENT_STATE_KEY)
+    } catch {
+      // ignore
+    }
+  }
+}
+
 async function handleNewChat() {
   currentSessionId.value = undefined
   messages.value = []
@@ -133,6 +263,7 @@ async function handleNewChat() {
   runStatus.value = 'idle'
   resultUrl.value = ''
   resultName.value = ''
+  persistAgentState({ sessionId: undefined, runId: undefined })
   if (isMobile.value) {
     isSidebarCollapsed.value = true
   }
@@ -146,6 +277,7 @@ function toggleRagMode() {
     currentRunId.value = undefined
     resultUrl.value = ''
     resultName.value = ''
+    persistAgentState({ runId: undefined })
   }
 }
 
@@ -185,6 +317,8 @@ async function handleSelectSession(id: number) {
 
   try {
     messages.value = await getSessionMessages(id)
+    persistAgentState({ sessionId: id, runId: undefined })
+    currentToolPreview.value = extractToolPreview(messages.value)
   } catch (e) {
     ElMessage.error('加载消息失败')
   }
@@ -220,6 +354,7 @@ async function handleAsk(text: string) {
     } finally {
       isThinking.value = false
     }
+    currentToolPreview.value = null
     return
   }
 
@@ -234,6 +369,7 @@ async function handleAsk(text: string) {
     
     currentRunId.value = res.runId
     runStatus.value = res.status
+    persistAgentState({ sessionId: currentSessionId.value, runId: currentRunId.value })
     startPolling(res.runId)
     
   } catch (e) {
@@ -251,15 +387,19 @@ function startPolling(runId: number) {
       runStatus.value = status.status
       resultUrl.value = status.resultUrl || ''
       resultName.value = status.resultName || ''
+      persistAgentState({ runId: runId })
       
       // Refresh messages to see updates (tool calls, partial answers, etc.)
       if (currentSessionId.value) {
         messages.value = await getSessionMessages(currentSessionId.value)
+        currentToolPreview.value = extractToolPreview(messages.value)
       }
 
       if (status.status === 'succeeded' || status.status === 'failed') {
         stopPolling()
         isThinking.value = false
+        persistAgentState({ runId: runId })
+        // 任务结束后仍保留最后一次工具输入，方便查看；如需清空可在此处置空。
         if (status.status === 'failed') {
           ElMessage.error(status.error || '任务执行失败')
         }
@@ -277,10 +417,11 @@ function stopPolling() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   checkMobile()
   window.addEventListener('resize', checkMobile)
-  loadSessions()
+  await loadSessions()
+  await restoreAgentState()
 })
 
 onBeforeUnmount(() => {

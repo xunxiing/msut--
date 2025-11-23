@@ -49,6 +49,7 @@ TOOL_SCHEMA: List[Dict] = [
                 },
                 "required": ["dsl"],
             },
+            "strict": True,
         },
     }
 ]
@@ -552,19 +553,28 @@ def _call_llm_stream(
         "role": role,
         "content": full_content,
     }
+    if full_thinking:
+        # 保留完整的思考内容，便于后续在需要时从中提取 DSL 等信息。
+        msg["reasoning_content"] = full_thinking
     if tool_calls:
         msg["tool_calls"] = tool_calls
     return msg
 
 
 def _guess_dsl_from_messages(messages: List[dict]) -> Optional[str]:
-    """Best-effort extraction of DSL code from previous assistant messages."""
-    for m in reversed(messages):
-        if m.get("role") != "assistant":
-            continue
-        text = m.get("content") or ""
+    """Best-effort extraction of DSL code from previous assistant messages.
+
+    在部分思维链模型（如 Kimi / DeepSeek 等）下，DSL 代码有时会只出现在
+    reasoning_content（思考过程）里，而不会出现在最终 content 或工具参数中。
+    这里做一个尽力而为的回溯提取：优先从代码块，其次从看起来像 DSL 的长文本中获取。
+    """
+
+    def _extract_from_text(text: str) -> Optional[str]:
         if not isinstance(text, str):
-            continue
+            return None
+        text = text.strip()
+        if not text:
+            return None
         # Prefer fenced code blocks if present.
         start = text.find("```")
         if start != -1:
@@ -578,9 +588,29 @@ def _guess_dsl_from_messages(messages: List[dict]) -> Optional[str]:
                 block = block.strip()
                 if block:
                     return block
-        # Fallback: if text looks code-like, treat the whole content as DSL.
-        if len(text) > 50 and "INPUT(" in text:
-            return text.strip()
+        # Fallback: if the text looks code-like, treat the whole content as DSL.
+        if len(text) > 50:
+            keywords = ("INPUT(", "OUTPUT(", "ADD_FORCE(", "MULTIPLY(", "Constant(", "velocity_split[")
+            if any(k in text for k in keywords):
+                return text
+            # Generic heuristic: multiple assignment lines with parentheses.
+            lines = [ln for ln in text.splitlines() if ln.strip()]
+            code_like = sum(1 for ln in lines if "=" in ln and "(" in ln) >= 2
+            if code_like:
+                return text
+        return None
+
+    for m in reversed(messages):
+        if m.get("role") != "assistant":
+            continue
+        # 同时尝试 content / reasoning_content / thinking 字段，兼容不同模型返回格式。
+        for key in ("content", "reasoning_content", "thinking"):
+            raw = m.get(key)
+            if not isinstance(raw, str):
+                continue
+            dsl = _extract_from_text(raw)
+            if dsl:
+                return dsl
     return None
 
 

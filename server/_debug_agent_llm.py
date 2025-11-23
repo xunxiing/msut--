@@ -42,6 +42,7 @@ def main() -> None:
                         },
                         "required": ["dsl"],
                     },
+                    "strict": True,
                 },
             }
         ],
@@ -91,4 +92,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

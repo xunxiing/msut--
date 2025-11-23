@@ -31,6 +31,7 @@
             <span class="filename">{{ resultName || 'generated_file' }}</span>
             <DownloadButton
               :href="resultUrl"
+              :download-name="resultName || ''"
               as="link"
               class="download-link"
             >

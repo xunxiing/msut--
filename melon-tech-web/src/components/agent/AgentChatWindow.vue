@@ -75,6 +75,21 @@
     </div>
 
     <div class="input-area">
+      <div class="mode-toggle-row">
+        <button
+          type="button"
+          class="mode-toggle-button"
+          :class="{ active: ragMode }"
+          @click="emit('toggle-rag')"
+        >
+          <span class="mode-toggle-pill">
+            <span class="mode-toggle-dot"></span>
+            <span class="mode-toggle-text">
+              {{ ragMode ? 'AI+RAG 模式' : 'Agent 模式' }}
+            </span>
+          </span>
+        </button>
+      </div>
       <div class="input-box">
         <el-input
           v-model="inputValue"
@@ -113,10 +128,12 @@ import { triggerFileDownload } from '../../utils/fileDownload'
 const props = defineProps<{
   messages: AgentMessage[]
   thinking?: boolean
+  ragMode?: boolean
 }>()
 
 const emit = defineEmits<{
   (e: 'send', text: string): void
+  (e: 'toggle-rag'): void
 }>()
 
 const inputValue = ref('')
@@ -492,6 +509,58 @@ watch(() => props.thinking, scrollToBottom)
   padding: 20px;
   background: #ffffff;
   border-top: 1px solid #e5e7eb;
+}
+
+.mode-toggle-row {
+  display: flex;
+  justify-content: flex-start;
+  margin-bottom: 8px;
+}
+
+.mode-toggle-button {
+  border: none;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+
+.mode-toggle-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  transition: all 0.2s ease;
+  color: #4b5563;
+}
+
+.mode-toggle-button.active .mode-toggle-pill {
+  background: #e0edff;
+  border-color: #3b82f6;
+  color: #1d4ed8;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
+}
+
+.mode-toggle-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  box-shadow: 0 0 0 1px rgba(156, 163, 175, 0.5);
+  transition: all 0.2s ease;
+}
+
+.mode-toggle-button.active .mode-toggle-dot {
+  background: #3b82f6;
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.8);
+}
+
+.mode-toggle-text {
+  font-size: 12px;
 }
 
 .input-box {

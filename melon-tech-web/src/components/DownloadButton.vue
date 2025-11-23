@@ -11,6 +11,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { ElButton } from 'element-plus'
+import { triggerFileDownload } from '../utils/fileDownload'
 
 const props = defineProps<{
   href: string
@@ -45,30 +46,14 @@ const rootProps = computed(() => {
   }
 })
 
-function triggerDownload() {
-  if (!props.href || props.disabled) return
-
-  const link = document.createElement('a')
-  link.href = props.href
-  if (props.downloadName !== undefined) {
-    // 为空字符串也显式设置，意味着“使用后端 Content-Disposition 的文件名”
-    link.download = props.downloadName || ''
-  }
-  link.style.display = 'none'
-  document.body.appendChild(link)
-  try {
-    link.click()
-  } finally {
-    document.body.removeChild(link)
-  }
-
-  emit('downloaded')
-}
-
 function handleClick(event: MouseEvent) {
-  // 阻止 a 标签默认跳转 / 新开页面
   event.preventDefault()
-  triggerDownload()
+  if (!props.href || props.disabled) return
+  // 未显式传入 downloadName 时，也设置 download 属性，
+  // 让浏览器按服务端 Content-Disposition 或 URL 文件名下载，避免页面跳转
+  const resolvedName = props.downloadName === undefined ? '' : props.downloadName
+  triggerFileDownload(props.href, resolvedName)
+  emit('downloaded')
 }
 </script>
 
@@ -86,4 +71,3 @@ a[role='button']:hover {
   text-decoration: underline;
 }
 </style>
-

@@ -1,6 +1,6 @@
 <template>
   <div class="agent-chat-window">
-    <div class="messages-area" ref="messagesContainer">
+    <div class="messages-area" ref="messagesContainer" @click="handleMessagesClick">
       <div v-if="messages.length === 0" class="welcome-state">
         <div class="welcome-icon">
           <el-icon><Service /></el-icon>
@@ -33,6 +33,7 @@
                 </span>
                 <DownloadButton
                   :href="getToolFile(msg)?.url || ''"
+                  :download-name="getToolFile(msg)?.filename || ''"
                   as="link"
                   class="tool-download-link"
                 >
@@ -107,6 +108,7 @@ import { UserFilled, Service, Position } from '@element-plus/icons-vue'
 import { marked } from 'marked'
 import type { AgentMessage } from '../../api/agent'
 import DownloadButton from '../DownloadButton.vue'
+import { triggerFileDownload } from '../../utils/fileDownload'
 
 const props = defineProps<{
   messages: AgentMessage[]
@@ -193,6 +195,35 @@ function getDisplayContent(msg: AgentMessage) {
 function renderMarkdown(text: string) {
   if (!text) return ''
   return marked.parse(text)
+}
+
+function isDownloadUrl(href: string) {
+  if (!href) return false
+  try {
+    const url = new URL(href, window.location.origin)
+    const path = url.pathname.toLowerCase()
+    return (
+      path.endsWith('.melsave') ||
+      path.startsWith('/api/files/') ||
+      path.startsWith('/uploads/')
+    )
+  } catch {
+    return false
+  }
+}
+
+function handleMessagesClick(event: MouseEvent) {
+  const target = event.target as HTMLElement | null
+  if (!target) return
+  const anchor = target.closest('a') as HTMLAnchorElement | null
+  if (!anchor) return
+  const href = anchor.getAttribute('href') || ''
+  if (!isDownloadUrl(href)) return
+
+  event.preventDefault()
+  // 不从链接文本推断文件名，交给服务端或 URL，
+  // 但通过传入空字符串，确保 download 属性被设置，避免页面跳转
+  triggerFileDownload(href, '')
 }
 
 function handleSend() {

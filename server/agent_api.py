@@ -113,12 +113,22 @@ def _insert_message(
 
 
 def _serialize_message_row(row) -> dict:
-    content = row["content"] or ""
+    raw_content = row["content"] or ""
+    content = raw_content
     payload = None
     try:
-        payload = json.loads(content)
+        payload = json.loads(raw_content)
     except Exception:
         payload = None
+
+    # For assistant messages stored as JSON, map the visible text
+    # back into the `content` field while keeping the full object
+    # in `payload` so the frontend can optionally inspect thinking / tool_calls.
+    if isinstance(payload, dict) and row["role"] == "assistant":
+        visible = payload.get("visible")
+        if isinstance(visible, str):
+            content = visible
+
     return {
         "id": int(row["id"]),
         "runId": int(row["run_id"]) if row["run_id"] is not None else None,
@@ -145,9 +155,22 @@ def _history_messages(conn, session_id: int) -> List[dict]:
     ).fetchall()
     messages: List[dict] = []
     for r in rows or []:
+        raw_content = r["content"] or ""
+        content = raw_content
+        # Decode assistant messages that were stored as JSON with a
+        # `visible` field so that the LLM history only sees the user-facing text.
+        if r["role"] == "assistant" and raw_content.lstrip().startswith("{"):
+            try:
+                obj = json.loads(raw_content)
+                if isinstance(obj, dict):
+                    visible = obj.get("visible")
+                    if isinstance(visible, str):
+                        content = visible
+            except Exception:
+                content = raw_content
         item = {
             "role": r["role"],
-            "content": r["content"] or "",
+            "content": content,
         }
         if r["role"] == "tool" and r["tool_call_id"]:
             item["tool_call_id"] = r["tool_call_id"]
@@ -165,7 +188,7 @@ def _agent_headers() -> Dict[str, str]:
 
 
 def _flatten_content(value) -> str:
-    """Extract plain text from an OpenAI-style content or delta field."""
+    """Extract plain text from an OpenAI-style content field."""
     parts: List[str] = []
     if isinstance(value, str):
         parts.append(value)
@@ -181,14 +204,14 @@ def _flatten_content(value) -> str:
 
 
 def _extract_delta_text(delta: dict) -> str:
-    """Extract visible text from a streaming delta payload."""
+    """Extract visible assistant text from a streaming delta payload.
+
+    对于带 thinking 的模型（Kimi / DeepSeek 等），我们只显示最终内容（content），
+    reasoning_content 仅用于内部思考，不直接暴露给前端，避免“思维链”和答案混在一起。
+    """
     if not isinstance(delta, dict):
         return ""
-    # Prefer normal assistant content; fall back to reasoning/thinking text if present.
-    text = _flatten_content(delta.get("content"))
-    if not text:
-        text = _flatten_content(delta.get("reasoning_content"))
-    return text
+    return _flatten_content(delta.get("content"))
 
 
 def _call_llm(messages: List[dict]) -> dict:
@@ -272,6 +295,10 @@ def _call_llm_v2(messages: List[dict]) -> dict:
 
 def _store_tool_file(dsl: str) -> dict:
     """Generate a .melsave file and persist it under uploads/agent."""
+    try:
+        logger.info("agent tool generate_melsave: dsl length=%s", len(dsl or ""))
+    except Exception:
+        pass
     result = generate_melsave_bytes(dsl)
     UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
     agent_dir = UPLOADS_DIR / "agent"
@@ -328,10 +355,23 @@ def _call_llm_stream(
 
     role = "assistant"
     full_content: str = ""
+    full_thinking: str = ""
     assistant_msg_id: Optional[int] = None
 
     # 累积流式 function calling 的 tool_calls 片段
     tool_calls_acc: List[dict] = []
+
+    def _assistant_content_json() -> str:
+        obj: Dict[str, object] = {"visible": full_content}
+        if full_thinking:
+            obj["thinking"] = full_thinking
+        if tool_calls_acc:
+            obj["tool_calls"] = tool_calls_acc
+        try:
+            return json.dumps(obj, ensure_ascii=False)
+        except Exception:
+            # Fallback to the plain text content if JSON encoding fails.
+            return full_content
 
     def _ensure_assistant_row() -> int:
         nonlocal assistant_msg_id
@@ -339,8 +379,8 @@ def _call_llm_stream(
             assistant_msg_id = _insert_message(
                 conn,
                 session_id,
-                role,
-                full_content,
+                "assistant",
+                _assistant_content_json(),
                 tool_name=None,
                 tool_args=None,
                 tool_call_id=None,
@@ -393,6 +433,7 @@ def _call_llm_stream(
                 role = r
 
             chunk_text = _extract_delta_text(delta)
+            reasoning_part = _flatten_content(delta.get("reasoning_content"))
 
             delta_tool_calls = delta.get("tool_calls") or []
             has_tool_delta = bool(delta_tool_calls)
@@ -442,13 +483,16 @@ def _call_llm_stream(
             if chunk_text:
                 full_content += chunk_text
                 updated = True
+            if reasoning_part:
+                full_thinking += reasoning_part
+                updated = True
 
             if updated or has_tool_delta:
                 msg_id = _ensure_assistant_row()
                 cur = conn.cursor()
                 cur.execute(
                     "UPDATE agent_messages SET content = ? WHERE id = ?",
-                    (full_content, msg_id),
+                    (_assistant_content_json(), msg_id),
                 )
                 conn.commit()
 
@@ -513,6 +557,33 @@ def _call_llm_stream(
     return msg
 
 
+def _guess_dsl_from_messages(messages: List[dict]) -> Optional[str]:
+    """Best-effort extraction of DSL code from previous assistant messages."""
+    for m in reversed(messages):
+        if m.get("role") != "assistant":
+            continue
+        text = m.get("content") or ""
+        if not isinstance(text, str):
+            continue
+        # Prefer fenced code blocks if present.
+        start = text.find("```")
+        if start != -1:
+            end = text.rfind("```")
+            if end > start:
+                block = text[start + 3 : end]
+                if "\n" in block:
+                    first_line, rest = block.split("\n", 1)
+                    if first_line.strip().lower().startswith("python"):
+                        block = rest
+                block = block.strip()
+                if block:
+                    return block
+        # Fallback: if text looks code-like, treat the whole content as DSL.
+        if len(text) > 50 and "INPUT(" in text:
+            return text.strip()
+    return None
+
+
 def _run_agent_once(conn, session_id: int, run_id: int) -> Dict[str, Optional[str]]:
     cur = conn.cursor()
     prompt = _load_prompt()
@@ -550,6 +621,17 @@ def _run_agent_once(conn, session_id: int, run_id: int) -> Dict[str, Optional[st
         tool_calls = msg.get("tool_calls") or []
         messages.append(msg)
 
+        if tool_calls:
+            try:
+                logger.debug("agent run_id=%s tool_calls=%s", run_id, json.dumps(tool_calls, ensure_ascii=False))
+            except Exception:
+                pass
+        else:
+            try:
+                logger.debug("agent run_id=%s tool_calls empty", run_id)
+            except Exception:
+                pass
+
         if not tool_calls:
             break
 
@@ -562,10 +644,33 @@ def _run_agent_once(conn, session_id: int, run_id: int) -> Dict[str, Optional[st
                 args_obj = {}
             call_id = call.get("id") or f"call_{loop}_{nanoid(4)}"
 
+            try:
+                logger.debug("agent tool call fn=%s raw_args=%s", fn, args_raw)
+            except Exception:
+                pass
+
             if fn == "generate_melsave":
-                dsl = args_obj.get("dsl") or ""
+                dsl = args_obj.get("dsl")
+                if isinstance(dsl, str):
+                    dsl_str = dsl
+                elif dsl is None:
+                    dsl_str = ""
+                else:
+                    dsl_str = str(dsl)
+                if not dsl_str.strip():
+                    fallback_dsl = _guess_dsl_from_messages(messages)
+                    if fallback_dsl:
+                        try:
+                            logger.warning(
+                                "agent run_id=%s generate_melsave: empty dsl in tool args, using fallback from history (len=%s)",
+                                run_id,
+                                len(fallback_dsl),
+                            )
+                        except Exception:
+                            pass
+                        dsl_str = fallback_dsl
                 try:
-                    tool_res = _store_tool_file(str(dsl))
+                    tool_res = _store_tool_file(dsl_str)
                     file_info = tool_res.get("file") or {}
                     result_url = file_info.get("url") or result_url
                     result_name = file_info.get("filename") or result_name

@@ -28,6 +28,20 @@
             <div v-if="msg.role === 'tool'" class="tool-output">
               <el-tag size="small" type="info">工具调用: {{ msg.toolName }}</el-tag>
             </div>
+            <div
+              v-if="msg.role === 'assistant' && hasThinking(msg)"
+              class="thinking-debug"
+            >
+              <div class="thinking-header" @click="toggleThinking(msg)">
+                <span class="thinking-label">思考过程</span>
+                <span class="thinking-toggle">
+                  {{ isThinkingExpanded(msg) ? '收起' : '展开' }}
+                </span>
+              </div>
+              <div v-if="isThinkingExpanded(msg)" class="thinking-body">
+                <pre class="thinking-text">{{ getThinkingText(msg) }}</pre>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -92,10 +106,39 @@ const emit = defineEmits<{
 
 const inputValue = ref('')
 const messagesContainer = ref<HTMLElement | null>(null)
+const thinkingExpanded = ref<Record<number, boolean>>({})
 
 function getRowClass(msg: AgentMessage) {
   if (msg.role === 'user') return 'user-row'
   return 'ai-row'
+}
+
+function hasThinking(msg: AgentMessage) {
+  const payload: any = (msg as any).payload
+  return !!(payload && typeof payload === 'object' && payload.thinking)
+}
+
+function getThinkingText(msg: AgentMessage) {
+  const payload: any = (msg as any).payload
+  const thinking = payload && typeof payload === 'object' ? payload.thinking : ''
+  if (typeof thinking === 'string') return thinking
+  if (!thinking) return ''
+  try {
+    return JSON.stringify(thinking, null, 2)
+  } catch {
+    return String(thinking)
+  }
+}
+
+function isThinkingExpanded(msg: AgentMessage) {
+  const id = msg.id || 0
+  return !!thinkingExpanded.value[id]
+}
+
+function toggleThinking(msg: AgentMessage) {
+  const id = msg.id || 0
+  if (!id) return
+  thinkingExpanded.value[id] = !thinkingExpanded.value[id]
 }
 
 function renderMarkdown(text: string) {
@@ -276,12 +319,52 @@ watch(() => props.thinking, scrollToBottom)
   opacity: 0.8;
 }
 
+.thinking-debug {
+  margin-top: 4px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: #f3f4f6;
+  border: 1px dashed #d1d5db;
+  font-size: 12px;
+  color: #4b5563;
+}
+
+.thinking-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+}
+
+.thinking-label {
+  color: #6b7280;
+}
+
+.thinking-toggle {
+  color: #3b82f6;
+}
+
+.thinking-body {
+  margin-top: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.thinking-text {
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
 .thinking-bubble {
   display: flex;
   align-items: center;
   gap: 6px;
   color: #6b7280;
   font-style: italic;
+  background: #e5e7eb;
+  border-radius: 12px;
+  border: 1px solid #d1d5db;
 }
 
 .dot {

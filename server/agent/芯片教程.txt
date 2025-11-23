@@ -65,7 +65,7 @@ b = INPUT(attrs={"name": "NumberB", "data_type": 2})
      A:第一个乘数(DECIMAL/vector)。
      B:第二个乘数 (DECIMAL/vector)。
  输出: 
-     A*B:A 和 B 的积  (DECIMAL/vector)。（向量类型就是把两个对应分量相乘之后的结果为新的对应分量，不允许一个向量乘一个数字）
+     A*B:A 和 B 的积  (DECIMAL/vector)。（向量类型就是把两个对应分量相乘之后的结果为新的对应分量，允许一个向量乘一个数字）
  使用方法: 有两种类型，请记得规定这个模块的datatype
 
  3.4.divide

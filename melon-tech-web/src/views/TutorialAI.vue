@@ -138,6 +138,9 @@ function extractToolPreview(allMessages: AgentMessage[]): { name: string; argume
   // 从最新消息往前找，优先使用 assistant 的 tool_calls，再退回到 tool 消息里的 tool_args。
   for (let i = allMessages.length - 1; i >= 0; i--) {
     const msg = allMessages[i]
+    
+    // 检查msg是否为空或未定义
+    if (!msg) continue
 
     if (msg.role === 'assistant') {
       const payload: any = (msg as any).payload

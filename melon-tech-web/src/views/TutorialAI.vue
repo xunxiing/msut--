@@ -291,11 +291,13 @@ onBeforeUnmount(() => {
   overflow: hidden;
   border-left: 1px solid #e5e7eb;
   background: #fff;
+  min-width: 0;
 }
 
 .right-panel-wrapper.collapsed {
   width: 0;
   border-left: none;
+  min-width: 0;
 }
 
 .sidebar-toggle {
@@ -374,12 +376,14 @@ onBeforeUnmount(() => {
     transform: translateX(0);
     border-left: 1px solid #e5e7eb;
     box-shadow: -2px 0 8px rgba(0,0,0,0.1);
+    min-width: 0;
   }
 
   .right-panel-wrapper.collapsed {
     width: 300px;
     transform: translateX(100%);
     border-left: none;
+    min-width: 0;
   }
 }
 </style>

@@ -89,12 +89,13 @@ function getStatusText(status: string) {
 
 <style scoped>
 .agent-right-panel {
-  width: 300px;
+  width: 100%;
   background: #ffffff;
   border-left: 1px solid #e5e7eb;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  overflow: hidden;
 }
 
 .panel-header {

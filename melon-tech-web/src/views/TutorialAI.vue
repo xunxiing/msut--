@@ -31,7 +31,9 @@
       <AgentChatWindow
         :messages="messages"
         :thinking="isThinking"
+        :rag-mode="useRagMode"
         @send="handleAsk"
+        @toggle-rag="toggleRagMode"
       />
 
       <el-button
@@ -70,6 +72,7 @@ import {
   type AgentSession,
   type AgentMessage
 } from '../api/agent'
+import { searchAndAsk } from '../api/tutorials'
 
 // State
 const sessions = ref<AgentSession[]>([])
@@ -77,6 +80,7 @@ const sessionsLoading = ref(false)
 const currentSessionId = ref<number>()
 const messages = ref<AgentMessage[]>([])
 const isThinking = ref(false)
+const useRagMode = ref(false)
 
 // Layout State
 const isMobile = ref(false)
@@ -134,6 +138,17 @@ async function handleNewChat() {
   }
 }
 
+function toggleRagMode() {
+  useRagMode.value = !useRagMode.value
+  if (useRagMode.value) {
+    stopPolling()
+    runStatus.value = 'idle'
+    currentRunId.value = undefined
+    resultUrl.value = ''
+    resultName.value = ''
+  }
+}
+
 function toggleSidebar() {
   isSidebarCollapsed.value = !isSidebarCollapsed.value
   if (isMobile.value && !isSidebarCollapsed.value) {
@@ -185,6 +200,28 @@ async function handleAsk(text: string) {
   }
   messages.value.push(tempMsg)
   isThinking.value = true
+
+  if (useRagMode.value) {
+    try {
+      const res = await searchAndAsk({ query: text, mode: 'both' })
+      const answerText =
+        (res.answer && res.answer.text) ||
+        '暂时没有基于教程内容找到合适的回答，请尝试换一种问法。'
+
+      const reply: AgentMessage = {
+        id: Date.now() + 1,
+        role: 'assistant',
+        content: answerText,
+        created_at: new Date().toISOString()
+      }
+      messages.value.push(reply)
+    } catch (e) {
+      ElMessage.error('RAG 模式请求失败')
+    } finally {
+      isThinking.value = false
+    }
+    return
+  }
 
   try {
     const res = await askAgent(currentSessionId.value, text)

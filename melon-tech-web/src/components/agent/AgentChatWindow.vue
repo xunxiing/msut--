@@ -310,6 +310,7 @@ watch(() => props.thinking, scrollToBottom)
   display: flex;
   gap: 16px;
   max-width: 85%;
+  min-width: 0;
 }
 
 .user-row {
@@ -407,10 +408,11 @@ watch(() => props.thinking, scrollToBottom)
 }
 
 .tool-filename {
-  max-width: 220px;
+  max-width: 180px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
 }
 
 .tool-download-link {

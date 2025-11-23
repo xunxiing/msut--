@@ -29,7 +29,13 @@
           <div class="file-item">
             <el-icon><Document /></el-icon>
             <span class="filename">{{ resultName || 'generated_file' }}</span>
-            <a :href="resultUrl" target="_blank" class="download-link">下载</a>
+            <DownloadButton
+              :href="resultUrl"
+              as="link"
+              class="download-link"
+            >
+              下载
+            </DownloadButton>
           </div>
         </div>
       </div>
@@ -40,6 +46,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Document } from '@element-plus/icons-vue'
+import DownloadButton from '../DownloadButton.vue'
 
 const props = defineProps<{
   status: string

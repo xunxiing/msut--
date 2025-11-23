@@ -690,7 +690,17 @@ def _run_agent_once(conn, session_id: int, run_id: int) -> Dict[str, Optional[st
                 tool_call_id=call_id,
                 run_id=run_id,
             )
-            messages.append({"role": "tool", "tool_call_id": call_id, "content": tool_content})
+            # OpenAI / SiliconFlow 等 function calling 协议要求在 tool 消息中同时携带
+            # tool_call_id 和 name，模型才能正确将结果与对应的工具调用对齐；
+            # 之前缺少 name 字段，可能导致模型拿不到工具结果又重复发起调用。
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": call_id,
+                    "name": fn,
+                    "content": tool_content,
+                }
+            )
     return {"url": result_url, "name": result_name}
 
 

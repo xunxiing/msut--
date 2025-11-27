@@ -13,7 +13,7 @@ echo.
 
 echo 启动后端服务（DEBUG 模式）...
 set LOG_LEVEL=DEBUG
-start "MSUT Server" cmd /k "set LOG_LEVEL=DEBUG && python -m uvicorn server.app:app --reload --port 3000"
+start "MSUT Server" cmd /k "set LOG_LEVEL=DEBUG && .venv\Scripts\python -m uvicorn server.app:app --reload --port 3000"
 echo.
 
 echo 等待后端服务器启动...

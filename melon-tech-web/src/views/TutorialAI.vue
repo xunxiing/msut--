@@ -435,7 +435,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .agent-page {
-  height: calc(100vh - 56px); /* Adjust based on your header height */
+  height: calc(100vh - 78px); /* Adjust based on your header height */
   display: flex;
   background: #ffffff;
   overflow: hidden;

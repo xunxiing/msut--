@@ -162,6 +162,8 @@ const onMenuItemClick = async (item: MenuItem) => {
   position: sticky;
   top: 0;
   z-index: 100;
+  height: 56px;
+  line-height: 56px;
   padding: 0 20px;
   box-shadow: 0 2px 10px rgba(0,0,0,.04);
   align-items: center;

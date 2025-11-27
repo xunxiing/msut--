@@ -5,3 +5,5 @@ bcrypt==4.2.0
 python-multipart==0.0.9
 typing-extensions>=4.12.2
 requests>=2.32.0
+langchain-core>=0.3.0
+langchain-openai>=0.2.0

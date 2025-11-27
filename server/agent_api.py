@@ -1,60 +1,23 @@
 import json
 import logging
 import os
-from pathlib import Path
 from typing import Dict, List, Optional
 
-import requests
 from fastapi import APIRouter, BackgroundTasks, Body, Query, Request
 from fastapi.responses import JSONResponse
 
+from .agent.langchain_agent import AgentRunResult, run_agent_with_langchain
 from .auth import get_current_user
 from .db import get_connection
-from .melsave import generate_melsave_bytes
 from .utils import nanoid
 
+
+# 从环境变量中读取 Agent 配置
+AGENT_MODEL = os.environ.get("AGENT_MODEL")
 
 router = APIRouter()
 logger = logging.getLogger("msut.agent")
 
-BASE_DIR = Path(__file__).resolve().parent
-PROMPT_FILES = [
-    BASE_DIR / "agent" / "全自动生成.txt",
-    BASE_DIR / "agent" / "芯片教程.txt",
-]
-UPLOADS_DIR = BASE_DIR / "uploads"
-
-AGENT_API_BASE = (os.getenv("AGENT_API_BASE") or os.getenv("RAG_API_BASE") or "").strip().rstrip("/")
-AGENT_API_KEY = (os.getenv("AGENT_API_KEY") or os.getenv("RAG_API_KEY") or "").strip()
-AGENT_MODEL = (
-    os.getenv("AGENT_MODEL")
-    or os.getenv("AGENTMODEL")
-    or os.getenv("AGENT_MODEL_NAME")
-    or ""
-).strip()
-
-TOOL_SCHEMA: List[Dict] = [
-    {
-        "type": "function",
-        "function": {
-            "name": "generate_melsave",
-            "description": "根据 DSL 代码生成 .melsave 存档文件。当用户需要产出芯片文件时必须调用此工具。",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "dsl": {
-                        "type": "string",
-                        "description": "完整的 Python DSL 代码，符合芯片教程规范，生成后会打包为 .melsave 文件。",
-                    }
-                },
-                "required": ["dsl"],
-            },
-            "strict": True,
-        },
-    }
-]
-
-MAX_TOOL_LOOPS = 3
 HISTORY_LIMIT = 30
 
 
@@ -66,20 +29,6 @@ def _require_user_id(request: Request) -> Optional[int]:
         return int(payload["uid"])  # type: ignore[index]
     except Exception:
         return None
-
-
-def _load_prompt() -> str:
-    parts: List[str] = []
-    for p in PROMPT_FILES:
-        try:
-            text = p.read_text(encoding="utf-8")
-            if text.strip():
-                parts.append(text.strip())
-        except Exception:
-            continue
-    if parts:
-        return "\n\n".join(parts)
-    return "你是 MSUT 的自动化芯片生成代理，请用中文回答，并在需要生成 .melsave 时调用生成工具。"
 
 
 def _session_owned(conn, session_id: int, user_id: int) -> bool:
@@ -761,6 +710,96 @@ def _mark_run_status(conn, run_id: int, status: str, *, session_id: int, result:
     conn.commit()
 
 
+def _run_agent_once_langchain(conn, session_id: int, run_id: int) -> Dict[str, Optional[str]]:
+    history = _history_messages(conn, session_id)
+
+    assistant_msg_id: Optional[int] = None
+
+    def _upsert_assistant_visible(visible: str) -> None:
+        """在 LangChain 流式回调中增量更新 assistant 消息。
+
+        这里只写入 `visible` 字段，最终完整结果会在 LLM 结束后再补充 thinking / tool_calls。
+        """
+        nonlocal assistant_msg_id
+        if not visible:
+            return
+        payload_obj: Dict[str, object] = {"visible": visible}
+        try:
+            content = json.dumps(payload_obj, ensure_ascii=False)
+        except Exception:
+            content = visible
+
+        if assistant_msg_id is None:
+            assistant_msg_id = _insert_message(
+                conn,
+                session_id,
+                "assistant",
+                content,
+                tool_name=None,
+                tool_args=None,
+                run_id=run_id,
+            )
+        else:
+            cur = conn.cursor()
+            cur.execute(
+                "UPDATE agent_messages SET content = ? WHERE id = ?",
+                (content, assistant_msg_id),
+            )
+        conn.commit()
+
+    # 使用 LangChain 版本的 Agent，并通过 on_stream_visible 回调实现“伪流式”更新
+    result: AgentRunResult = run_agent_with_langchain(history, on_stream_visible=_upsert_assistant_visible)
+
+    # LLM 完成后，用完整 payload 覆盖一次，补齐 thinking / tool_calls 等信息
+    payload_obj: Dict[str, object] = {"visible": result.visible}
+    if result.thinking:
+        payload_obj["thinking"] = result.thinking
+    if result.tool_calls:
+        payload_obj["tool_calls"] = result.tool_calls
+
+    try:
+        assistant_content = json.dumps(payload_obj, ensure_ascii=False)
+    except Exception:
+        assistant_content = result.visible or ""
+
+    if assistant_msg_id is None:
+        assistant_msg_id = _insert_message(
+            conn,
+            session_id,
+            "assistant",
+            assistant_content,
+            tool_name=None,
+            tool_args=None,
+            run_id=run_id,
+        )
+        conn.commit()
+    else:
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE agent_messages SET content = ? WHERE id = ?",
+            (assistant_content, assistant_msg_id),
+        )
+        conn.commit()
+
+    for record in result.tool_messages:
+        try:
+            tool_content = json.dumps(record.result, ensure_ascii=False)
+        except Exception:
+            tool_content = ""
+        _insert_message(
+            conn,
+            session_id,
+            "tool",
+            tool_content,
+            tool_name=record.name,
+            tool_args=record.arguments_json,
+            tool_call_id=record.id,
+            run_id=run_id,
+        )
+
+    return {"url": result.result_url, "name": result.result_name}
+
+
 def _process_agent_run(run_id: int):
     conn = get_connection()
     cur = conn.cursor()
@@ -787,7 +826,7 @@ def _process_agent_run(run_id: int):
         )
         conn.commit()
 
-        result = _run_agent_once(conn, session_id, run_id)
+        result = _run_agent_once_langchain(conn, session_id, run_id)
         _mark_run_status(conn, run_id, "succeeded", session_id=session_id, result=result)
     except Exception as e:
         err = str(e)

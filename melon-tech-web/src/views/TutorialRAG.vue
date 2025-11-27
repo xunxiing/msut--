@@ -522,7 +522,7 @@ onUnmounted(() => {
 
 <style scoped>
 .rag-page {
-  height: 100vh;
+  height: calc(100vh - 80px);
   overflow: hidden;
   background: #f3f4f6;
   display: flex;

@@ -65,6 +65,42 @@ def _flatten_content(value) -> str:
     return "".join(parts)
 
 
+def _enable_thinking_on_llm(llm: ChatOpenAI) -> ChatOpenAI:
+    """为支持思维链的模型打开 reasoning_content / thinking 输出（如果可用）。
+
+    - 通过设置 llm.model_kwargs，把 enable_thinking / reasoning_format 等
+      供应商扩展参数带到 /chat/completions 请求中；
+    - 具体有哪些字段由供应商决定，这里只做常见模型的启用尝试，未知模型保持无副作用。
+    """
+    try:
+        model = getattr(llm, "model", None)
+        if not isinstance(model, str):
+            return llm
+        model_lower = model.lower()
+
+        model_kwargs = getattr(llm, "model_kwargs", None)
+        if not isinstance(model_kwargs, dict):
+            model_kwargs = {}
+
+        # moonshot / Kimi 系列：使用 enable_thinking 打开思维链
+        if "kimi" in model_lower or "moonshot" in model_lower or "k2-thinking" in model_lower:
+            model_kwargs.setdefault("enable_thinking", True)
+
+        # DeepSeek reasoning 系列：优先请求标准 reasoning_content 字段
+        if "deepseek-r1" in model_lower or "reasoner" in model_lower:
+            model_kwargs.setdefault("reasoning_format", "default")
+
+        # DeepSeek V3.1 function-calling 场景下启用 thinking 会有兼容性问题，保持关闭
+        if "deepseek-v3.1" in model_lower:
+            model_kwargs["enable_thinking"] = False
+
+        setattr(llm, "model_kwargs", model_kwargs)
+    except Exception:
+        # 启用思维链失败不应影响主流程
+        return llm
+    return llm
+
+
 class _AgentStreamCallback(BaseCallbackHandler):
     """LangChain 回调：把 LLM 产生的新 token 作为可见文本流式抛出。
 
@@ -231,6 +267,7 @@ def run_agent_with_langchain(
 
     prompt = _load_prompt()
     llm = _build_llm(on_stream_visible)
+    llm = _enable_thinking_on_llm(llm)
 
     system_msg = SystemMessage(content=prompt)
     chat_history: List = []

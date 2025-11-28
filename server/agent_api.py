@@ -1,19 +1,51 @@
 import json
 import logging
 import os
+import requests
+from pathlib import Path
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Body, Query, Request
 from fastapi.responses import JSONResponse
 
-from .agent.langchain_agent import AgentRunResult, run_agent_with_langchain
+from .agent.langchain_agent import AgentRunResult, run_agent_with_langchain, _load_prompt
 from .auth import get_current_user
 from .db import get_connection
+from .melsave import generate_melsave_bytes
 from .utils import nanoid
 
 
 # 从环境变量中读取 Agent 配置
 AGENT_MODEL = os.environ.get("AGENT_MODEL")
+AGENT_API_BASE = (os.getenv("AGENT_API_BASE") or os.getenv("RAG_API_BASE") or "").strip().rstrip("/")
+AGENT_API_KEY = (os.getenv("AGENT_API_KEY") or os.getenv("RAG_API_KEY") or "").strip()
+
+# 服务器目录和上传目录
+SERVER_DIR = Path(__file__).resolve().parent
+UPLOADS_DIR = SERVER_DIR / "uploads"
+
+# Agent 工具配置
+TOOL_SCHEMA = [
+    {
+        "type": "function",
+        "function": {
+            "name": "generate_melsave",
+            "description": "生成 melsave 文件并保存到服务器。参数为 DSL 字符串。返回包含文件信息的字典。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "dsl": {
+                        "type": "string",
+                        "description": "DSL 代码字符串"
+                    }
+                },
+                "required": ["dsl"]
+            }
+        }
+    }
+]
+
+MAX_TOOL_LOOPS = 3
 
 router = APIRouter()
 logger = logging.getLogger("msut.agent")
@@ -174,7 +206,7 @@ def _call_llm(messages: List[dict]) -> dict:
         "tool_choice": "auto",
         "temperature": 0.35,
         # moonshot 兼容接口支持启用思维链，但为兼容其他实现使用布尔控制
-        "enable_thinking": True,
+        
     }
     url = f"{AGENT_API_BASE}/chat/completions"
     resp = requests.post(url, headers=_agent_headers(), data=json.dumps(body, ensure_ascii=False), timeout=120)
@@ -293,9 +325,12 @@ def _call_llm_stream(
         "tool_choice": "auto",
         "temperature": 0.35,
         "stream": True,
+        # 默认打开 thinking，让支持思维链的模型返回 reasoning_content；
+        # 个别模型（如 DeepSeek-V3.1）在 function calling 模式下会与该参数冲突，下面再做特判关闭。
+        
     }
 
-    # deepseek-ai/DeepSeek-V3.1 系列在使�?function calling 时需要关�?thinking
+    # deepseek-ai/DeepSeek-V3.1 系列在使用 function calling 时需要关闭 thinking
     model_lower = AGENT_MODEL.lower()
     if "deepseek-v3.1" in model_lower:
         body["enable_thinking"] = False
@@ -497,6 +532,13 @@ def _call_llm_stream(
         (tool_args_json, msg_id),
     )
     conn.commit()
+
+    # 在日志中记录一次思维链长度，便于调试是否拿到了 reasoning_content。
+    try:
+        if full_thinking:
+            logger.info("agent stream run_id=%s thinking_length=%s", run_id, len(full_thinking))
+    except Exception:
+        pass
 
     msg: dict = {
         "role": role,
@@ -826,7 +868,9 @@ def _process_agent_run(run_id: int):
         )
         conn.commit()
 
-        result = _run_agent_once_langchain(conn, session_id, run_id)
+        # 使用直连 SiliconFlow 的流式实现，以获得完整的 reasoning_content，
+        # 并在 _call_llm_stream 中把思维链累积到 payload.thinking，前端可折叠查看。
+        result = _run_agent_once(conn, session_id, run_id)
         _mark_run_status(conn, run_id, "succeeded", session_id=session_id, result=result)
     except Exception as e:
         err = str(e)

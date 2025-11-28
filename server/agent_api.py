@@ -658,7 +658,8 @@ def _run_agent_once(conn, session_id: int, run_id: int) -> Dict[str, Optional[st
 
         for call in tool_calls:
             fn = (call.get("function") or {}).get("name") or ""
-            args_raw = (call.get("function") or {}).get("arguments") or "{}"
+            fn_payload = call.get("function") or {}
+            args_raw = fn_payload.get("arguments") or "{}"
             try:
                 args_obj = json.loads(args_raw)
             except Exception:
@@ -690,6 +691,17 @@ def _run_agent_once(conn, session_id: int, run_id: int) -> Dict[str, Optional[st
                         except Exception:
                             pass
                         dsl_str = fallback_dsl
+                        # 同步回写到工具参数里，确保前端“工具输入”展示到实际用于调用的 DSL，
+                        # 而不是 `{}` 或空字串。这不会影响上游 LLM，只是用于记录和调试。
+                        try:
+                            args_obj = {"dsl": dsl_str}
+                            args_raw = json.dumps(args_obj, ensure_ascii=False)
+                            # 同时更新当前 call 对象，便于后续调试 / 日志观察
+                            fn_payload["arguments"] = args_raw
+                            call["function"] = fn_payload
+                        except Exception:
+                            # 即便序列化失败，也不影响真实的工具执行（直接用 dsl_str）
+                            args_raw = dsl_str
                 try:
                     tool_res = _store_tool_file(dsl_str)
                     file_info = tool_res.get("file") or {}

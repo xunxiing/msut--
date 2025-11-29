@@ -43,16 +43,22 @@
             </div>
             <div
               v-if="msg.role === 'assistant' && hasThinking(msg)"
-              class="thinking-debug"
+              class="thinking-process"
+              :class="{ expanded: isThinkingExpanded(msg) }"
             >
               <div class="thinking-header" @click="toggleThinking(msg)">
-                <span class="thinking-label">思考过程</span>
-                <span class="thinking-toggle">
-                  {{ isThinkingExpanded(msg) ? '收起' : '展开' }}
-                </span>
+                <div class="thinking-title">
+                  <el-icon class="thinking-icon"><Cpu /></el-icon>
+                  <span>思考过程</span>
+                </div>
+                <el-icon class="thinking-arrow" :class="{ rotated: isThinkingExpanded(msg) }">
+                  <ArrowDown />
+                </el-icon>
               </div>
-              <div v-if="isThinkingExpanded(msg)" class="thinking-body">
-                <pre class="thinking-text">{{ getThinkingText(msg) }}</pre>
+              <div v-show="isThinkingExpanded(msg)" class="thinking-body">
+                <div class="thinking-content">
+                  <pre class="thinking-text">{{ getThinkingText(msg) }}</pre>
+                </div>
               </div>
             </div>
           </div>
@@ -119,7 +125,7 @@
 
 <script setup lang="ts">
 import { ref, nextTick, watch } from 'vue'
-import { UserFilled, Service, Position } from '@element-plus/icons-vue'
+import { UserFilled, Service, Position, Cpu, ArrowDown } from '@element-plus/icons-vue'
 import { marked } from 'marked'
 import type { AgentMessage } from '../../api/agent'
 import DownloadButton from '../DownloadButton.vue'
@@ -222,6 +228,7 @@ function isDownloadUrl(href: string) {
     return (
       path.endsWith('.melsave') ||
       path.startsWith('/api/files/') ||
+      path.startsWith('/api/uploads/') ||
       path.startsWith('/uploads/')
     )
   } catch {
@@ -443,41 +450,100 @@ watch(() => props.thinking, scrollToBottom)
   text-decoration: underline;
 }
 
-.thinking-debug {
-  margin-top: 4px;
-  padding: 6px 10px;
+.thinking-process {
+  margin-top: 8px;
   border-radius: 8px;
-  background: #f3f4f6;
-  border: 1px dashed #d1d5db;
-  font-size: 12px;
-  color: #4b5563;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  border-left: 3px solid #cbd5e1;
+}
+
+.thinking-process.expanded {
+  border-left-color: #3b82f6;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+.thinking-process:hover {
+  border-color: #cbd5e1;
 }
 
 .thinking-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding: 8px 12px;
   cursor: pointer;
+  background: #f1f5f9;
+  user-select: none;
+  transition: background-color 0.2s;
 }
 
-.thinking-label {
-  color: #6b7280;
+.thinking-header:hover {
+  background: #e2e8f0;
 }
 
-.thinking-toggle {
+.thinking-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.thinking-icon {
+  font-size: 16px;
+  color: #64748b;
+}
+
+.thinking-process.expanded .thinking-title,
+.thinking-process.expanded .thinking-icon {
   color: #3b82f6;
 }
 
+.thinking-arrow {
+  font-size: 12px;
+  color: #94a3b8;
+  transition: transform 0.3s ease;
+}
+
+.thinking-arrow.rotated {
+  transform: rotate(180deg);
+}
+
 .thinking-body {
-  margin-top: 4px;
-  max-height: 200px;
+  border-top: 1px solid #e2e8f0;
+  background: #ffffff;
+}
+
+.thinking-content {
+  padding: 12px 16px;
+  max-height: 300px;
   overflow-y: auto;
+}
+
+/* 自定义滚动条 */
+.thinking-content::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.thinking-content::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+.thinking-content::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .thinking-text {
   margin: 0;
   white-space: pre-wrap;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #475569;
 }
 
 .thinking-bubble {

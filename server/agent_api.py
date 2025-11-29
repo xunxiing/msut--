@@ -296,7 +296,7 @@ def _store_tool_file(dsl: str) -> dict:
             "filename": result.filename,
             "storedName": stored_name,
             "size": len(result.data),
-            "url": f"/uploads/agent/{stored_name}",
+            "url": f"/api/uploads/agent/{stored_name}",
         },
     }
 

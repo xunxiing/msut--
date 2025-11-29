@@ -419,7 +419,7 @@ import {
   listMyResources,
   updateResourceMeta,
   deleteResource,
-  getResource,
+
   setResourceCover,
   listResourceImages,
   type MyResourceItem,
@@ -617,35 +617,6 @@ function handleResourceCommand(command: string, item: MyResourceItem) {
   }
 }
 
-async function setAutoCover(item: MyResourceItem) {
-  try {
-    const detail = await getResource(item.slug)
-    const files = (detail.files || []) as any[]
-    const imageFiles = files.filter((f) => {
-      const mime = (f.mime || '').toString().toLowerCase()
-      const name = (f.original_name || '').toString().toLowerCase()
-      return mime.startsWith('image/') || /\.(png|jpg|jpeg|gif|webp|bmp|svg)$/.test(name)
-    })
-    if (!imageFiles.length) {
-      ElMessage.warning('当前作品还没有图片文件，请先上传图片')
-      return
-    }
-    const target = imageFiles[0]
-    await setResourceCover(detail.id, target.id)
-    const idx = resourceItems.value.findIndex(r => r.id === detail.id)
-    if (idx !== -1) {
-      const current = resourceItems.value[idx] as any
-      resourceItems.value[idx] = {
-        ...current,
-        coverFileId: target.id,
-        coverUrlPath: target.url_path,
-      }
-    }
-    ElMessage.success('封面已设置为第一个图片文件')
-  } catch (error: any) {
-    ElMessage.error(error?.response?.data?.error || '设置封面失败')
-  }
-}
 
 async function loadCoverImages() {
   if (!coverManager.resourceId) return

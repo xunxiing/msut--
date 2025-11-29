@@ -20,6 +20,7 @@ export type ResourceItem = {
   author_name?: string
   author_username?: string
   files: ResourceFile[]
+  imageFiles?: ResourceFile[]
   coverFileId?: number | null
   coverUrlPath?: string | null
   shareUrl: string

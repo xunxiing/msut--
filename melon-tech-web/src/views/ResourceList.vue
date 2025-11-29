@@ -51,26 +51,30 @@
                 </template>
               </div>
               <div class="card-info">
-                <h3 class="resource-title" :title="r.title">{{ r.title }}</h3>
-                <p class="resource-desc">{{ r.description || '暂无描述' }}</p>
-              </div>
-            </div>
-            <div class="card-footer">
-              <div class="author-info">
-                <el-avatar :size="24" class="author-avatar">{{ (r as any).author_name?.[0]?.toUpperCase() || 'U' }}</el-avatar>
-                <span class="author-name">{{ (r as any).author_name || 'Unknown' }}</span>
-              </div>
-              <div class="card-meta">
-                <span class="date">{{ formatDate(r.created_at) }}</span>
-                <div 
-                  class="like-action" 
-                  :class="{ 'is-active': likesMap[r.id]?.liked }"
-                  @click.stop="toggleLike(r.id)"
-                >
-                  <el-icon>
-                    <component :is="likesMap[r.id]?.liked ? StarFilled : Star" />
-                  </el-icon>
-                  <span class="like-count">{{ likesMap[r.id]?.likes || 0 }}</span>
+                <div class="info-top">
+                  <div class="title-row">
+                    <h3 class="resource-title" :title="r.title">{{ r.title }}</h3>
+                    <div class="author-info-mini">
+                      <el-avatar :size="16" class="author-avatar">{{ (r as any).author_name?.[0]?.toUpperCase() || 'U' }}</el-avatar>
+                      <span class="author-name">{{ (r as any).author_name || 'Unknown' }}</span>
+                    </div>
+                  </div>
+                  <p class="resource-desc">{{ r.description || '暂无描述' }}</p>
+                </div>
+                <div class="info-bottom">
+                  <div class="card-meta">
+                    <span class="date">{{ formatDate(r.created_at) }}</span>
+                    <div
+                      class="like-action"
+                      :class="{ 'is-active': likesMap[r.id]?.liked }"
+                      @click.stop="toggleLike(r.id)"
+                    >
+                      <el-icon>
+                        <component :is="likesMap[r.id]?.liked ? StarFilled : Star" />
+                      </el-icon>
+                      <span class="like-count">{{ likesMap[r.id]?.likes || 0 }}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -267,7 +271,7 @@ onMounted(fetch)
 }
 
 .resource-card {
-  height: 100%;
+  height: 160px;
   border: 1px solid #f1f5f9;
   border-radius: 16px;
   transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
@@ -288,26 +292,26 @@ onMounted(fetch)
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 24px;
+  padding: 16px;
 }
 
 .card-body {
   display: flex;
-  gap: 20px;
-  margin-bottom: 20px;
+  gap: 16px;
   flex: 1;
+  height: 100%;
 }
 
 .card-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 14px;
+  width: 128px;
+  height: 100%;
+  border-radius: 12px;
   background: #ecfdf5;
   color: #10b981;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 28px;
+  font-size: 48px;
   flex-shrink: 0;
   transition: transform 0.3s ease;
 }
@@ -335,17 +339,51 @@ onMounted(fetch)
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: space-between;
+  padding: 2px 0;
+}
+
+.title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  gap: 8px;
 }
 
 .resource-title {
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 600;
   color: #1e293b;
-  margin: 0 0 6px 0;
+  margin: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex: 1;
+}
+
+.author-info-mini {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.author-avatar {
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 600;
+  border: 1px solid #e2e8f0;
+}
+
+.author-name {
+  font-size: 12px;
+  color: #94a3b8;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .resource-desc {
@@ -360,34 +398,11 @@ onMounted(fetch)
   line-height: 1.5;
 }
 
-.card-footer {
+.info-bottom {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
-  padding-top: 20px;
-  border-top: 1px solid #f1f5f9;
   margin-top: auto;
-}
-
-.author-info {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.author-avatar {
-  background: #f1f5f9;
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 600;
-  border: 2px solid #fff;
-  box-shadow: 0 0 0 1px #e2e8f0;
-}
-
-.author-name {
-  font-size: 13px;
-  font-weight: 500;
-  color: #475569;
 }
 
 .card-meta {

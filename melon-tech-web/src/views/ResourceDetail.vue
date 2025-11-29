@@ -57,18 +57,8 @@
     </div>
 
     <div class="detail-content">
-      <el-row :gutter="24">
+      <el-row :gutter="24" class="top-row">
         <el-col :xs="24" :md="16">
-          <div class="content-section">
-            <h3 class="section-title">使用说明</h3>
-            <div class="usage-content" v-if="data.usage">
-              {{ data.usage }}
-            </div>
-            <el-empty v-else description="暂无使用说明" :image-size="120" />
-          </div>
-        </el-col>
-
-        <el-col :xs="24" :md="8">
           <div class="files-section">
             <h3 class="section-title">包含文件</h3>
             <div v-if="data.files?.length" class="file-list">
@@ -94,7 +84,41 @@
                 </DownloadButton>
               </div>
             </div>
-            <el-empty v-else description="暂无文件" :image-size="100" />
+            <div v-else class="no-files-placeholder">暂无文件</div>
+          </div>
+
+          <div class="content-section">
+            <h3 class="section-title">使用说明</h3>
+            <div class="usage-content" v-if="data.usage">
+              {{ data.usage }}
+            </div>
+            <div v-else class="no-files-placeholder">暂无使用说明</div>
+          </div>
+        </el-col>
+
+        <el-col :xs="24" :md="8">
+          <div class="images-section">
+            <h3 class="section-title">封面与图片</h3>
+            <div v-if="coverImageUrl || galleryImages.length" class="images-content">
+              <div v-if="coverImageUrl" class="cover-preview">
+                <img :src="coverImageUrl" alt="封面图片" class="cover-image" loading="lazy" />
+                <span class="cover-badge">封面</span>
+              </div>
+              <div v-if="galleryImages.length" class="image-gallery">
+                <div
+                  v-for="img in galleryImages"
+                  :key="img.id"
+                  class="image-thumb"
+                >
+                  <img
+                    :src="toImageUrl(img.url_path)"
+                    :alt="img.original_name"
+                    loading="lazy"
+                  />
+                </div>
+              </div>
+            </div>
+            <div v-else class="no-files-placeholder">暂无图片</div>
           </div>
           
           <div class="download-tip">
@@ -137,8 +161,8 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { getResource } from '../api/resources'
+import { computed, onMounted, ref } from 'vue'
+import { getResource, type ResourceFile, type ResourceItem } from '../api/resources'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getResourceLikes, likeResource, unlikeResource, type LikeInfo } from '../api/likes'
@@ -150,11 +174,42 @@ import {
 import DownloadButton from '../components/DownloadButton.vue'
 
 const route = useRoute()
-const data = ref<any>(null)
+const data = ref<ResourceItem | null>(null)
 const auth = useAuth()
 const resourceLike = ref<LikeInfo | null>(null)
 const showLikePopup = ref(false)
 let popupTimer: any = null
+const imageFiles = ref<ResourceFile[]>([])
+
+function toImageUrl(path?: string | null) {
+  if (!path) return ''
+  if (path.startsWith('http://') || path.startsWith('https://')) return path
+  if (path.startsWith('/uploads/')) return path
+  return path
+}
+
+const coverImageUrl = computed(() => {
+  const detail = data.value as any
+  if (!detail) return ''
+  if (detail.coverUrlPath) {
+    return toImageUrl(detail.coverUrlPath as string)
+  }
+  const coverId = detail.coverFileId ?? null
+  if (coverId) {
+    const cover = imageFiles.value.find(img => img.id === coverId)
+    if (cover) return toImageUrl(cover.url_path)
+  }
+  const first = imageFiles.value[0]
+  return first ? toImageUrl(first.url_path) : ''
+})
+
+const galleryImages = computed(() => {
+  const detail = data.value as any
+  const coverId = detail?.coverFileId ?? null
+  if (!imageFiles.value.length) return []
+  if (!coverId) return imageFiles.value
+  return imageFiles.value.filter(img => img.id !== coverId)
+})
 
 function prettySize(n: number) {
   if (!n && n !== 0) return ''
@@ -166,10 +221,12 @@ function prettySize(n: number) {
 
 async function fetch() {
   try {
-    data.value = await getResource(route.params.slug as string)
-    if (data.value?.id) {
-      const items = await getResourceLikes([data.value.id])
-      resourceLike.value = items[0] || { id: data.value.id, likes: 0, liked: false }
+    const detail = await getResource(route.params.slug as string)
+    data.value = detail
+    imageFiles.value = (detail.imageFiles || []) as ResourceFile[]
+    if (detail?.id) {
+      const items = await getResourceLikes([detail.id])
+      resourceLike.value = items[0] || { id: detail.id, likes: 0, liked: false }
     }
   } catch (e) {
     ElMessage.error('加载资源失败')
@@ -351,14 +408,13 @@ onMounted(fetch)
   min-height: 400px;
 }
 
-.content-section, .files-section {
+.content-section, .files-section, .images-section {
   background: #fff;
   border-radius: 16px;
   padding: 24px;
   border: 1px solid #f1f5f9;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
   margin-bottom: 24px;
-  height: 100%;
 }
 
 .section-title {
@@ -375,6 +431,57 @@ onMounted(fetch)
   line-height: 1.7;
   color: #334155;
   white-space: pre-wrap;
+}
+
+.images-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cover-preview {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #0f172a;
+}
+
+.cover-image {
+  width: 100%;
+  max-height: 220px;
+  object-fit: cover;
+  display: block;
+}
+
+.cover-badge {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.8);
+  color: #e5e7eb;
+}
+
+.image-gallery {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.image-thumb {
+  width: calc(50% - 4px);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #f1f5f9;
+}
+
+.image-thumb img {
+  width: 100%;
+  height: 80px;
+  object-fit: cover;
+  display: block;
 }
 
 .file-list {
@@ -457,6 +564,13 @@ onMounted(fetch)
   margin: 0;
   font-size: 13px;
   opacity: 0.9;
+}
+
+.no-files-placeholder {
+  text-align: center;
+  color: #94a3b8;
+  font-size: 14px;
+  padding: 20px 0;
 }
 
 .loading-skeleton {

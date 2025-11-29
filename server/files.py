@@ -222,6 +222,7 @@ async def upload_to_resource(
     do_wm = parse_bool(saveWatermark, False)
     # 使用 autocommit，每条语句独立事务，避免长时间持有写锁
     created_file_paths: List[Path] = []
+    first_uploaded_image_id: Optional[int] = None
     try:
         for uf in files[:10]:
             dest = await _save_upload_atomic(request, uf, UPLOAD_DIR)
@@ -243,6 +244,11 @@ async def upload_to_resource(
                     url_path,
                 ),
             )
+            file_id = int(info.lastrowid)
+            # Check if this is the first uploaded image and if no cover is set yet
+            if _is_image_file(uf.content_type, uf.filename):
+                if first_uploaded_image_id is None:
+                    first_uploaded_image_id = file_id
         # Attempt watermark extraction for .melsave/.zip when requested
             try:
                 suffix = str(dest.suffix).lower()
@@ -289,6 +295,13 @@ async def upload_to_resource(
                     "urlPath": url_path,
                 }
             )
+        # After all files are uploaded, set the cover if it's the first image and no cover exists
+        if first_uploaded_image_id is not None:
+            current_cover = cur.execute("SELECT cover_file_id FROM resources WHERE id = ?", (resourceId,)).fetchone()
+            if current_cover and current_cover["cover_file_id"] is None:
+                cur.execute("UPDATE resources SET cover_file_id = ? WHERE id = ?", (first_uploaded_image_id, resourceId))
+                logger.info("Auto-set cover for resource %s to file %s", resourceId, first_uploaded_image_id)
+
         conn.commit()
     except Exception:
         # Roll back DB and delete any files saved during this request
@@ -316,6 +329,7 @@ async def upload_resource_images(
     - 仅资源创建者可用
     - 仅允许图片类型，最多 10 个，单文件 50MB
     - 文件仍然写入 resource_files 表，后续可通过 /api/resources/{rid}/images 查询
+    - 如果资源尚无封面，则自动将第一张上传的图片设为封面
     """
     uid, err = _require_owner(request, rid)
     if err is not None:
@@ -333,6 +347,7 @@ async def upload_resource_images(
     cur = conn.cursor()
     saved = []
     created_file_paths: List[Path] = []
+    first_uploaded_image_id: Optional[int] = None
     try:
         for uf in files[:10]:
             dest = await _save_upload_atomic(request, uf, UPLOAD_DIR)
@@ -354,9 +369,12 @@ async def upload_resource_images(
                     url_path,
                 ),
             )
+            file_id = int(info.lastrowid)
+            if first_uploaded_image_id is None:
+                first_uploaded_image_id = file_id
             saved.append(
                 {
-                    "id": int(info.lastrowid),
+                    "id": file_id,
                     "original_name": uf.filename or dest.name,
                     "stored_name": dest.name,
                     "size": dest.stat().st_size,
@@ -364,6 +382,13 @@ async def upload_resource_images(
                     "url_path": url_path,
                 }
             )
+        # After all files are uploaded, set the cover if it's the first image and no cover exists
+        if first_uploaded_image_id is not None:
+            current_cover = cur.execute("SELECT cover_file_id FROM resources WHERE id = ?", (rid,)).fetchone()
+            if current_cover and current_cover["cover_file_id"] is None:
+                cur.execute("UPDATE resources SET cover_file_id = ? WHERE id = ?", (first_uploaded_image_id, rid))
+                logger.info("Auto-set cover for resource %s to file %s", rid, first_uploaded_image_id)
+
         conn.commit()
     except Exception:
         try:
@@ -518,6 +543,14 @@ def list_my_resources(request: Request):
                     cover_url_path = cover_row["url_path"]
             except Exception:
                 cover_url_path = None
+        files_out = []
+        image_files_out = []
+        for f in files:
+            fd = dict(f)
+            if _is_image_file(fd.get("mime"), fd.get("original_name")):
+                image_files_out.append(fd)
+            else:
+                files_out.append(fd)
         items.append(
             {
                 "id": int(r["id"]),
@@ -526,7 +559,8 @@ def list_my_resources(request: Request):
                 "description": r["description"],
                 "usage": r["usage"],
                 "created_at": r["created_at"],
-                "files": [dict(f) for f in files],
+                "files": files_out,
+                "imageFiles": image_files_out,
                 "coverFileId": int(cover_file_id) if cover_file_id is not None else None,
                 "coverUrlPath": cover_url_path,
                 "shareUrl": _share_url(r["slug"]),
@@ -751,17 +785,27 @@ def get_resource(slug: str):
     ).fetchall()
     cover_file_id = r["cover_file_id"] if "cover_file_id" in r.keys() else None
     cover_url_path = None
+    files = list(files)
+    files_out = []
+    image_files_out = []
+    for f in files:
+        fd = dict(f)
+        if _is_image_file(fd.get("mime"), fd.get("original_name")):
+            image_files_out.append(fd)
+        else:
+            files_out.append(fd)
     if cover_file_id:
         try:
-            for f in files:
-                if int(f["id"]) == int(cover_file_id):
-                    cover_url_path = f["url_path"]
+            for f in image_files_out:
+                if int(f.get("id")) == int(cover_file_id):
+                    cover_url_path = f.get("url_path")
                     break
         except Exception:
             cover_url_path = None
     data = {
         **{k: r[k] for k in r.keys()},
-        "files": [dict(f) for f in files],
+        "files": files_out,
+        "imageFiles": image_files_out,
         "shareUrl": _share_url(r["slug"]),
         "coverFileId": int(cover_file_id) if cover_file_id is not None else None,
         "coverUrlPath": cover_url_path,

@@ -193,6 +193,11 @@ Agent LLM 相关（用于智能对话 + 代码生成）：
   - 可选表单字段：`saveWatermark`（布尔），用于对 `.melsave` / `.zip` 进行水印提取并入库
 - `GET /api/files/:id/download` - 下载文件，`Content-Disposition` 采用 UTF-8 百分号编码文件名
 
+资源图片 / 封面管理（新增，保持兼容，不影响旧接口）：
+
+- `POST /api/resources/:id/images/upload` - 为指定资源上传一批图片文件（仅资源作者，最多 10 个，单文件 50MB，自动写入 `resource_files`）。
+- `GET /api/resources/:id/images` - 列出该资源下所有图片类型文件（按 MIME/扩展名过滤），返回 `{ items: ResourceFile[], coverFileId }`，用于在前端管理封面和图片列表。
+
 ### 文件点赞（已实现）
 
 - `GET /api/resources/likes?ids=1,2,3`

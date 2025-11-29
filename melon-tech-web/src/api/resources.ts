@@ -20,10 +20,17 @@ export type ResourceItem = {
   author_name?: string
   author_username?: string
   files: ResourceFile[]
+  coverFileId?: number | null
+  coverUrlPath?: string | null
   shareUrl: string
 }
 
 export type MyResourceItem = ResourceItem
+
+export type ResourceImagesResponse = {
+  items: ResourceFile[]
+  coverFileId?: number | null
+}
 
 export async function listResources(params: { q?: string; page?: number; pageSize?: number } = {}) {
   const { data } = await http.get("/resources", { params })
@@ -63,4 +70,14 @@ export async function updateResourceMeta(id: number, payload: { description?: st
 export async function deleteResource(id: number) {
   const { data } = await http.delete(`/resources/${id}`)
   return data as { ok: boolean }
+}
+
+export async function setResourceCover(id: number, fileId: number | null) {
+  const { data } = await http.patch(`/resources/${id}/cover`, { fileId })
+  return data as { ok: boolean; coverFileId: number | null }
+}
+
+export async function listResourceImages(id: number) {
+  const { data } = await http.get(`/resources/${id}/images`)
+  return data as ResourceImagesResponse
 }

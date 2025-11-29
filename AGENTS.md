@@ -37,7 +37,12 @@ Additional tool routes (non-breaking additions):
   - `GET /api/agent/sessions` → list own sessions
   - `GET /api/agent/sessions/{id}/messages` → pull session history
   - `POST /api/agent/ask` → send a user message (optionally with `sessionId`), starts an async run that may call the melsave generator tool
-  - `GET /api/agent/runs/{runId}` → poll run status/result (download URL for generated `.melsave`)
+ - `GET /api/agent/runs/{runId}` → poll run status/result (download URL for generated `.melsave`)
+
+New resource image management (non-breaking additions):
+- Resource images (authenticated, owner only):
+  - `POST /api/resources/{id}/images/upload` → upload one or more image files for a resource; files are stored in `resource_files` and can be used as covers or gallery images.
+  - `GET /api/resources/{id}/images` → list all image-type files under a resource (filtered by MIME/extension) plus current `coverFileId`, for cover/gallery management.
 
 ## Environment & Config
 - `PORT` (dev 3000, Docker 3400), `JWT_SECRET`, `NODE_ENV`, `PUBLIC_BASE_URL`, `HTTPS_ENABLED`, `COOKIE_DOMAIN`.

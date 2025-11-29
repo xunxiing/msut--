@@ -64,8 +64,18 @@
               class="work-card"
             >
               <div class="card-content" @click="openResourceAction(item)">
-                <div class="card-icon">
-                  <el-icon><FolderOpened /></el-icon>
+                <div class="card-icon" :class="{ 'has-cover': (item as any).coverUrlPath }">
+                  <template v-if="(item as any).coverUrlPath">
+                    <img
+                      class="card-cover-image"
+                      :src="toImageUrl((item as any).coverUrlPath)"
+                      alt="cover"
+                      loading="lazy"
+                    />
+                  </template>
+                  <template v-else>
+                    <el-icon><FolderOpened /></el-icon>
+                  </template>
                 </div>
                 <div class="card-info">
                   <h3 class="work-title" :title="item.title">{{ item.title }}</h3>
@@ -94,6 +104,7 @@
                     <el-dropdown-menu>
                       <el-dropdown-item command="preview">预览详情</el-dropdown-item>
                       <el-dropdown-item command="addFile">添加文件</el-dropdown-item>
+                      <el-dropdown-item command="cover">设置封面</el-dropdown-item>
                       <el-dropdown-item command="edit">编辑信息</el-dropdown-item>
                       <el-dropdown-item command="delete" divided style="color: var(--el-color-danger)">删除</el-dropdown-item>
                     </el-dropdown-menu>
@@ -297,6 +308,68 @@
         </template>
       </el-dialog>
 
+      <!-- 封面 / 图片管理弹窗 -->
+      <el-dialog
+        v-model="coverManager.visible"
+        :title="`管理封面与图片 - ${coverManager.title}`"
+        width="800px"
+        align-center
+        class="custom-dialog"
+        @closed="resetCoverManager"
+      >
+        <div v-loading="coverManager.loading">
+          <div class="cover-upload-section">
+            <h4 class="cover-section-title">上传图片（支持多张）</h4>
+            <el-upload
+              ref="coverUploadRef"
+              v-model:file-list="coverUploadList"
+              :action="coverManager.resourceId ? `/api/resources/${coverManager.resourceId}/images/upload` : ''"
+              :with-credentials="true"
+              :multiple="true"
+              :auto-upload="true"
+              :limit="10"
+              name="files"
+              accept="image/*"
+              drag
+              @success="handleCoverUploadSuccess"
+              @error="handleCoverUploadError"
+            >
+              <el-icon class="el-icon--upload"><upload-filled /></el-icon>
+              <div class="el-upload__text">拖动�?<em>点击选择</em> 图片文件</div>
+              <template #tip>
+                <div class="el-upload__tip">支持 PNG/JPG 等图片格式，单个文件不超过 50MB</div>
+              </template>
+            </el-upload>
+          </div>
+
+          <div v-if="coverManager.images.length" class="cover-images-list">
+            <h4 class="cover-section-title">已上传图片（点击设为封面）</h4>
+            <div class="cover-images-grid">
+              <div
+                v-for="img in coverManager.images"
+                :key="img.id"
+                class="cover-image-item"
+                :class="{ 'is-cover': img.id === coverManager.coverFileId }"
+                @click="setCoverFromDialog(img.id)"
+              >
+                <img :src="toImageUrl(img.url_path)" :alt="img.original_name" class="cover-image-thumb" />
+                <div class="cover-image-meta">
+                  <span class="cover-image-name">{{ img.original_name }}</span>
+                  <span v-if="img.id === coverManager.coverFileId" class="cover-image-badge">当前封面</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <el-empty v-else description="还没有上传图片，可先上传图片再选择封面" :image-size="120" />
+        </div>
+        <template #footer>
+          <el-button v-if="coverManager.coverFileId !== null" :loading="coverManager.savingCoverId === 0" @click="handleClearCover">
+            清除封面
+          </el-button>
+          <el-button @click="coverManager.visible = false">关闭</el-button>
+        </template>
+      </el-dialog>
+
       <!-- 教程编辑 / 新建弹窗 -->
       <el-dialog
         v-model="tutorialEdit.visible"
@@ -346,7 +419,11 @@ import {
   listMyResources,
   updateResourceMeta,
   deleteResource,
+  getResource,
+  setResourceCover,
+  listResourceImages,
   type MyResourceItem,
+  type ResourceFile,
 } from '../api/resources'
 import {
   createTutorial,
@@ -402,6 +479,16 @@ const upload = reactive({
   submitting: false,
 })
 
+const coverUploadRef = ref<UploadInstance>()
+const coverUploadList = ref<UploadUserFile[]>([])
+
+function toImageUrl(path?: string | null) {
+  if (!path) return ''
+  if (path.startsWith('http://') || path.startsWith('https://')) return path
+  if (path.startsWith('/uploads/')) return path
+  return path
+}
+
 const tutorialEdit = reactive({
   visible: false,
   loading: false,
@@ -426,6 +513,26 @@ const tutorialAction = reactive<{
 }>({
   visible: false,
   item: null,
+})
+
+const coverManager = reactive<{
+  visible: boolean
+  loading: boolean
+  savingCoverId: number | null
+  resourceId: number
+  slug: string
+  title: string
+  coverFileId: number | null
+  images: ResourceFile[]
+}>({
+  visible: false,
+  loading: false,
+  savingCoverId: null,
+  resourceId: 0,
+  slug: '',
+  title: '',
+  coverFileId: null,
+  images: [],
 })
 
 async function fetchResources() {
@@ -501,9 +608,136 @@ function handleResourceCommand(command: string, item: MyResourceItem) {
     case 'edit':
       openEdit(item)
       break
+    case 'cover':
+      openCoverManager(item)
+      break
     case 'delete':
       confirmRemove(item)
       break
+  }
+}
+
+async function setAutoCover(item: MyResourceItem) {
+  try {
+    const detail = await getResource(item.slug)
+    const files = (detail.files || []) as any[]
+    const imageFiles = files.filter((f) => {
+      const mime = (f.mime || '').toString().toLowerCase()
+      const name = (f.original_name || '').toString().toLowerCase()
+      return mime.startsWith('image/') || /\.(png|jpg|jpeg|gif|webp|bmp|svg)$/.test(name)
+    })
+    if (!imageFiles.length) {
+      ElMessage.warning('当前作品还没有图片文件，请先上传图片')
+      return
+    }
+    const target = imageFiles[0]
+    await setResourceCover(detail.id, target.id)
+    const idx = resourceItems.value.findIndex(r => r.id === detail.id)
+    if (idx !== -1) {
+      const current = resourceItems.value[idx] as any
+      resourceItems.value[idx] = {
+        ...current,
+        coverFileId: target.id,
+        coverUrlPath: target.url_path,
+      }
+    }
+    ElMessage.success('封面已设置为第一个图片文件')
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.error || '设置封面失败')
+  }
+}
+
+async function loadCoverImages() {
+  if (!coverManager.resourceId) return
+  coverManager.loading = true
+  try {
+    const res = await listResourceImages(coverManager.resourceId)
+    coverManager.images = res.items || []
+    if (typeof res.coverFileId === 'number' || res.coverFileId === null) {
+      coverManager.coverFileId = res.coverFileId ?? null
+    }
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.error || '加载图片列表失败')
+  } finally {
+    coverManager.loading = false
+  }
+}
+
+async function openCoverManager(item: MyResourceItem) {
+  coverManager.visible = true
+  coverManager.resourceId = item.id
+  coverManager.slug = item.slug
+  coverManager.title = item.title
+  coverManager.coverFileId = (item as any).coverFileId ?? null
+  await loadCoverImages()
+}
+
+function resetCoverManager() {
+  coverUploadList.value = []
+  coverManager.visible = false
+  coverManager.loading = false
+  coverManager.savingCoverId = null
+  coverManager.resourceId = 0
+  coverManager.slug = ''
+  coverManager.title = ''
+  coverManager.coverFileId = null
+  coverManager.images = []
+}
+
+function handleCoverUploadSuccess(_response: any, _file: UploadUserFile, _uploadFiles: UploadUserFile[]) {
+  // 上传图片成功后刷新图片列表
+  loadCoverImages()
+  ElMessage.success('图片上传成功')
+}
+
+function handleCoverUploadError() {
+  ElMessage.error('图片上传失败')
+}
+
+async function setCoverFromDialog(fileId: number) {
+  if (!coverManager.resourceId) return
+  coverManager.savingCoverId = fileId
+  try {
+    const res = await setResourceCover(coverManager.resourceId, fileId)
+    coverManager.coverFileId = res.coverFileId ?? null
+    const idx = resourceItems.value.findIndex(r => r.id === coverManager.resourceId)
+    if (idx !== -1) {
+      const current = resourceItems.value[idx] as any
+      const target = coverManager.images.find(img => img.id === fileId) as any
+      resourceItems.value[idx] = {
+        ...current,
+        coverFileId: res.coverFileId,
+        coverUrlPath: target?.url_path || current.coverUrlPath,
+      }
+    }
+    ElMessage.success('封面已更新')
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.error || '设置封面失败')
+  } finally {
+    coverManager.savingCoverId = null
+  }
+}
+
+async function handleClearCover() {
+  if (!coverManager.resourceId) return
+  coverManager.savingCoverId = 0
+  try {
+    const res = await setResourceCover(coverManager.resourceId, null)
+    coverManager.coverFileId = res.coverFileId ?? null
+    const idx = resourceItems.value.findIndex(r => r.id === coverManager.resourceId)
+    if (idx !== -1) {
+      const current = resourceItems.value[idx] as any
+      resourceItems.value[idx] = {
+        ...current,
+        coverFileId: null,
+        coverUrlPath: null,
+      }
+    }
+    ElMessage.success('封面已清除')
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.error || '清除封面失败')
+  } finally {
+    coverManager.savingCoverId = null
   }
 }
 
@@ -768,12 +1002,20 @@ async function confirmTutorialRemove(item: MyTutorialItem) {
 
 // 确保路由切换或组件卸载时中止后台上传
 function abortAllUploads() {
-  if (!uploadRef.value) return
-  ;(upload.fileList || []).forEach((f) => {
-    if ((f as any).status === 'uploading') {
-      uploadRef.value!.abort(f as any)
-    }
-  })
+  if (uploadRef.value) {
+    ;(upload.fileList || []).forEach((f) => {
+      if ((f as any).status === 'uploading') {
+        uploadRef.value!.abort(f as any)
+      }
+    })
+  }
+  if (coverUploadRef.value) {
+    (coverUploadList.value || []).forEach((f) => {
+      if ((f as any).status === 'uploading') {
+        coverUploadRef.value!.abort(f as any)
+      }
+    })
+  }
 }
 
 onBeforeRouteLeave(() => {
@@ -933,6 +1175,19 @@ onBeforeUnmount(() => {
   margin-bottom: 16px;
 }
 
+.card-icon.has-cover {
+  background: #0f172a;
+  overflow: hidden;
+  padding: 0;
+}
+
+.card-cover-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
 .card-icon.tutorial-icon {
   background: var(--el-color-warning-light-9);
   color: var(--el-color-warning);
@@ -1010,6 +1265,78 @@ onBeforeUnmount(() => {
 
 .action-icon {
   margin-right: 8px;
+}
+
+.cover-upload-section {
+  margin-top: 16px;
+  margin-bottom: 16px;
+}
+
+.cover-section-title {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.cover-images-list {
+  margin-top: 16px;
+}
+
+.cover-images-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.cover-image-item {
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  cursor: pointer;
+  background: #f9fafb;
+  transition: all 0.2s ease;
+}
+
+.cover-image-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.08);
+}
+
+.cover-image-item.is-cover {
+  border-color: var(--el-color-primary);
+  box-shadow: 0 0 0 1px var(--el-color-primary-light-8);
+}
+
+.cover-image-thumb {
+  width: 100%;
+  height: 90px;
+  object-fit: cover;
+  display: block;
+}
+
+.cover-image-meta {
+  padding: 6px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.cover-image-name {
+  font-size: 12px;
+  color: #4b5563;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.cover-image-badge {
+  font-size: 11px;
+  color: #16a34a;
+  background-color: #dcfce7;
+  border-radius: 999px;
+  padding: 0 6px;
 }
 
 @media (max-width: 768px) {

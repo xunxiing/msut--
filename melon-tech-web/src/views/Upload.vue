@@ -56,6 +56,29 @@
       <el-space class="mt">
         <el-button type="primary" @click="submitUpload">开始上传</el-button>
       </el-space>
+
+      <!-- 可选：封面 / 展示图片上传（多张） -->
+      <el-divider class="mt">可选：上传封面 / 展示图片</el-divider>
+      <el-upload
+        ref="coverUploadRef"
+        v-model:file-list="coverFileList"
+        :action="resourceId !== null ? `/api/resources/${resourceId}/images/upload` : ''"
+        :with-credentials="true"
+        :multiple="true"
+        :auto-upload="true"
+        :limit="10"
+        name="files"
+        accept="image/*"
+        drag
+        @success="handleCoverSuccess"
+        @error="handleCoverError"
+      >
+        <el-icon class="el-icon--upload"><upload-filled /></el-icon>
+        <div class="el-upload__text">把图片拖到这里，�?<em>点击上传</em></div>
+        <template #tip>
+          <div class="el-upload__tip">支持常见图片格式（PNG/JPG 等），单文件不超过 50MB</div>
+        </template>
+      </el-upload>
     </el-card>
 
     <el-result v-else icon="success" title="分享创建完成" sub-title="未登录的用户也能通过链接访问并下载">
@@ -82,6 +105,7 @@ import { UploadFilled } from '@element-plus/icons-vue'
 const step = ref(0)
 const formRef = ref<FormInstance>()
 const uploadRef = ref<UploadInstance>()
+const coverUploadRef = ref<UploadInstance>()
 const loading = ref(false)
 const form = ref({ title: '', description: '', usage: '' })
 const rules: FormRules = { title: [{ required: true, message: '请输入标题', trigger: 'blur' }] }
@@ -91,6 +115,7 @@ const slug = ref('')
 const shareUrl = ref('')
 
 const fileList = ref<UploadUserFile[]>([])
+const coverFileList = ref<UploadUserFile[]>([])
 const uploaded = ref(false)
 const saveWatermark = ref<boolean>(false)
 
@@ -129,6 +154,14 @@ function handleError() {
   ElMessage.error('文件上传失败')
 }
 
+function handleCoverSuccess(_response: any, _file: UploadUserFile, _uploadFiles: UploadUserFile[]) {
+  ElMessage.success('图片上传成功')
+}
+
+function handleCoverError() {
+  ElMessage.error('图片上传失败')
+}
+
 async function copy(text: string) {
   if (!text) return
   try {
@@ -154,13 +187,20 @@ async function copy(text: string) {
 
 // Abort any in-flight uploads when leaving or unmounting
 function abortAllUploads() {
-  if (!uploadRef.value) return
-  fileList.value.forEach((f) => {
-    if (f.status === 'uploading') {
-      // Element Plus UploadInstance.abort now requires a file argument
-      uploadRef.value!.abort(f as any)
-    }
-  })
+  if (uploadRef.value) {
+    fileList.value.forEach((f) => {
+      if (f.status === 'uploading') {
+        uploadRef.value!.abort(f as any)
+      }
+    })
+  }
+  if (coverUploadRef.value) {
+    coverFileList.value.forEach((f) => {
+      if (f.status === 'uploading') {
+        coverUploadRef.value!.abort(f as any)
+      }
+    })
+  }
 }
 onBeforeRouteLeave(() => {
   abortAllUploads()

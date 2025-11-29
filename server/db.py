@@ -131,7 +131,9 @@ def run_migrations(conn: Optional[sqlite3.Connection] = None) -> None:
               description TEXT DEFAULT '',
               usage TEXT DEFAULT '',
               created_by INTEGER,
-              created_at TEXT NOT NULL DEFAULT (datetime('now'))
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              -- Optional cover image for resource cards
+              cover_file_id INTEGER
             );
 
             CREATE TABLE IF NOT EXISTS resource_files (
@@ -217,6 +219,11 @@ def run_migrations(conn: Optional[sqlite3.Connection] = None) -> None:
             CREATE INDEX IF NOT EXISTS idx_tutorial_embeddings_tutorial ON tutorial_embeddings(tutorial_id);
             """
         )
+        # Extra columns for resources (idempotent, added for image cover support)
+        cur.execute("PRAGMA table_info(resources)")
+        res_cols = [row["name"] for row in cur.fetchall() or []]
+        if "cover_file_id" not in res_cols:
+            cur.execute("ALTER TABLE resources ADD COLUMN cover_file_id INTEGER")
         # Extra columns for tutorial chunk optimization (idempotent)
         cur.execute("PRAGMA table_info(tutorial_embeddings)")
         cols = [row["name"] for row in cur.fetchall() or []]

@@ -37,8 +37,18 @@
         >
           <el-card class="resource-card" shadow="hover">
             <div class="card-body">
-              <div class="card-icon">
-                <el-icon><Document /></el-icon>
+              <div class="card-icon" :class="{ 'has-cover': (r as any).coverUrlPath }">
+                <template v-if="(r as any).coverUrlPath">
+                  <img
+                    class="card-cover-image"
+                    :src="toImageUrl((r as any).coverUrlPath)"
+                    alt="cover"
+                    loading="lazy"
+                  />
+                </template>
+                <template v-else>
+                  <el-icon><Document /></el-icon>
+                </template>
               </div>
               <div class="card-info">
                 <h3 class="resource-title" :title="r.title">{{ r.title }}</h3>
@@ -101,6 +111,13 @@ const total = ref(0)
 const loading = ref(false)
 const likesMap = ref<Record<number, LikeInfo>>({})
 const auth = useAuth()
+
+function toImageUrl(path?: string | null) {
+  if (!path) return ''
+  if (path.startsWith('http://') || path.startsWith('https://')) return path
+  if (path.startsWith('/uploads/')) return path
+  return path
+}
 
 async function fetch() {
   loading.value = true
@@ -293,6 +310,19 @@ onMounted(fetch)
   font-size: 28px;
   flex-shrink: 0;
   transition: transform 0.3s ease;
+}
+
+.card-icon.has-cover {
+  padding: 0;
+  background: #0f172a;
+  overflow: hidden;
+}
+
+.card-cover-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .resource-card:hover .card-icon {

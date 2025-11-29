@@ -2,9 +2,9 @@ import os
 import tempfile
 import logging
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
-from fastapi import APIRouter, File, Form, Query, Request, UploadFile
+from fastapi import APIRouter, File, Form, Query, Request, UploadFile, Body
 from fastapi.responses import FileResponse, JSONResponse
 
 from .auth import get_current_user
@@ -40,6 +40,22 @@ def _u64_to_i64(u: int) -> int:
     return u - (1 << 64) if (u & (1 << 63)) else u
 
 
+def _is_image_file(mime: Optional[str], name: Optional[str]) -> bool:
+    """
+    判定一个文件是否为图片文件（用于封面/展示图）：
+    - MIME 以 image/ 开头，或
+    - 文件名后缀为常见图片扩展名
+    """
+    mime_lc = (mime or "").lower()
+    name_lc = (name or "").lower()
+    if mime_lc.startswith("image/"):
+        return True
+    for ext in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"):
+        if name_lc.endswith(ext):
+            return True
+    return False
+
+
 def _require_user_id(request: Request) -> Optional[int]:
     payload = get_current_user(request)
     if not payload:
@@ -48,6 +64,24 @@ def _require_user_id(request: Request) -> Optional[int]:
         return int(payload["uid"])  # type: ignore[index]
     except Exception:
         return None
+
+
+def _require_owner(request: Request, resource_id: int) -> Tuple[Optional[int], Optional[str]]:
+    """
+    Ensure the current user is the owner of the given resource.
+    Returns (user_id, error_message). When error_message is None, the check passed.
+    """
+    uid = _require_user_id(request)
+    if uid is None:
+        return None, "未登录"
+    conn = get_connection()
+    cur = conn.cursor()
+    r = cur.execute("SELECT id, created_by FROM resources WHERE id = ?", (resource_id,)).fetchone()
+    if not r:
+        return uid, "资源不存在"
+    if int(r["created_by"] or 0) != uid:
+        return uid, "无法操作其他用户的资源"
+    return uid, None
 
 
 @router.post("/api/resources")
@@ -271,6 +305,80 @@ async def upload_to_resource(
     return {"ok": True, "files": saved}
 
 
+@router.post("/api/resources/{rid}/images/upload")
+async def upload_resource_images(
+    request: Request,
+    rid: int,
+    files: List[UploadFile] = File(default=[]),
+):
+    """
+    为指定资源上传图片文件（封面 / 展示图）。
+    - 仅资源创建者可用
+    - 仅允许图片类型，最多 10 个，单文件 50MB
+    - 文件仍然写入 resource_files 表，后续可通过 /api/resources/{rid}/images 查询
+    """
+    uid, err = _require_owner(request, rid)
+    if err is not None:
+        if uid is None:
+            return JSONResponse(status_code=401, content={"error": err})
+        # 对于不存在或无权限统一返回 403，错误文案仍然由 err 提示
+        return JSONResponse(status_code=403, content={"error": err})
+    if not files:
+        return JSONResponse(status_code=400, content={"error": "没有文件"})
+    # 先整体校验类型，避免部分文件已落库又整体报错
+    for uf in files[:10]:
+        if not _is_image_file(uf.content_type, uf.filename or ""):
+            return JSONResponse(status_code=400, content={"error": "仅支持图片文件"})
+    conn = get_connection()
+    cur = conn.cursor()
+    saved = []
+    created_file_paths: List[Path] = []
+    try:
+        for uf in files[:10]:
+            dest = await _save_upload_atomic(request, uf, UPLOAD_DIR)
+            if dest is None:
+                raise RuntimeError("upload_failed")
+            created_file_paths.append(dest)
+            url_path = f"/uploads/{dest.name}"
+            info = cur.execute(
+                """
+                INSERT INTO resource_files (resource_id, original_name, stored_name, mime, size, url_path)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    rid,
+                    uf.filename or dest.name,
+                    dest.name,
+                    uf.content_type or None,
+                    dest.stat().st_size,
+                    url_path,
+                ),
+            )
+            saved.append(
+                {
+                    "id": int(info.lastrowid),
+                    "original_name": uf.filename or dest.name,
+                    "stored_name": dest.name,
+                    "size": dest.stat().st_size,
+                    "mime": uf.content_type or None,
+                    "url_path": url_path,
+                }
+            )
+        conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        for p in created_file_paths:
+            try:
+                p.unlink(missing_ok=True)
+            except Exception:
+                pass
+        return JSONResponse(status_code=400, content={"error": "上传失败"})
+    return {"ok": True, "files": saved}
+
+
 @router.post("/api/watermark/check")
 async def check_watermark(file: UploadFile = File(...)):
     # Accept one .melsave (or .zip) and return computed watermark and DB matches
@@ -381,7 +489,7 @@ def list_my_resources(request: Request):
     cur = conn.cursor()
     resources = cur.execute(
         """
-        SELECT id, slug, title, description, usage, created_at
+        SELECT id, slug, title, description, usage, created_at, cover_file_id
         FROM resources WHERE created_by = ? ORDER BY id DESC
         """,
         (uid,),
@@ -395,6 +503,21 @@ def list_my_resources(request: Request):
             """,
             (r["id"],),
         ).fetchall()
+        cover_file_id = r["cover_file_id"] if "cover_file_id" in r.keys() else None
+        cover_url_path: Optional[str] = None
+        if cover_file_id:
+            try:
+                cover_row = cur.execute(
+                    """
+                    SELECT url_path FROM resource_files
+                    WHERE id = ? AND resource_id = ?
+                    """,
+                    (cover_file_id, r["id"]),
+                ).fetchone()
+                if cover_row:
+                    cover_url_path = cover_row["url_path"]
+            except Exception:
+                cover_url_path = None
         items.append(
             {
                 "id": int(r["id"]),
@@ -404,10 +527,62 @@ def list_my_resources(request: Request):
                 "usage": r["usage"],
                 "created_at": r["created_at"],
                 "files": [dict(f) for f in files],
+                "coverFileId": int(cover_file_id) if cover_file_id is not None else None,
+                "coverUrlPath": cover_url_path,
                 "shareUrl": _share_url(r["slug"]),
             }
         )
     return {"items": items}
+
+
+@router.get("/api/resources/{rid}/images")
+def list_resource_images(request: Request, rid: int):
+    """
+    列出指定资源下的所有图片文件（封面候选）。
+    仅资源创建者可见，用于管理封面与展示图片。
+    """
+    uid, err = _require_owner(request, rid)
+    if err is not None:
+        if uid is None:
+            return JSONResponse(status_code=401, content={"error": err})
+        return JSONResponse(status_code=403, content={"error": err})
+    conn = get_connection()
+    cur = conn.cursor()
+    res = cur.execute(
+        "SELECT id, cover_file_id FROM resources WHERE id = ?",
+        (rid,),
+    ).fetchone()
+    if not res:
+        return JSONResponse(status_code=404, content={"error": "资源不存在"})
+    cover_file_id = res["cover_file_id"] if "cover_file_id" in res.keys() else None
+    rows = cur.execute(
+        """
+        SELECT id, original_name, stored_name, mime, size, url_path, created_at
+        FROM resource_files
+        WHERE resource_id = ?
+        ORDER BY id DESC
+        """,
+        (rid,),
+    ).fetchall()
+    items = []
+    for r in rows:
+        if not _is_image_file(r["mime"], r["original_name"]):
+            continue
+        items.append(
+            {
+                "id": int(r["id"]),
+                "original_name": r["original_name"],
+                "stored_name": r["stored_name"],
+                "size": r["size"],
+                "mime": r["mime"],
+                "url_path": r["url_path"],
+                "created_at": r["created_at"],
+            }
+        )
+    return {
+        "items": items,
+        "coverFileId": int(cover_file_id) if cover_file_id is not None else None,
+    }
 
 
 @router.patch("/api/resources/{rid}")
@@ -574,7 +749,23 @@ def get_resource(slug: str):
         "SELECT id, original_name, stored_name, mime, size, url_path, created_at FROM resource_files WHERE resource_id = ? ORDER BY id DESC",
         (r["id"],),
     ).fetchall()
-    data = {**{k: r[k] for k in r.keys()}, "files": [dict(f) for f in files], "shareUrl": _share_url(r["slug"]) }
+    cover_file_id = r["cover_file_id"] if "cover_file_id" in r.keys() else None
+    cover_url_path = None
+    if cover_file_id:
+        try:
+            for f in files:
+                if int(f["id"]) == int(cover_file_id):
+                    cover_url_path = f["url_path"]
+                    break
+        except Exception:
+            cover_url_path = None
+    data = {
+        **{k: r[k] for k in r.keys()},
+        "files": [dict(f) for f in files],
+        "shareUrl": _share_url(r["slug"]),
+        "coverFileId": int(cover_file_id) if cover_file_id is not None else None,
+        "coverUrlPath": cover_url_path,
+    }
     return data
 
 
@@ -592,17 +783,74 @@ def list_resources(q: str = Query(default=""), page: int = Query(default=1), pag
     total = cur.execute(f"SELECT COUNT(1) as c FROM resources r {where}", tuple(args)).fetchone()["c"]
     items = cur.execute(
         f"""
-        SELECT r.id, r.slug, r.title, r.description, r.created_at,
-               u.name AS author_name, u.username AS author_username
+        SELECT
+          r.id,
+          r.slug,
+          r.title,
+          r.description,
+          r.created_at,
+          r.cover_file_id,
+          u.name AS author_name,
+          u.username AS author_username,
+          cf.url_path AS cover_url_path
         FROM resources r
         LEFT JOIN users u ON u.id = r.created_by
+        LEFT JOIN resource_files cf ON cf.id = r.cover_file_id
         {where}
         ORDER BY r.id DESC
         LIMIT ? OFFSET ?
         """,
         (*args, page_size, offset),
     ).fetchall()
-    return {"items": [dict(i) for i in items], "page": page, "pageSize": page_size, "total": total}
+    items_out = []
+    for row in items:
+        d = dict(row)
+        cover_file_id = d.pop("cover_file_id", None)
+        cover_url_path = d.pop("cover_url_path", None)
+        # Preserve existing fields; add camelCase cover metadata
+        d["coverFileId"] = int(cover_file_id) if cover_file_id is not None else None
+        d["coverUrlPath"] = cover_url_path
+        items_out.append(d)
+    return {"items": items_out, "page": page, "pageSize": page_size, "total": total}
+
+
+@router.patch("/api/resources/{rid}/cover")
+async def set_resource_cover(
+    request: Request,
+    rid: int,
+    fileId: Optional[int] = Body(default=None, embed=True),
+):
+    """
+    设置或清除资源封面图片。
+    - 需要登录并且必须是资源创建者。
+    - fileId 为 null 或省略时表示清除封面。
+    """
+    uid, err = _require_owner(request, rid)
+    if err is not None:
+        if uid is None:
+            return JSONResponse(status_code=401, content={"error": err})
+        status = 404 if "不存在" in err else 403
+        return JSONResponse(status_code=status, content={"error": err})
+    conn = get_connection()
+    cur = conn.cursor()
+    # If a fileId is provided, ensure it belongs to this resource
+    if fileId is not None:
+        row = cur.execute(
+            "SELECT id FROM resource_files WHERE id = ? AND resource_id = ?",
+            (fileId, rid),
+        ).fetchone()
+        if not row:
+            return JSONResponse(status_code=400, content={"error": "文件不属于该资源"})
+    try:
+        cur.execute(
+            "UPDATE resources SET cover_file_id = ? WHERE id = ?",
+            (fileId, rid),
+        )
+        conn.commit()
+    except Exception:
+        return JSONResponse(status_code=500, content={"error": "更新封面失败"})
+    # Return simple ack to keep payload small for this update route
+    return {"ok": True, "coverFileId": fileId}
 
 
 # ----- Resource likes (collections) -----

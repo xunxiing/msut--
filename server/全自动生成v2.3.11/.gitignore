@@ -140,4 +140,6 @@ dmypy.json
 Thumbs.db
 
 # Custom
-.melsave
+*.melsave
+
+

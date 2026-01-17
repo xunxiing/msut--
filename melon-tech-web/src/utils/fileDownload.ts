@@ -22,24 +22,6 @@ async function downloadViaBlob(href: string, downloadName: string) {
   }
 }
 
-export async function triggerFileOpen(href: string, filename: string) {
-  if (!href) return false
-  if (!navigator.share) return false
-  try {
-    const resp = await fetch(href, { credentials: 'include' })
-    if (!resp.ok) return false
-    const blob = await resp.blob()
-    const file = new File([blob], filename || 'file', {
-      type: blob.type || 'application/octet-stream',
-    })
-    if (navigator.canShare && !navigator.canShare({ files: [file] })) return false
-    await navigator.share({ files: [file], title: filename || 'file' })
-    return true
-  } catch {
-    return false
-  }
-}
-
 export function triggerFileDownload(href: string, downloadName?: string) {
   if (!href) return
 

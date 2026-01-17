@@ -2,6 +2,7 @@ import os
 import re
 import time
 import secrets
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional
 
 
@@ -37,16 +38,18 @@ def parse_bool(v: Optional[str], fallback: bool) -> bool:
     return fallback
 
 
-def cookie_kwargs() -> Dict:
+def cookie_kwargs(max_age_seconds: Optional[int] = None) -> Dict:
     is_prod = os.getenv("NODE_ENV") == "production"
     https_enabled = parse_bool(os.getenv("HTTPS_ENABLED"), is_prod)
     same_site = "none" if https_enabled else "lax"
+    max_age = max_age_seconds if max_age_seconds is not None else 7 * 24 * 60 * 60
+    expires = datetime.now(timezone.utc) + timedelta(seconds=max_age)
     return dict(
         httponly=True,
         samesite=same_site,
         secure=https_enabled,
         domain=os.getenv("COOKIE_DOMAIN") or None,
         path="/",
-        max_age=7 * 24 * 60 * 60,
+        max_age=max_age,
+        expires=expires,
     )
-

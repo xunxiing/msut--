@@ -124,6 +124,18 @@ def run_migrations(conn: Optional[sqlite3.Connection] = None) -> None:
               UPDATE users SET updated_at = datetime('now') WHERE id = OLD.id;
             END;
 
+            CREATE TABLE IF NOT EXISTS auth_refresh_tokens (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              user_id INTEGER NOT NULL,
+              token_hash TEXT NOT NULL UNIQUE,
+              expires_at INTEGER NOT NULL,
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              last_used_at TEXT,
+              FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_auth_refresh_tokens_user ON auth_refresh_tokens(user_id);
+
             CREATE TABLE IF NOT EXISTS resources (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
               slug TEXT NOT NULL UNIQUE,

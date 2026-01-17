@@ -23,6 +23,8 @@ Scope: This AGENTS.md applies to the entire repository.
 
 Additional tool routes (non-breaking additions):
 - DSL generator (anonymous): `POST /api/melsave/generate` with JSON `{ dsl: string }` returns a `.melsave` file stream with UTF-8 filename header.
+- Auth refresh (cookie-based):
+  - `POST /api/auth/refresh` → refreshes access cookie using `refresh_token`, returns `{ user }` or `{ error }`.
 - Resource likes (authenticated):
   - `GET /api/resources/likes?ids=1,2,3` → `{ items: [{ id, likes, liked }] }`
   - `POST /api/resources/:id/like` → like a resource (idempotent)
@@ -90,6 +92,7 @@ New resource image management (non-breaking additions):
 
 ## Safety & Security
 - Always use `utils.cookie_kwargs()` for auth cookies to ensure cross-site cookie behavior is correct behind reverse proxies.
+- Auth cookies include `token` (access) and `refresh_token` (refresh, optional “记住我”); keep names stable.
 - Avoid leaking secrets into logs. Keep error responses generic where appropriate.
 
 ## Questions

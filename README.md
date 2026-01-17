@@ -178,8 +178,10 @@ Agent LLM 相关（用于智能对话 + 代码生成）：
 
 - `POST /api/auth/register` - 注册
 - `POST /api/auth/login` - 登录
+  - 请求体可选 `remember: true`，用于启用长期会话（30/90 天）
 - `POST /api/auth/logout` - 登出
 - `GET /api/auth/me` - 获取当前登录用户（基于 `token` Cookie）
+- `POST /api/auth/refresh` - 使用 `refresh_token` 刷新登录状态（返回 `user` 并续期）
 
 ### 资源与文件
 
@@ -342,7 +344,8 @@ Agent LLM 相关（用于智能对话 + 代码生成）：
 ## 🔐 安全与运行注意事项
 
 - 密码使用 `bcrypt` 哈希存储。  
-- 身份认证基于 JWT，使用名为 `token` 的 Cookie 传递会话信息。  
+- 身份认证基于 JWT，使用名为 `token` 的 Cookie 传递会话信息；启用“记住我”时会额外设置 `refresh_token`。  
+- Cookie 有效期默认：登录会话 7 天，“记住我”访问令牌 30 天、刷新令牌 90 天（由后端设置）。  
 - 设置 Cookie 时必须通过 `utils.cookie_kwargs()`，确保 SameSite / Secure 等选项在反向代理之后表现正确。  
 - 避免在日志中打印敏感信息（如 `RAG_API_KEY`、`AGENT_API_KEY` 等）。  
 - SQLite 与上传目录在 Docker 中通过卷挂载持久化，避免容器销毁导致数据丢失。

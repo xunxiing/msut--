@@ -1,4 +1,5 @@
 import os
+import re
 import tempfile
 import logging
 from pathlib import Path
@@ -30,6 +31,18 @@ MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 
 def _share_url(slug: str) -> str:
     return f"{PUBLIC_BASE}/share/{slug}"
+
+
+def _safe_ascii_filename(filename: str) -> str:
+    if not filename:
+        return "file"
+    p = Path(filename)
+    ext = "".join(p.suffixes)
+    stem = p.name[: -len(ext)] if ext else p.name
+    safe_stem = re.sub(r"[^A-Za-z0-9._-]+", "_", stem).strip("_")
+    if not safe_stem:
+        safe_stem = "file"
+    return f"{safe_stem}{ext}" if ext else safe_stem
 
 
 def _u64_to_i64(u: int) -> int:
@@ -976,8 +989,10 @@ def download_file(fid: int):
         return JSONResponse(status_code=404, content={"error": "文件丢了"})
     from urllib.parse import quote
     filename = row["original_name"]
+    safe_name = _safe_ascii_filename(filename)
     headers = {
-        "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"
+        "Content-Disposition": f"attachment; filename=\"{safe_name}\"; filename*=UTF-8''{quote(filename)}",
+        "X-Content-Type-Options": "nosniff",
     }
     # FastAPI's FileResponse sets correct headers and content-type
-    return FileResponse(path, headers=headers)
+    return FileResponse(path, headers=headers, media_type="application/octet-stream")

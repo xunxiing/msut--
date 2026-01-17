@@ -72,27 +72,16 @@
                     <div class="file-meta">{{ prettySize(f.size) }} · {{ f.mime || 'unknown' }}</div>
                   </div>
                 </div>
-                <div class="file-actions">
-                  <DownloadButton
-                    :href="`/api/files/${f.id}/download`"
-                    :download-name="f.original_name"
-                    class="download-btn-large"
-                    type="primary"
-                    @downloaded="handleFileDownloaded"
-                  >
-                    <el-icon><Download /></el-icon>
-                    下载
-                  </DownloadButton>
-                  <el-button
-                    v-if="isOpenableFile(f.original_name || '')"
-                    type="success"
-                    plain
-                    class="open-btn-large"
-                    @click="handleOpenFile(f)"
-                  >
-                    打开
-                  </el-button>
-                </div>
+                <DownloadButton
+                  :href="`/api/files/${f.id}/download`"
+                  :download-name="f.original_name"
+                  class="download-btn-large"
+                  type="primary"
+                  @downloaded="handleFileDownloaded"
+                >
+                  <el-icon><Download /></el-icon>
+                  下载
+                </DownloadButton>
               </div>
             </div>
             <div v-else class="no-files-placeholder">暂无文件</div>
@@ -183,7 +172,6 @@ import {
   Star, StarFilled, Paperclip, Download, InfoFilled 
 } from '@element-plus/icons-vue'
 import DownloadButton from '../components/DownloadButton.vue'
-import { triggerFileOpen } from '../utils/fileDownload'
 
 const route = useRoute()
 const data = ref<ResourceItem | null>(null)
@@ -229,21 +217,6 @@ function prettySize(n: number) {
   let i = 0; let v = n
   while (v >= 1024 && i < units.length - 1) { v /= 1024; i++ }
   return `${v.toFixed(1)} ${units[i]}`
-}
-
-function isOpenableFile(name: string) {
-  const lower = (name || '').toLowerCase()
-  return lower.endsWith('.melsave') || lower.endsWith('.melmod')
-}
-
-async function handleOpenFile(file: ResourceFile) {
-  if (!file?.id) return
-  const href = `/api/files/${file.id}/download`
-  const filename = file.original_name || 'file'
-  const ok = await triggerFileOpen(href, filename)
-  if (!ok) {
-    ElMessage.info('当前浏览器不支持系统分享，请先下载后在文件管理器中打开')
-  }
 }
 
 async function fetch() {
@@ -635,22 +608,8 @@ onMounted(fetch)
   width: 100%;
 }
 
-.file-actions {
-  display: flex;
-  gap: 8px;
-  width: 100%;
-  margin-top: 4px;
-}
-
 .download-btn-large {
-  flex: 1;
-  height: 40px;
-  font-size: 15px;
-  border-radius: 8px;
-}
-
-.open-btn-large {
-  flex: 1;
+  width: 100%;
   height: 40px;
   font-size: 15px;
   border-radius: 8px;

@@ -1,5 +1,6 @@
 import io
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -117,7 +118,20 @@ def _run_pipeline(temp_dir: Path) -> Path:
 
 def _encode_filename_header(filename: str) -> str:
     from urllib.parse import quote
-    return f"attachment; filename*=UTF-8''{quote(filename)}"
+    safe_name = _safe_ascii_filename(filename)
+    return f"attachment; filename=\"{safe_name}\"; filename*=UTF-8''{quote(filename)}"
+
+
+def _safe_ascii_filename(filename: str) -> str:
+    if not filename:
+        return "file"
+    p = Path(filename)
+    ext = "".join(p.suffixes)
+    stem = p.name[: -len(ext)] if ext else p.name
+    safe_stem = re.sub(r"[^A-Za-z0-9._-]+", "_", stem).strip("_")
+    if not safe_stem:
+        safe_stem = "file"
+    return f"{safe_stem}{ext}" if ext else safe_stem
 
 
 def generate_melsave_bytes(dsl_code: str) -> MelsaveResult:
@@ -150,7 +164,8 @@ def generate_melsave(body: dict):
     try:
         result = generate_melsave_bytes(dsl_code)
         headers = {
-            "Content-Disposition": _encode_filename_header(result.filename)
+            "Content-Disposition": _encode_filename_header(result.filename),
+            "X-Content-Type-Options": "nosniff",
         }
         return Response(content=result.data, media_type="application/octet-stream", headers=headers)
     except ValueError as e:

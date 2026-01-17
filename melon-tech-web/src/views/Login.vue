@@ -11,6 +11,9 @@
           <el-form-item label="密码" prop="password">
             <el-input v-model="form.password" type="password" show-password autocomplete="current-password" />
           </el-form-item>
+          <el-form-item>
+            <el-checkbox v-model="form.remember">记住我（90天）</el-checkbox>
+          </el-form-item>
 
           <el-space>
             <el-button type="primary" :loading="auth.loading" @click="onSubmit">登录</el-button>
@@ -35,7 +38,7 @@ const auth = useAuth()
 const router = useRouter()
 const route = useRoute()
 const formRef = ref<FormInstance>()
-const form = reactive({ username: '', password: '' })
+const form = reactive({ username: '', password: '', remember: true })
 const rules: FormRules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }, { min: 3, max: 32, message: '用户名长度为 3-32 位', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }, { min: 6, message: '至少 6 位', trigger: 'blur' }]

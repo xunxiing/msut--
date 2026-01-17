@@ -3,6 +3,7 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
@@ -46,7 +47,7 @@ def _copy_tree(src: Path, dst: Path) -> None:
     def _ignore(_dir: str, names: list[str]) -> set[str]:
         ignored: set[str] = set()
         for n in names:
-            if n in {".git", "__pycache__"}:
+            if n in {".git", "__pycache__", "output"}:
                 ignored.add(n)
             if n.endswith(".melsave"):
                 ignored.add(n)
@@ -73,10 +74,18 @@ def _copy_tree(src: Path, dst: Path) -> None:
         except Exception:
             pass
 
+    try:
+        out_dir = dst / "output"
+        if out_dir.exists():
+            shutil.rmtree(out_dir, ignore_errors=True)
+    except Exception:
+        pass
+
 
 def _run_pipeline(temp_dir: Path) -> Path:
     # Prefer running in a subprocess to isolate execution of DSL code.
     import subprocess
+    start_ts = time.time()
     env = dict(os.environ)
     env["PYTHONIOENCODING"] = "utf-8"
     env["PYTHONUNBUFFERED"] = "1"
@@ -96,8 +105,11 @@ def _run_pipeline(temp_dir: Path) -> Path:
     except subprocess.TimeoutExpired:
         raise RuntimeError("生成超时")
 
-    # Pick the most recent .melsave
-    melsaves = sorted(temp_dir.glob("*.melsave"), key=lambda p: p.stat().st_mtime, reverse=True)
+    # Pick the most recent .melsave (output path may vary in newer generators).
+    melsaves = sorted(temp_dir.rglob("*.melsave"), key=lambda p: p.stat().st_mtime, reverse=True)
+    fresh = [p for p in melsaves if p.stat().st_mtime >= start_ts - 1.0]
+    if fresh:
+        return fresh[0]
     if not melsaves:
         raise RuntimeError("未生成 .melsave 文件")
     return melsaves[0]

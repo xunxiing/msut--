@@ -8,198 +8,167 @@
       </div>
       <div class="header-actions">
         <el-input
-          v-model="searchModel"
-          :placeholder="activeTab === 'internal' ? '搜索本站资源...' : '搜索外站资源（按名称/文件名）'"
+          v-model="queryDraft"
+          :placeholder="searchPlaceholder"
           class="search-input"
           clearable
-          @clear="handleSearch"
-          @keyup.enter="handleSearch"
+          @clear="handleClearSearch"
+          @keyup.enter="applySearch"
         >
           <template #prefix>
             <el-icon><Search /></el-icon>
           </template>
         </el-input>
-        <el-button v-if="activeTab === 'internal'" type="primary" class="upload-btn" @click="$router.push('/upload')">
+        <el-button v-if="showInternal" type="primary" class="upload-btn" @click="$router.push('/upload')">
           <el-icon><Upload /></el-icon>
           <span>上传文件</span>
         </el-button>
-        <el-button v-else class="refresh-btn" :loading="externalLoading" @click="refreshExternal">刷新外站</el-button>
+        <el-button class="refresh-btn" :loading="loadingAny" @click="refreshAll">刷新列表</el-button>
       </div>
     </div>
 
     <!-- Content Section -->
-    <div class="library-content" v-loading="activeTab === 'internal' && loading">
-      <el-tabs v-model="activeTab" class="resource-tabs">
-        <el-tab-pane label="本站资源" name="internal">
-      <div v-if="items.length > 0" class="resource-grid">
-        <div
-          v-for="r in items"
-          :key="r.id"
-          class="resource-card-wrapper"
-          @click="$router.push(`/share/${r.slug}`)"
-        >
-          <el-card class="resource-card" shadow="hover">
-            <div class="card-body">
-              <div class="card-icon" :class="{ 'has-cover': (r as any).coverUrlPath }">
-                <template v-if="(r as any).coverUrlPath">
-                  <img
-                    class="card-cover-image"
-                    :src="toImageUrl((r as any).coverUrlPath)"
-                    alt="cover"
-                    loading="lazy"
-                  />
-                </template>
-                <template v-else>
-                  <el-icon><Document /></el-icon>
-                </template>
-              </div>
-              <div class="card-info">
-                <div class="info-top">
-                  <div class="title-row">
-                    <h3 class="resource-title" :title="r.title">{{ r.title }}</h3>
-                    <div class="author-info-mini">
-                      <el-avatar :size="16" class="author-avatar">{{ (r as any).author_name?.[0]?.toUpperCase() || 'U' }}</el-avatar>
-                      <span class="author-name">{{ (r as any).author_name || 'Unknown' }}</span>
-                    </div>
-                  </div>
-                  <p class="resource-desc">{{ r.description || '暂无描述' }}</p>
-                </div>
-                <div class="info-bottom">
-                  <div class="card-meta">
-                    <span class="date">{{ formatDate(r.created_at) }}</span>
-                    <div
-                      class="like-action"
-                      :class="{ 'is-active': likesMap[r.id]?.liked }"
-                      @click.stop="toggleLike(r.id)"
-                    >
-                      <el-icon>
-                        <component :is="likesMap[r.id]?.liked ? StarFilled : Star" />
-                      </el-icon>
-                      <span class="like-count">{{ likesMap[r.id]?.likes || 0 }}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </el-card>
+    <div class="library-content">
+      <div class="source-switch">
+        <el-radio-group v-model="sourceFilter" size="large" class="source-switch-group">
+          <el-radio-button label="all">全部</el-radio-button>
+          <el-radio-button label="internal">本站</el-radio-button>
+          <el-radio-button label="external">外站</el-radio-button>
+        </el-radio-group>
+      </div>
+
+      <div class="stream-toolbar">
+        <div class="stream-left">
+          <el-text class="external-muted">
+            显示 {{ combinedTotal }} 条
+            <span v-if="showInternal">（本站 {{ internalTotal }}）</span>
+            <span v-if="showExternal">（外站 {{ externalTotalRaw }}）</span>
+          </el-text>
+        </div>
+        <div class="stream-right">
+          <el-text class="external-muted">15/页</el-text>
         </div>
       </div>
 
-      <el-empty v-else description="暂无资源" :image-size="200" />
-
-      <!-- Pagination -->
-      <div class="pagination-wrapper" v-if="total > 0">
-        <el-pagination
-          background
-          layout="prev, pager, next"
-          :page-size="pageSize"
-          :current-page="page"
-          :total="total"
-          @current-change="handlePageChange"
-        />
-      </div>
-        </el-tab-pane>
-
-        <el-tab-pane label="外站资源（me.loveall.icu）" name="external">
-          <div class="external-box">
-            <el-alert
-              title="外站资源按日期倒序展示（最新在前）；下载/预览为外站直连，不会通过本站文件 API 转发。"
-              type="info"
-              show-icon
-              :closable="false"
-              class="external-alert"
-            />
-
-            <div class="external-toolbar">
-              <div class="external-toolbar-left">
-                <el-text class="external-muted">共 {{ externalTotal }} 个资源</el-text>
-              </div>
-              <div class="external-toolbar-right">
-                <el-select v-model="externalPageSize" class="external-page-size">
-                  <el-option :value="12" label="12/页" />
-                  <el-option :value="24" label="24/页" />
-                  <el-option :value="48" label="48/页" />
-                </el-select>
-              </div>
-            </div>
-
-            <div class="external-list" v-loading="externalLoading">
-              <div v-if="externalPaged.length > 0" class="resource-grid">
-                <div
-                  v-for="f in externalPaged"
-                  :key="f.full_name"
-                  class="resource-card-wrapper"
-                  @click="$router.push({ name: 'external-resource', query: { file: f.full_name } })"
-                >
-                  <el-card class="resource-card external-card" shadow="hover">
-                    <div class="card-body">
-                      <div class="card-icon has-cover external-cover">
-                        <template v-if="externalPreviewUrl(f) && !brokenExternalPreviews[f.full_name]">
-                          <img
-                            class="card-cover-image"
-                            :src="externalPreviewUrl(f)"
-                            alt="preview"
-                            loading="lazy"
-                            referrerpolicy="no-referrer"
-                            @error="markExternalPreviewBroken(f.full_name)"
-                          />
-                        </template>
-                        <template v-else>
-                          <div class="external-cover-empty">
-                            <el-icon><Document /></el-icon>
-                          </div>
-                        </template>
-                        <div class="external-badge">外站</div>
+      <div class="stream-list" v-loading="loadingAny">
+        <div v-if="combinedPaged.length > 0" class="resource-grid">
+          <div
+            v-for="it in combinedPaged"
+            :key="it.key"
+            class="resource-card-wrapper"
+            @click="handleOpen(it)"
+          >
+            <el-card class="resource-card" :class="{ 'external-card': it.source === 'external' }" shadow="hover">
+              <div class="card-body">
+                <template v-if="it.source === 'internal'">
+                  <div class="card-icon" :class="{ 'has-cover': (it.internal as any).coverUrlPath }">
+                    <template v-if="(it.internal as any).coverUrlPath">
+                      <img
+                        class="card-cover-image"
+                        :src="toImageUrl((it.internal as any).coverUrlPath)"
+                        alt="cover"
+                        loading="lazy"
+                      />
+                    </template>
+                    <template v-else>
+                      <el-icon><Document /></el-icon>
+                    </template>
+                  </div>
+                </template>
+                <template v-else>
+                  <div class="card-icon has-cover external-cover">
+                    <template v-if="externalPreviewUrl(it.external) && !brokenExternalPreviews[it.external.full_name]">
+                      <img
+                        class="card-cover-image"
+                        :src="externalPreviewUrl(it.external)"
+                        alt="preview"
+                        loading="lazy"
+                        referrerpolicy="no-referrer"
+                        @error="markExternalPreviewBroken(it.external.full_name)"
+                      />
+                    </template>
+                    <template v-else>
+                      <div class="external-cover-empty">
+                        <el-icon><Document /></el-icon>
                       </div>
-                      <div class="card-info">
-                        <div class="info-top">
-                          <div class="title-row">
-                            <h3 class="resource-title" :title="f.name || f.full_name">{{ f.name || f.full_name }}</h3>
-                            <div class="author-info-mini">
-                              <span class="external-domain">me.loveall.icu</span>
-                            </div>
-                          </div>
-                          <p class="resource-desc">{{ f.full_name }}</p>
+                    </template>
+                    <div class="external-badge">外站</div>
+                  </div>
+                </template>
+
+                <div class="card-info">
+                  <div class="info-top">
+                    <div class="title-row">
+                      <template v-if="it.source === 'internal'">
+                        <h3 class="resource-title" :title="it.internal.title">{{ it.internal.title }}</h3>
+                        <div class="author-info-mini">
+                          <el-avatar :size="15" class="author-avatar">{{ (it.internal as any).author_name?.[0]?.toUpperCase() || 'U' }}</el-avatar>
+                          <span class="author-name">{{ (it.internal as any).author_name || 'Unknown' }}</span>
                         </div>
-                        <div class="info-bottom">
-                          <div class="card-meta">
-                            <span class="date">{{ f.date || '-' }}</span>
-                            <span class="external-size">{{ f.size || prettySize(f.size_bytes) }}</span>
-                            <div class="external-mini-actions" @click.stop>
-                              <el-button size="small" @click="goExternalDetail(f.full_name)">详情</el-button>
-                              <el-button size="small" type="primary" @click="openExternalDownload(externalDownloadUrl(f))">下载</el-button>
-                              <el-button
-                                v-if="externalPreviewUrl(f) && !brokenExternalPreviews[f.full_name]"
-                                size="small"
-                                @click="openExternalPreview(externalPreviewUrl(f))"
-                              >
-                                预览
-                              </el-button>
-                            </div>
-                          </div>
+                      </template>
+                      <template v-else>
+                        <h3 class="resource-title" :title="it.external.name || it.external.full_name">{{ it.external.name || it.external.full_name }}</h3>
+                        <div class="author-info-mini">
+                          <span class="external-domain">me.loveall.icu</span>
                         </div>
-                      </div>
+                      </template>
                     </div>
-                  </el-card>
+                    <p class="resource-desc">
+                      {{ it.source === 'internal' ? (it.internal.description || '暂无描述') : it.external.full_name }}
+                    </p>
+                  </div>
+
+                  <div class="info-bottom">
+                    <div class="card-meta">
+                      <template v-if="it.source === 'internal'">
+                        <span class="date">{{ formatDate(it.internal.created_at) }}</span>
+                        <div
+                          class="like-action"
+                          :class="{ 'is-active': likesMap[it.internal.id]?.liked }"
+                          @click.stop="toggleLike(it.internal.id)"
+                        >
+                          <el-icon>
+                            <component :is="likesMap[it.internal.id]?.liked ? StarFilled : Star" />
+                          </el-icon>
+                          <span class="like-count">{{ likesMap[it.internal.id]?.likes || 0 }}</span>
+                        </div>
+                      </template>
+                      <template v-else>
+                        <span class="date">{{ it.external.date || '-' }}</span>
+                        <span class="external-size">{{ it.external.size || prettySize(it.external.size_bytes) }}</span>
+                        <div class="external-mini-actions" @click.stop>
+                          <el-button size="small" @click="goExternalDetail(it.external.full_name)">详情</el-button>
+                          <el-button size="small" type="primary" @click="openExternalDownload(externalDownloadUrl(it.external))">下载</el-button>
+                          <el-button
+                            v-if="externalPreviewUrl(it.external) && !brokenExternalPreviews[it.external.full_name]"
+                            size="small"
+                            @click="openExternalPreview(externalPreviewUrl(it.external))"
+                          >
+                            预览
+                          </el-button>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
                 </div>
               </div>
-
-              <el-empty v-else description="暂无外站资源（或被筛选隐藏）" :image-size="160" />
-
-              <div class="pagination-wrapper" v-if="externalTotal > 0">
-                <el-pagination
-                  background
-                  layout="prev, pager, next"
-                  :page-size="externalPageSize"
-                  :current-page="externalPage"
-                  :total="externalTotal"
-                  @current-change="handleExternalPageChange"
-                />
-              </div>
-            </div>
+            </el-card>
           </div>
-        </el-tab-pane>
-      </el-tabs>
+        </div>
+
+        <el-empty v-else description="暂无资源" :image-size="200" />
+
+        <div class="pagination-wrapper" v-if="combinedTotal > 0">
+          <el-pagination
+            background
+            layout="prev, pager, next"
+            :page-size="combinedPageSize"
+            :current-page="combinedPage"
+            :total="combinedTotal"
+            @current-change="handleCombinedPageChange"
+          />
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -214,31 +183,35 @@ import { getResourceLikes, likeResource, unlikeResource, type LikeInfo } from '.
 import { useAuth } from '../stores/auth'
 import { listMeLoveallResources, meLoveallDownloadUrl, meLoveallPreviewUrl, type MeLoveallFileInfo } from '../api/meLoveall'
 
-const internalQ = ref('')
-const externalQ = ref('')
+const queryDraft = ref('')
+const query = ref('')
+
+const combinedPage = ref(1)
+const combinedPageSize = 15
+
 const items = ref<ResourceItem[]>([])
-const page = ref(1)
-const pageSize = ref(12)
-const total = ref(0)
+const internalTotal = ref(0)
 const loading = ref(false)
 const likesMap = ref<Record<number, LikeInfo>>({})
 const auth = useAuth()
 const router = useRouter()
 
-const activeTab = ref<'internal' | 'external'>('internal')
+const sourceFilter = ref<'all' | 'internal' | 'external'>('all')
+const showInternal = computed(() => sourceFilter.value !== 'external')
+const showExternal = computed(() => sourceFilter.value !== 'internal')
+
+const searchPlaceholder = computed(() => {
+  if (sourceFilter.value === 'internal') return '搜索本站资源...'
+  if (sourceFilter.value === 'external') return '搜索外站资源（按名称/文件名）...'
+  return '搜索本站/外站资源...'
+})
 
 const externalLoading = ref(false)
 const externalAll = ref<MeLoveallFileInfo[]>([])
-const externalPage = ref(1)
-const externalPageSize = ref(24)
 const brokenExternalPreviews = ref<Record<string, true>>({})
 
-const searchModel = computed({
-  get: () => (activeTab.value === 'internal' ? internalQ.value : externalQ.value),
-  set: (v: string) => {
-    if (activeTab.value === 'internal') internalQ.value = v
-    else externalQ.value = v
-  },
+const loadingAny = computed(() => {
+  return (showInternal.value && loading.value) || (showExternal.value && externalLoading.value)
 })
 
 function toImageUrl(path?: string | null) {
@@ -269,49 +242,22 @@ function resolveExternalUrl(raw: string | null) {
   }
 }
 
-async function fetch() {
-  loading.value = true
-  try {
-    const data = await listResources({ q: internalQ.value, page: page.value, pageSize: pageSize.value })
-    items.value = data.items
-    total.value = data.total
-    
-    if (items.value.length > 0) {
-      const ids = items.value.map(r => r.id)
-      const likes = await getResourceLikes(ids)
-      const m: Record<number, LikeInfo> = {}
-      likes.forEach(i => { m[i.id] = i })
-      likesMap.value = m
-    }
-  } catch (error) {
-    ElMessage.error('获取资源列表失败')
-  } finally {
-    loading.value = false
-  }
-}
-
-function handleSearch() {
-  if (activeTab.value === 'internal') {
-    page.value = 1
-    fetch()
-    return
-  }
-  externalPage.value = 1
-}
-
-function handlePageChange(p: number) {
-  page.value = p
-  fetch()
-  window.scrollTo({ top: 0, behavior: 'smooth' })
-}
-
 function parseExternalDate(s: string) {
   const v = Date.parse(s)
   return Number.isFinite(v) ? v : 0
 }
 
+function parseInternalDate(s: string) {
+  const v = Date.parse(s)
+  return Number.isFinite(v) ? v : 0
+}
+
+type CombinedItem =
+  | { source: 'internal'; key: string; ts: number; internal: ResourceItem }
+  | { source: 'external'; key: string; ts: number; external: MeLoveallFileInfo }
+
 const externalFiltered = computed(() => {
-  const q = externalQ.value.trim().toLowerCase()
+  const q = query.value.trim().toLowerCase()
   const sorted = [...externalAll.value].sort((a, b) => {
     const da = parseExternalDate(a.date || '')
     const db = parseExternalDate(b.date || '')
@@ -326,16 +272,87 @@ const externalFiltered = computed(() => {
   })
 })
 
-const externalTotal = computed(() => externalFiltered.value.length)
+const externalTotalRaw = computed(() => externalFiltered.value.length)
 
-const externalPaged = computed(() => {
-  const start = (externalPage.value - 1) * externalPageSize.value
-  return externalFiltered.value.slice(start, start + externalPageSize.value)
+const combinedAll = computed<CombinedItem[]>(() => {
+  const out: CombinedItem[] = []
+  if (showInternal.value) {
+    for (const r of items.value) {
+      out.push({ source: 'internal', key: `i:${r.id}`, ts: parseInternalDate(r.created_at || ''), internal: r })
+    }
+  }
+  if (showExternal.value) {
+    for (const f of externalFiltered.value) {
+      out.push({ source: 'external', key: `e:${f.full_name}`, ts: parseExternalDate(f.date || ''), external: f })
+    }
+  }
+  out.sort((a, b) => b.ts - a.ts || a.key.localeCompare(b.key, 'zh-Hans-CN'))
+  return out
 })
 
-function handleExternalPageChange(p: number) {
-  externalPage.value = p
+const combinedTotal = computed(() => combinedAll.value.length)
+
+const combinedPaged = computed(() => {
+  const start = (combinedPage.value - 1) * combinedPageSize
+  return combinedAll.value.slice(start, start + combinedPageSize)
+})
+
+function handleCombinedPageChange(p: number) {
+  combinedPage.value = p
   window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+function handleOpen(it: CombinedItem) {
+  if (it.source === 'internal') {
+    router.push(`/share/${it.internal.slug}`)
+    return
+  }
+  router.push({ name: 'external-resource', query: { file: it.external.full_name } })
+}
+
+function applySearch() {
+  query.value = queryDraft.value.trim()
+  combinedPage.value = 1
+  if (showInternal.value) refreshInternal()
+  if (showExternal.value && externalAll.value.length === 0) refreshExternal()
+}
+
+function handleClearSearch() {
+  queryDraft.value = ''
+  applySearch()
+}
+
+async function refreshAll() {
+  const tasks: Promise<any>[] = []
+  if (showInternal.value) tasks.push(refreshInternal())
+  if (showExternal.value) tasks.push(refreshExternal())
+  await Promise.all(tasks)
+}
+
+async function refreshInternal() {
+  loading.value = true
+  try {
+    const all: ResourceItem[] = []
+    const reqPageSize = 200
+    let p = 1
+    let t = 0
+    while (true) {
+      const data: any = await listResources({ q: query.value || undefined, page: p, pageSize: reqPageSize })
+      const chunk = (data?.items || []) as ResourceItem[]
+      if (p === 1) t = Number(data?.total || 0)
+      all.push(...chunk)
+      if (t > 0 && all.length >= t) break
+      if (!chunk.length) break
+      p += 1
+      if (p > 200) break
+    }
+    items.value = all
+    internalTotal.value = t || all.length
+  } catch (error) {
+    ElMessage.error('获取本站资源失败')
+  } finally {
+    loading.value = false
+  }
 }
 
 function externalPreviewUrl(f: MeLoveallFileInfo) {
@@ -359,7 +376,7 @@ async function refreshExternal() {
   try {
     const r = await listMeLoveallResources()
     externalAll.value = r.files || []
-    externalPage.value = 1
+    brokenExternalPreviews.value = {}
   } catch (e: any) {
     const msg = String(e?.message || '外站列表获取失败')
     if (msg.toLowerCase().includes('network')) {
@@ -412,19 +429,45 @@ async function toggleLike(id: number) {
   }
 }
 
-watch(activeTab, (tab) => {
-  if (tab === 'external' && externalAll.value.length === 0) {
-    refreshExternal()
+let lastLikesKey = ''
+async function refreshLikesForVisible() {
+  const ids = combinedPaged.value
+    .filter(it => it.source === 'internal')
+    .map(it => it.internal.id)
+  if (!ids.length) return
+  const key = [...new Set(ids)].sort((a, b) => a - b).join(',')
+  if (!key || key === lastLikesKey) return
+  lastLikesKey = key
+
+  try {
+    const likes = await getResourceLikes(ids)
+    const m: Record<number, LikeInfo> = { ...likesMap.value }
+    likes.forEach(i => {
+      m[i.id] = i
+    })
+    likesMap.value = m
+  } catch {
+    // ignore
   }
+}
+
+watch(combinedPaged, () => {
+  refreshLikesForVisible()
 })
 
-watch([externalQ, externalPageSize], () => {
-  if (activeTab.value === 'external') externalPage.value = 1
+watch(sourceFilter, () => {
+  combinedPage.value = 1
+  if (showInternal.value && items.value.length === 0) refreshInternal()
+  if (showExternal.value && externalAll.value.length === 0) refreshExternal()
+})
+
+watch([query], () => {
+  combinedPage.value = 1
 })
 
 onMounted(() => {
-  fetch()
-  if (activeTab.value === 'external') refreshExternal()
+  queryDraft.value = query.value
+  refreshAll()
 })
 </script>
 
@@ -464,7 +507,7 @@ onMounted(() => {
 
 .header-actions {
   display: flex;
-  gap: 16px;
+  gap: 15px;
   align-items: center;
 }
 
@@ -498,7 +541,7 @@ onMounted(() => {
   border-radius: 10px;
   padding: 10px 20px;
   font-weight: 500;
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+  box-shadow: 0 4px 12px rgba(15, 185, 129, 0.2);
   transition: all 0.2s ease;
 }
 
@@ -506,7 +549,7 @@ onMounted(() => {
   background-color: #059669;
   border-color: #059669;
   transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.3);
+  box-shadow: 0 6px 15px rgba(15, 185, 129, 0.3);
 }
 
 .refresh-btn {
@@ -524,38 +567,40 @@ onMounted(() => {
   transform: translateY(-1px);
 }
 
-.resource-tabs :deep(.el-tabs__header) {
-  margin: 0 0 20px 0;
+.source-switch {
+  display: flex;
+  justify-content: center;
+  margin: 0 0 22px 0;
 }
 
-.external-box {
-  max-width: 1280px;
-  margin: 0 auto;
+.source-switch-group :deep(.el-radio-button__inner) {
+  padding: 10px 18px;
+  border-radius: 12px;
 }
 
-.external-alert {
-  margin-bottom: 16px;
-}
-
-.external-toolbar {
+.stream-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 15px;
   margin: 0 0 14px 0;
+}
+
+.stream-left,
+.stream-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.stream-list {
+  border-radius: 15px;
 }
 
 .external-muted {
   color: #64748b;
 }
 
-.external-page-size {
-  width: 110px;
-}
-
-.external-list {
-  border-radius: 16px;
-}
 
 .resource-card.external-card {
   border-color: rgba(99, 102, 241, 0.18);
@@ -633,9 +678,9 @@ onMounted(() => {
 }
 
 .resource-card {
-  height: 160px;
+  height: 150px;
   border: 1px solid #f1f5f9;
-  border-radius: 16px;
+  border-radius: 15px;
   transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
   background: #fff;
   cursor: pointer;
@@ -647,19 +692,19 @@ onMounted(() => {
 .resource-card:hover {
   transform: translateY(-4px);
   box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.08);
-  border-color: rgba(16, 185, 129, 0.2);
+  border-color: rgba(15, 185, 129, 0.2);
 }
 
 .resource-card :deep(.el-card__body) {
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 16px;
+  padding: 15px;
 }
 
 .card-body {
   display: flex;
-  gap: 16px;
+  gap: 15px;
   flex: 1;
   height: 100%;
 }
@@ -770,7 +815,7 @@ onMounted(() => {
 .card-meta {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 15px;
 }
 
 .date {

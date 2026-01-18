@@ -1,5 +1,5 @@
 <template>
-  <el-popover placement="bottom-end" trigger="click" width="320" @show="refresh">
+  <el-popover placement="bottom-end" trigger="click" width="320" @show="handleOpen">
     <template #reference>
       <button class="bell-button" aria-label="通知">
         <el-badge :value="count" :hidden="count === 0" class="bell-badge">
@@ -41,7 +41,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Bell } from '@element-plus/icons-vue'
-import { listUnreadNotifications, type NotificationItem } from '../api/notifications'
+import { listUnreadNotifications, markAllNotificationsRead, type NotificationItem } from '../api/notifications'
 
 const router = useRouter()
 const items = ref<NotificationItem[]>([])
@@ -62,6 +62,17 @@ async function refresh() {
   } finally {
     loading.value = false
   }
+}
+
+async function handleOpen() {
+  // Clicking the badge marks all as read, so the red dot clears immediately.
+  try {
+    await markAllNotificationsRead()
+    total.value = 0
+  } catch {
+    // ignore
+  }
+  refresh()
 }
 
 function formatActor(actor: NotificationItem['actor']) {

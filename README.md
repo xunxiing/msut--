@@ -212,7 +212,8 @@ Agent LLM 相关（用于智能对话 + 代码生成）：
 ### 通知（新增）
 
 - `GET /api/notifications` - 获取通知列表（需要登录）
-- `GET /api/notifications/unread` - 获取最新通知预览（用于顶部铃铛，返回 `items` + `total`）
+- `GET /api/notifications/unread` - 获取最新通知预览（用于顶部铃铛，返回 `items` + `total`；`total` 为未读数量）
+- `POST /api/notifications/read-all` - 全部标记为已读（用于点击铃铛红点后一键清空）
 
 
 ### DSL 生成器（`.melsave`）

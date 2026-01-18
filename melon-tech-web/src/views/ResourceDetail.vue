@@ -130,8 +130,15 @@
           </div>
         </el-col>
       </el-row>
+
+      <el-row class="comment-row">
+        <el-col :span="24">
+          <CommentList v-if="data?.id" :resource-id="data.id" />
+        </el-col>
+      </el-row>
     </div>
   </div>
+
 
   <!-- Like Popup -->
   <transition name="fade">
@@ -172,6 +179,7 @@ import {
   Star, StarFilled, Paperclip, Download, InfoFilled 
 } from '@element-plus/icons-vue'
 import DownloadButton from '../components/DownloadButton.vue'
+import CommentList from '../components/CommentList.vue'
 
 const route = useRoute()
 const data = ref<ResourceItem | null>(null)
@@ -408,7 +416,7 @@ onMounted(fetch)
   min-height: 400px;
 }
 
-.content-section, .files-section, .images-section {
+.content-section, .files-section, .images-section, .comment-row {
   background: #fff;
   border-radius: 16px;
   padding: 24px;
@@ -416,6 +424,14 @@ onMounted(fetch)
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
   margin-bottom: 24px;
 }
+
+.comment-row {
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
 
 .section-title {
   font-size: 18px;

@@ -47,7 +47,16 @@ def _issue_token(uid: int, username: str, name: str, ttl_seconds: int) -> str:
         "name": name,
         "exp": int(time.time()) + ttl_seconds,
     }
-    token = jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+    token = jwt.encode(
+        {
+            "uid": uid,
+            "username": username,
+            "name": name,
+            "exp": int(time.time()) + ttl_seconds,
+        },
+        JWT_SECRET,
+        algorithm="HS256",
+    )
     return token
 
 
@@ -100,7 +109,9 @@ class LoginBody(BaseModel):
 def register(body: RegisterBody, request: Request, response: Response):
     conn = get_connection()
     cur = conn.cursor()
-    exists = cur.execute("SELECT id FROM users WHERE username = ?", (body.username,)).fetchone()
+    exists = cur.execute(
+        "SELECT id FROM users WHERE username = ?", (body.username,)
+    ).fetchone()
     if exists:
         return JSONResponse(status_code=409, content={"error": "用户名已注册"})
     hash_ = _hash_password(body.password)
@@ -109,7 +120,10 @@ def register(body: RegisterBody, request: Request, response: Response):
         (body.username, hash_, body.name),
     )
     conn.commit()
-    uid = int(cur.lastrowid)
+    last_id = cur.lastrowid
+    if last_id is None:
+        return JSONResponse(status_code=500, content={"error": "注册失败"})
+    uid = int(last_id)
     remember = bool(body.remember)
     token_ttl = ACCESS_TOKEN_TTL_SECONDS if remember else ACCESS_TOKEN_TTL_SHORT_SECONDS
     token = _issue_token(uid, body.username, body.name, token_ttl)
@@ -141,7 +155,9 @@ def register(body: RegisterBody, request: Request, response: Response):
 def login(body: LoginBody, request: Request, response: Response):
     conn = get_connection()
     cur = conn.cursor()
-    row = cur.execute("SELECT * FROM users WHERE username = ?", (body.username,)).fetchone()
+    row = cur.execute(
+        "SELECT * FROM users WHERE username = ?", (body.username,)
+    ).fetchone()
     if not row:
         return JSONResponse(status_code=401, content={"error": "用户名或密码错误"})
     if not _verify_password(body.password, row["password_hash"]):
@@ -170,7 +186,9 @@ def login(body: LoginBody, request: Request, response: Response):
                 pass
         ck = cookie_kwargs(max_age_seconds=0)
         response.set_cookie("refresh_token", value="", **ck)
-    return {"user": {"id": int(row["id"]), "username": row["username"], "name": row["name"]}}
+    return {
+        "user": {"id": int(row["id"]), "username": row["username"], "name": row["name"]}
+    }
 
 
 @router.post("/api/auth/logout")
@@ -200,7 +218,20 @@ def me(request: Request):
     payload = get_current_user(request)
     if not payload:
         return {"user": None}
-    return {"user": {"id": int(payload["uid"]), "username": payload["username"], "name": payload["name"]}}
+    if not isinstance(payload, dict):
+        return {"user": None}
+    uid = payload.get("uid")
+    username = payload.get("username")
+    name = payload.get("name")
+    if uid is None or username is None or name is None:
+        return {"user": None}
+    return {
+        "user": {
+            "id": int(uid),
+            "username": username,
+            "name": name,
+        }
+    }
 
 
 @router.post("/api/auth/refresh")
@@ -221,7 +252,9 @@ def refresh(request: Request, response: Response):
         return JSONResponse(status_code=401, content={"error": "登录已过期"})
     now = int(time.time())
     if int(row["expires_at"]) <= now:
-        cur.execute("DELETE FROM auth_refresh_tokens WHERE token_hash = ?", (token_hash,))
+        cur.execute(
+            "DELETE FROM auth_refresh_tokens WHERE token_hash = ?", (token_hash,)
+        )
         conn.commit()
         ck = cookie_kwargs(max_age_seconds=0)
         response.set_cookie("refresh_token", value="", **ck)
@@ -232,7 +265,9 @@ def refresh(request: Request, response: Response):
         (int(row["user_id"]),),
     ).fetchone()
     if not user:
-        cur.execute("DELETE FROM auth_refresh_tokens WHERE token_hash = ?", (token_hash,))
+        cur.execute(
+            "DELETE FROM auth_refresh_tokens WHERE token_hash = ?", (token_hash,)
+        )
         conn.commit()
         ck = cookie_kwargs(max_age_seconds=0)
         response.set_cookie("refresh_token", value="", **ck)
@@ -251,11 +286,21 @@ def refresh(request: Request, response: Response):
     )
     conn.commit()
 
-    token = _issue_token(int(user["id"]), user["username"], user["name"], ACCESS_TOKEN_TTL_SECONDS)
-    response.set_cookie("token", token, **cookie_kwargs(max_age_seconds=ACCESS_TOKEN_TTL_SECONDS))
+    token = _issue_token(
+        int(user["id"]), user["username"], user["name"], ACCESS_TOKEN_TTL_SECONDS
+    )
+    response.set_cookie(
+        "token", token, **cookie_kwargs(max_age_seconds=ACCESS_TOKEN_TTL_SECONDS)
+    )
     response.set_cookie(
         "refresh_token",
         new_refresh,
         **cookie_kwargs(max_age_seconds=REFRESH_TOKEN_TTL_SECONDS),
     )
-    return {"user": {"id": int(user["id"]), "username": user["username"], "name": user["name"]}}
+    return {
+        "user": {
+            "id": int(user["id"]),
+            "username": user["username"],
+            "name": user["name"],
+        }
+    }

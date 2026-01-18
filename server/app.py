@@ -46,6 +46,8 @@ from .db import run_migrations, DB_FILE
 from .files import router as files_router
 from .melsave import router as melsave_router
 from .tutorials import router as tutorials_router
+from .comments import router as comments_router
+from .notifications_api import router as notifications_router
 
 
 app = FastAPI()
@@ -63,7 +65,12 @@ def _startup():
     logger = logging.getLogger("msut.app")
     run_migrations()
     try:
-        logger.info("startup complete: DATA_DIR=%s DB=%s HTTPS_ENABLED=%s", os.getenv("DATA_DIR"), str(DB_FILE), os.getenv("HTTPS_ENABLED"))
+        logger.info(
+            "startup complete: DATA_DIR=%s DB=%s HTTPS_ENABLED=%s",
+            os.getenv("DATA_DIR"),
+            str(DB_FILE),
+            os.getenv("HTTPS_ENABLED"),
+        )
     except Exception:
         pass
 
@@ -74,7 +81,9 @@ async def security_headers(request: Request, call_next: Callable):
     response: Response = await call_next(request)
     # mimic basic helmet config: HSTS enabled when https enabled
     if is_https_enabled():
-        response.headers.setdefault("Strict-Transport-Security", "max-age=15552000; includeSubDomains")
+        response.headers.setdefault(
+            "Strict-Transport-Security", "max-age=15552000; includeSubDomains"
+        )
     # Allow static cross-origin resource loading (disable CORP akin to helmet crossOriginResourcePolicy: false)
     # We simply do not set CORP header.
     return response
@@ -82,7 +91,11 @@ async def security_headers(request: Request, call_next: Callable):
 
 # Static files for uploads (public)
 uploads_path = Path(__file__).resolve().parent / "uploads"
-app.mount("/uploads", StaticFiles(directory=str(uploads_path), html=False, check_dir=True), name="uploads")
+app.mount(
+    "/uploads",
+    StaticFiles(directory=str(uploads_path), html=False, check_dir=True),
+    name="uploads",
+)
 
 
 # Routers
@@ -91,6 +104,8 @@ app.include_router(files_router)
 app.include_router(melsave_router)
 app.include_router(agent_router)
 app.include_router(tutorials_router)
+app.include_router(comments_router)
+app.include_router(notifications_router)
 
 
 @app.get("/api/private/ping")

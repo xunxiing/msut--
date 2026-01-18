@@ -5,7 +5,7 @@ Scope: This AGENTS.md applies to the entire repository.
 ## Backend Overview
 - The backend has been fully migrated to Python/FastAPI. Do NOT re-enable the legacy Node/Express implementation under `server/src` or `server/dist`.
 - App entry: `server/app.py`
-- Routes: defined in `server/auth.py`, `server/files.py`, `server/melsave.py`, `server/tutorials.py` (tutorial docs + RAG), and `server/agent_api.py` (agent chat + melsave tool calls).
+- Routes: defined in `server/auth.py`, `server/files.py`, `server/melsave.py`, `server/tutorials.py` (tutorial docs + RAG), `server/agent_api.py` (agent chat + melsave tool calls), and `server/notifications_api.py`.
 - DB/migrations: `server/db.py` (SQLite, file at `server/data.sqlite`)
 - Static uploads: `server/uploads/` mounted at `/uploads`
 - Utilities: `server/utils.py` (cookie options, boolean env parsing, slug/nanoid)
@@ -29,7 +29,10 @@ Additional tool routes (non-breaking additions):
   - `GET /api/resources/likes?ids=1,2,3` → `{ items: [{ id, likes, liked }] }`
   - `POST /api/resources/:id/like` → like a resource (idempotent)
   - `DELETE /api/resources/:id/like` → remove like
- - Watermark check (anonymous): `POST /api/watermark/check` with multipart `file` (`.melsave`/`.zip`). Returns `{ watermark, length, embedded, matches: [{ fileId, resourceId, resourceSlug, resourceTitle, originalName, urlPath }] }`.
+- Notifications (authenticated):
+  - `GET /api/notifications` → list notifications
+  - `GET /api/notifications/unread` → latest notifications for bell preview
+- Watermark check (anonymous): `POST /api/watermark/check` with multipart `file` (`.melsave`/`.zip`). Returns `{ watermark, length, embedded, matches: [{ fileId, resourceId, resourceSlug, resourceTitle, originalName, urlPath }] }`.
 - Tutorial management (authenticated, per-user):
  - `GET /api/my/tutorials` → `{ items: [{ id, slug, title, description, created_at, updated_at }] }`
  - `PATCH /api/tutorials/:id` → update title/description/content of a tutorial owned by the current user, and refresh its embeddings for RAG

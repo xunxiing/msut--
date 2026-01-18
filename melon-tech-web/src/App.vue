@@ -28,11 +28,13 @@
       <el-menu-item v-if="auth.user" index="/upload" class="nav-item">上传文件</el-menu-item>
 
       <div class="flex-spacer"></div>
+      <NotificationBell v-if="auth.user" class="nav-item" />
       <template v-if="!auth.user">
         <el-menu-item index="/login" class="nav-item">登录</el-menu-item>
         <el-menu-item index="/register" class="nav-item">注册</el-menu-item>
       </template>
       <el-menu-item v-else @click="onLogout" class="nav-item logout-btn">退出</el-menu-item>
+
     </el-menu>
 
     <transition name="drawer">
@@ -87,6 +89,8 @@ import { ref, computed, onMounted, onBeforeUnmount, type Component } from 'vue'
 import { useAuth } from './stores/auth'
 import { useRouter } from 'vue-router'
 import { House, InfoFilled, Connection, Watermelon, Folder, DataAnalysis, Collection, Upload, User, EditPen, SwitchButton } from '@element-plus/icons-vue'
+import NotificationBell from './components/NotificationBell.vue'
+
 
 const auth = useAuth()
 const router = useRouter()
@@ -308,6 +312,15 @@ const onMenuItemClick = async (item: MenuItem) => {
 
 /* 隐藏 Element Plus 横向菜单的“更多”入口（...） */
 .topbar :deep(.el-sub-menu) { display: none !important; }
+
+.topbar :deep(.bell-button) {
+  color: #475569;
+}
+
+.topbar :deep(.bell-button:hover) {
+  color: #0f172a;
+}
+
 
 /* 抽屉淡入背景整体过渡（仅用于透明背景下的轻微渐显） */
 .drawer-enter-active, .drawer-leave-active { transition: opacity .15s ease; }

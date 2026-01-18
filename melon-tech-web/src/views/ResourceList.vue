@@ -8,21 +8,22 @@
       </div>
       <div class="header-actions">
         <el-input
-          v-model="q"
-          placeholder="搜索资源..."
+          v-model="searchModel"
+          :placeholder="activeTab === 'internal' ? '搜索本站资源...' : '搜索外站资源（按名称/文件名）'"
           class="search-input"
           clearable
-          @clear="fetch"
-          @keyup.enter="fetch"
+          @clear="handleSearch"
+          @keyup.enter="handleSearch"
         >
           <template #prefix>
             <el-icon><Search /></el-icon>
           </template>
         </el-input>
-        <el-button type="primary" class="upload-btn" @click="$router.push('/upload')">
+        <el-button v-if="activeTab === 'internal'" type="primary" class="upload-btn" @click="$router.push('/upload')">
           <el-icon><Upload /></el-icon>
           <span>上传文件</span>
         </el-button>
+        <el-button v-else class="refresh-btn" :loading="externalLoading" @click="refreshExternal">刷新外站</el-button>
       </div>
     </div>
 
@@ -102,49 +103,100 @@
         <el-tab-pane label="外站资源（me.loveall.icu）" name="external">
           <div class="external-box">
             <el-alert
-              title="仅获取单个资源信息；下载/预览为外站直连，不会通过本站文件 API 转发。"
+              title="外站资源按日期倒序展示（最新在前）；下载/预览为外站直连，不会通过本站文件 API 转发。"
               type="info"
               show-icon
               :closable="false"
               class="external-alert"
             />
 
-            <div class="external-form">
-              <el-input
-                v-model="externalFile"
-                placeholder="输入文件名（如：资源.zip）"
-                clearable
-                @keyup.enter="fetchExternal"
-              />
-              <el-button type="primary" :loading="externalLoading" @click="fetchExternal">查询</el-button>
+            <div class="external-toolbar">
+              <div class="external-toolbar-left">
+                <el-text class="external-muted">共 {{ externalTotal }} 个资源</el-text>
+              </div>
+              <div class="external-toolbar-right">
+                <el-select v-model="externalPageSize" class="external-page-size">
+                  <el-option :value="12" label="12/页" />
+                  <el-option :value="24" label="24/页" />
+                  <el-option :value="48" label="48/页" />
+                </el-select>
+              </div>
             </div>
 
-            <el-card v-if="externalInfo" class="external-card" shadow="hover">
-              <div class="external-card-body">
-                <div class="external-preview">
-                  <img v-if="externalPreviewSrc" :src="externalPreviewSrc" alt="preview" loading="lazy" />
-                  <div v-else class="external-preview-empty">暂无预览</div>
-                </div>
-
-                <div class="external-info">
-                  <div class="external-title">{{ externalInfo.name || externalInfo.full_name }}</div>
-                  <div class="external-meta">
-                    <span>{{ externalInfo.full_name }}</span>
-                    <span>·</span>
-                    <span>{{ externalInfo.date || '-' }}</span>
-                    <span>·</span>
-                    <span>{{ externalInfo.size || prettySize(externalInfo.size_bytes) }}</span>
-                  </div>
-                  <div class="external-actions">
-                    <el-button @click="goExternalDetail(externalInfo.full_name)">详情</el-button>
-                    <el-button type="primary" @click="openExternalDownload(externalDownloadHref)">下载</el-button>
-                    <el-button v-if="externalPreviewSrc" @click="openExternalPreview(externalPreviewSrc)">预览</el-button>
-                  </div>
+            <div class="external-list" v-loading="externalLoading">
+              <div v-if="externalPaged.length > 0" class="resource-grid">
+                <div
+                  v-for="f in externalPaged"
+                  :key="f.full_name"
+                  class="resource-card-wrapper"
+                  @click="$router.push({ name: 'external-resource', query: { file: f.full_name } })"
+                >
+                  <el-card class="resource-card external-card" shadow="hover">
+                    <div class="card-body">
+                      <div class="card-icon has-cover external-cover">
+                        <template v-if="externalPreviewUrl(f) && !brokenExternalPreviews[f.full_name]">
+                          <img
+                            class="card-cover-image"
+                            :src="externalPreviewUrl(f)"
+                            alt="preview"
+                            loading="lazy"
+                            referrerpolicy="no-referrer"
+                            @error="markExternalPreviewBroken(f.full_name)"
+                          />
+                        </template>
+                        <template v-else>
+                          <div class="external-cover-empty">
+                            <el-icon><Document /></el-icon>
+                          </div>
+                        </template>
+                        <div class="external-badge">外站</div>
+                      </div>
+                      <div class="card-info">
+                        <div class="info-top">
+                          <div class="title-row">
+                            <h3 class="resource-title" :title="f.name || f.full_name">{{ f.name || f.full_name }}</h3>
+                            <div class="author-info-mini">
+                              <span class="external-domain">me.loveall.icu</span>
+                            </div>
+                          </div>
+                          <p class="resource-desc">{{ f.full_name }}</p>
+                        </div>
+                        <div class="info-bottom">
+                          <div class="card-meta">
+                            <span class="date">{{ f.date || '-' }}</span>
+                            <span class="external-size">{{ f.size || prettySize(f.size_bytes) }}</span>
+                            <div class="external-mini-actions" @click.stop>
+                              <el-button size="small" @click="goExternalDetail(f.full_name)">详情</el-button>
+                              <el-button size="small" type="primary" @click="openExternalDownload(externalDownloadUrl(f))">下载</el-button>
+                              <el-button
+                                v-if="externalPreviewUrl(f) && !brokenExternalPreviews[f.full_name]"
+                                size="small"
+                                @click="openExternalPreview(externalPreviewUrl(f))"
+                              >
+                                预览
+                              </el-button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </el-card>
                 </div>
               </div>
-            </el-card>
 
-            <el-empty v-else description="输入文件名后查询" :image-size="160" />
+              <el-empty v-else description="暂无外站资源（或被筛选隐藏）" :image-size="160" />
+
+              <div class="pagination-wrapper" v-if="externalTotal > 0">
+                <el-pagination
+                  background
+                  layout="prev, pager, next"
+                  :page-size="externalPageSize"
+                  :current-page="externalPage"
+                  :total="externalTotal"
+                  @current-change="handleExternalPageChange"
+                />
+              </div>
+            </div>
           </div>
         </el-tab-pane>
       </el-tabs>
@@ -153,16 +205,17 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, Upload, Document, Star, StarFilled } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import { listResources, type ResourceItem } from '../api/resources'
 import { getResourceLikes, likeResource, unlikeResource, type LikeInfo } from '../api/likes'
 import { useAuth } from '../stores/auth'
-import { getMeLoveallResourceInfo, meLoveallDownloadUrl, meLoveallPreviewUrl, type MeLoveallFileInfo } from '../api/meLoveall'
+import { listMeLoveallResources, meLoveallDownloadUrl, meLoveallPreviewUrl, type MeLoveallFileInfo } from '../api/meLoveall'
 
-const q = ref('')
+const internalQ = ref('')
+const externalQ = ref('')
 const items = ref<ResourceItem[]>([])
 const page = ref(1)
 const pageSize = ref(12)
@@ -174,11 +227,19 @@ const router = useRouter()
 
 const activeTab = ref<'internal' | 'external'>('internal')
 
-const externalFile = ref('')
 const externalLoading = ref(false)
-const externalInfo = ref<MeLoveallFileInfo | null>(null)
-const externalPreviewSrc = ref('')
-const externalDownloadHref = ref('')
+const externalAll = ref<MeLoveallFileInfo[]>([])
+const externalPage = ref(1)
+const externalPageSize = ref(24)
+const brokenExternalPreviews = ref<Record<string, true>>({})
+
+const searchModel = computed({
+  get: () => (activeTab.value === 'internal' ? internalQ.value : externalQ.value),
+  set: (v: string) => {
+    if (activeTab.value === 'internal') internalQ.value = v
+    else externalQ.value = v
+  },
+})
 
 function toImageUrl(path?: string | null) {
   if (!path) return ''
@@ -199,15 +260,6 @@ function prettySize(n: number) {
   return `${v.toFixed(1)} ${units[i]}`
 }
 
-function normalizeExternalFileName(raw: string) {
-  const trimmed = String(raw || '').trim()
-  if (!trimmed) return ''
-  const lower = trimmed.toLowerCase()
-  if (lower.endsWith('.zip')) return trimmed
-  if (trimmed.includes('.')) return trimmed
-  return `${trimmed}.zip`
-}
-
 function resolveExternalUrl(raw: string | null) {
   if (!raw) return ''
   try {
@@ -220,7 +272,7 @@ function resolveExternalUrl(raw: string | null) {
 async function fetch() {
   loading.value = true
   try {
-    const data = await listResources({ q: q.value, page: page.value, pageSize: pageSize.value })
+    const data = await listResources({ q: internalQ.value, page: page.value, pageSize: pageSize.value })
     items.value = data.items
     total.value = data.total
     
@@ -238,39 +290,92 @@ async function fetch() {
   }
 }
 
+function handleSearch() {
+  if (activeTab.value === 'internal') {
+    page.value = 1
+    fetch()
+    return
+  }
+  externalPage.value = 1
+}
+
 function handlePageChange(p: number) {
   page.value = p
   fetch()
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
+function parseExternalDate(s: string) {
+  const v = Date.parse(s)
+  return Number.isFinite(v) ? v : 0
+}
+
+const externalFiltered = computed(() => {
+  const q = externalQ.value.trim().toLowerCase()
+  const sorted = [...externalAll.value].sort((a, b) => {
+    const da = parseExternalDate(a.date || '')
+    const db = parseExternalDate(b.date || '')
+    if (da !== db) return db - da
+    return String(a.full_name || '').localeCompare(String(b.full_name || ''), 'zh-Hans-CN')
+  })
+  if (!q) return sorted
+  return sorted.filter(f => {
+    const n = String(f.name || '').toLowerCase()
+    const fn = String(f.full_name || '').toLowerCase()
+    return n.includes(q) || fn.includes(q)
+  })
+})
+
+const externalTotal = computed(() => externalFiltered.value.length)
+
+const externalPaged = computed(() => {
+  const start = (externalPage.value - 1) * externalPageSize.value
+  return externalFiltered.value.slice(start, start + externalPageSize.value)
+})
+
+function handleExternalPageChange(p: number) {
+  externalPage.value = p
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+function externalPreviewUrl(f: MeLoveallFileInfo) {
+  // Prefer the API preview endpoint because it URL-encodes filenames and is less likely
+  // to be blocked by hotlink rules on static preview paths.
+  return meLoveallPreviewUrl(f.full_name)
+}
+
+function externalDownloadUrl(f: MeLoveallFileInfo) {
+  return resolveExternalUrl(f.download_url) || meLoveallDownloadUrl(f.full_name)
+}
+
+function markExternalPreviewBroken(fileName: string) {
+  if (!fileName) return
+  if (brokenExternalPreviews.value[fileName]) return
+  brokenExternalPreviews.value = { ...brokenExternalPreviews.value, [fileName]: true }
+}
+
+async function refreshExternal() {
+  externalLoading.value = true
+  try {
+    const r = await listMeLoveallResources()
+    externalAll.value = r.files || []
+    externalPage.value = 1
+  } catch (e: any) {
+    const msg = String(e?.message || '外站列表获取失败')
+    if (msg.toLowerCase().includes('network')) {
+      ElMessage.error('外站网络错误：请检查代理/防火墙或外站服务状态')
+    } else {
+      ElMessage.error(msg)
+    }
+  } finally {
+    externalLoading.value = false
+  }
+}
+
 function formatDate(dateStr: string) {
   if (!dateStr) return ''
   const date = new Date(dateStr)
   return date.toLocaleDateString()
-}
-
-async function fetchExternal() {
-  const fileName = normalizeExternalFileName(externalFile.value)
-  if (!fileName) {
-    ElMessage.warning('请输入文件名')
-    return
-  }
-
-  externalLoading.value = true
-  externalInfo.value = null
-  externalPreviewSrc.value = ''
-  externalDownloadHref.value = ''
-  try {
-    const info = await getMeLoveallResourceInfo(fileName)
-    externalInfo.value = info
-    externalPreviewSrc.value = resolveExternalUrl(info.preview_url) || meLoveallPreviewUrl(info.full_name)
-    externalDownloadHref.value = resolveExternalUrl(info.download_url) || meLoveallDownloadUrl(info.full_name)
-  } catch (e: any) {
-    ElMessage.error(e?.message || '外站查询失败')
-  } finally {
-    externalLoading.value = false
-  }
 }
 
 function goExternalDetail(fileName: string) {
@@ -307,7 +412,20 @@ async function toggleLike(id: number) {
   }
 }
 
-onMounted(fetch)
+watch(activeTab, (tab) => {
+  if (tab === 'external' && externalAll.value.length === 0) {
+    refreshExternal()
+  }
+})
+
+watch([externalQ, externalPageSize], () => {
+  if (activeTab.value === 'external') externalPage.value = 1
+})
+
+onMounted(() => {
+  fetch()
+  if (activeTab.value === 'external') refreshExternal()
+})
 </script>
 
 <style scoped>
@@ -391,12 +509,27 @@ onMounted(fetch)
   box-shadow: 0 6px 16px rgba(16, 185, 129, 0.3);
 }
 
+.refresh-btn {
+  border-radius: 10px;
+  padding: 10px 18px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #0f172a;
+  transition: all 0.2s ease;
+}
+
+.refresh-btn:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  transform: translateY(-1px);
+}
+
 .resource-tabs :deep(.el-tabs__header) {
   margin: 0 0 20px 0;
 }
 
 .external-box {
-  max-width: 900px;
+  max-width: 1280px;
   margin: 0 auto;
 }
 
@@ -404,70 +537,89 @@ onMounted(fetch)
   margin-bottom: 16px;
 }
 
-.external-form {
+.external-toolbar {
   display: flex;
-  gap: 12px;
   align-items: center;
-  margin-bottom: 16px;
-}
-
-.external-card-body {
-  display: flex;
+  justify-content: space-between;
   gap: 16px;
-  align-items: stretch;
+  margin: 0 0 14px 0;
 }
 
-.external-preview {
-  width: 160px;
-  height: 110px;
-  border-radius: 12px;
-  overflow: hidden;
-  background: #0f172a;
-  flex-shrink: 0;
+.external-muted {
+  color: #64748b;
+}
+
+.external-page-size {
+  width: 110px;
+}
+
+.external-list {
+  border-radius: 16px;
+}
+
+.resource-card.external-card {
+  border-color: rgba(99, 102, 241, 0.18);
+}
+
+.resource-card.external-card:hover {
+  border-color: rgba(99, 102, 241, 0.35);
+  box-shadow: 0 22px 44px -14px rgba(79, 70, 229, 0.18);
+}
+
+.card-icon.external-cover {
+  background: radial-gradient(120px 120px at 30% 30%, rgba(99, 102, 241, 0.55), rgba(15, 23, 42, 1));
+  color: #e0e7ff;
+  position: relative;
+}
+
+.external-cover-empty {
+  width: 100%;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
+  font-size: 44px;
+  opacity: 0.85;
 }
 
-.external-preview img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
+.external-badge {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.65);
+  color: #e0e7ff;
+  border: 1px solid rgba(224, 231, 255, 0.22);
+  backdrop-filter: blur(6px);
 }
 
-.external-preview-empty {
-  color: #e5e7eb;
-  font-size: 13px;
-}
-
-.external-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.external-title {
-  font-weight: 700;
-  color: #0f172a;
-  margin-bottom: 6px;
+.external-domain {
+  font-size: 12px;
+  color: #4f46e5;
+  background: rgba(79, 70, 229, 0.08);
+  border: 1px solid rgba(79, 70, 229, 0.18);
+  padding: 3px 10px;
+  border-radius: 999px;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-.external-meta {
-  color: #64748b;
-  font-size: 13px;
+.external-size {
+  font-size: 12px;
+  color: #0f172a;
+  background: rgba(15, 23, 42, 0.04);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.external-mini-actions {
   display: flex;
   gap: 8px;
-  flex-wrap: wrap;
-  margin-bottom: 12px;
-}
-
-.external-actions {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  margin-left: auto;
 }
 
 .resource-grid {

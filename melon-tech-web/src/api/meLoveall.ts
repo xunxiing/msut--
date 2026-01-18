@@ -10,6 +10,10 @@ export type MeLoveallFileInfo = {
   download_url: string | null
 }
 
+export type MeLoveallListResponse =
+  | { success: true; count: number; files: MeLoveallFileInfo[] }
+  | { success: false; error: string }
+
 export type MeLoveallInfoResponse =
   | { success: true; file: MeLoveallFileInfo }
   | { success: false; error: string }
@@ -42,3 +46,14 @@ export async function getMeLoveallResourceInfo(fileName: string) {
   throw new Error(data.error || '外站资源不存在')
 }
 
+export async function listMeLoveallResources() {
+  const { data } = await axios.get<MeLoveallListResponse>(API_BASE, {
+    params: { action: 'list' },
+  })
+
+  if (!data || typeof data !== 'object') {
+    throw new Error('外站 API 返回异常')
+  }
+  if (data.success) return { count: data.count, files: data.files || [] }
+  throw new Error(data.error || '外站资源列表获取失败')
+}

@@ -28,23 +28,30 @@
                 :prefix-icon="SearchIcon"
               />
             </div>
-            <el-menu
-              :default-active="selectedTutorial ? String(selectedTutorial.id) : ''"
-              class="tutorial-menu"
-              @select="handleSelectTutorial"
-            >
-              <el-menu-item
-                v-for="tutorial in filteredTutorials"
-                :key="tutorial.id"
-                :index="String(tutorial.id)"
+            <div class="tutorial-menu-wrap" ref="listScrollRef" @scroll="onListScroll">
+              <el-skeleton v-if="listLoading && !allTutorials.length" :rows="6" animated class="list-skeleton" />
+              <el-menu
+                v-else
+                :default-active="selectedTutorial ? String(selectedTutorial.id) : ''"
+                class="tutorial-menu"
+                @select="handleSelectTutorial"
               >
-                <template #title>
-                  <div class="menu-item-content">
-                    <span class="item-title">{{ tutorial.title }}</span>
-                  </div>
-                </template>
-              </el-menu-item>
-            </el-menu>
+                <el-menu-item
+                  v-for="tutorial in filteredTutorials"
+                  :key="tutorial.id"
+                  :index="String(tutorial.id)"
+                >
+                  <template #title>
+                    <div class="menu-item-content">
+                      <span class="item-title">{{ tutorial.title }}</span>
+                    </div>
+                  </template>
+                </el-menu-item>
+              </el-menu>
+              <div v-if="listLoadingMore" class="list-loading-more">
+                <el-icon class="loading-icon-small"><Loading /></el-icon>
+              </div>
+            </div>
           </div>
 
           <!-- Right side: Tutorial Viewer -->
@@ -120,7 +127,7 @@
                   关闭
                 </button>
               </div>
-              <div class="mobile-panel-body">
+              <div class="mobile-panel-body" ref="mobileListScrollRef" @scroll="onListScroll">
                 <div class="search-box">
                   <el-input
                     v-model="searchTerm"
@@ -129,23 +136,30 @@
                     :prefix-icon="SearchIcon"
                   />
                 </div>
-                <el-menu
-                  :default-active="selectedTutorial ? String(selectedTutorial.id) : ''"
-                  class="tutorial-menu"
-                  @select="handleSelectTutorial"
-                >
-                  <el-menu-item
-                    v-for="tutorial in filteredTutorials"
-                    :key="tutorial.id"
-                    :index="String(tutorial.id)"
+                <div class="tutorial-menu-wrap mobile">
+                  <el-skeleton v-if="listLoading && !allTutorials.length" :rows="6" animated class="list-skeleton" />
+                  <el-menu
+                    v-else
+                    :default-active="selectedTutorial ? String(selectedTutorial.id) : ''"
+                    class="tutorial-menu"
+                    @select="handleSelectTutorial"
                   >
-                    <template #title>
-                      <div class="menu-item-content">
-                        <span class="item-title">{{ tutorial.title }}</span>
-                      </div>
-                    </template>
-                  </el-menu-item>
-                </el-menu>
+                    <el-menu-item
+                      v-for="tutorial in filteredTutorials"
+                      :key="tutorial.id"
+                      :index="String(tutorial.id)"
+                    >
+                      <template #title>
+                        <div class="menu-item-content">
+                          <span class="item-title">{{ tutorial.title }}</span>
+                        </div>
+                      </template>
+                    </el-menu-item>
+                  </el-menu>
+                  <div v-if="listLoadingMore" class="list-loading-more">
+                    <el-icon class="loading-icon-small"><Loading /></el-icon>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -221,7 +235,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { Search as SearchIcon, Loading } from '@element-plus/icons-vue'
@@ -249,6 +263,16 @@ const tocItems = ref<{ text: string; level: number; slug: string }[]>([])
 const activeChunkId = ref<string | null>(null)
 const scrollContainerRef = ref<HTMLElement | null>(null)
 const tocListRef = ref<HTMLElement | null>(null)
+const listScrollRef = ref<HTMLElement | null>(null)
+const mobileListScrollRef = ref<HTMLElement | null>(null)
+const listPage = ref(1)
+const listTotal = ref(-1)
+const listLoading = ref(false)
+const listLoadingMore = ref(false)
+const searchQuery = ref('')
+const listPageSize = 20
+let searchTimer: number | undefined
+let pendingSearch = false
 
 const newTitle = ref('')
 const newDesc = ref('')
@@ -256,17 +280,8 @@ const newContent = ref('')
 const creating = ref(false)
 const createDialogVisible = ref(false)
 
-const filteredTutorials = computed(() => {
-  if (!searchTerm.value) {
-    return allTutorials.value
-  }
-  const lowerCaseSearch = searchTerm.value.toLowerCase()
-  return allTutorials.value.filter(
-    (t: TutorialItem) =>
-      t.title.toLowerCase().includes(lowerCaseSearch) ||
-      (t.description && t.description.toLowerCase().includes(lowerCaseSearch))
-  )
-})
+const filteredTutorials = computed(() => allTutorials.value)
+const listHasMore = computed(() => listTotal.value < 0 || allTutorials.value.length < listTotal.value)
 
 const renderedMarkdown = computed(() => {
   if (!selectedTutorial.value?.content) return ''
@@ -302,18 +317,107 @@ watch(isMobile, (val) => {
     mobileListOpen.value = false
     mobileTocOpen.value = false
   }
+  nextTick(() => {
+    ensureListScrollable()
+  })
 })
 
-async function fetchAllTutorials() {
+watch(mobileListOpen, (open) => {
+  if (!open) return
+  nextTick(() => {
+    ensureListScrollable()
+  })
+})
+
+watch(searchTerm, (value) => {
+  if (typeof window === 'undefined') return
+  if (searchTimer) {
+    window.clearTimeout(searchTimer)
+  }
+  searchTimer = window.setTimeout(() => {
+    const nextQuery = value.trim()
+    searchQuery.value = nextQuery
+    if (listLoading.value || listLoadingMore.value) {
+      pendingSearch = true
+      return
+    }
+    resetTutorialList()
+    fetchTutorialPage()
+  }, 300)
+})
+
+function resetTutorialList() {
+  listPage.value = 1
+  listTotal.value = -1
+  allTutorials.value = []
+  if (listScrollRef.value) {
+    listScrollRef.value.scrollTop = 0
+  }
+  if (mobileListScrollRef.value) {
+    mobileListScrollRef.value.scrollTop = 0
+  }
+}
+
+function onListScroll(event: Event) {
+  const target = event.target as HTMLElement | null
+  if (!target) return
+  const remaining = target.scrollHeight - target.scrollTop - target.clientHeight
+  if (remaining <= 120) {
+    fetchTutorialPage()
+  }
+}
+
+function ensureListScrollable() {
+  const target = isMobile.value ? mobileListScrollRef.value : listScrollRef.value
+  if (!target || target.clientHeight === 0) return
+  if (target.scrollHeight <= target.clientHeight + 20) {
+    fetchTutorialPage()
+  }
+}
+
+async function fetchTutorialPage() {
+  if (listLoading.value || listLoadingMore.value) return
+  if (listPage.value > 1 && !listHasMore.value) return
+
+  const page = listPage.value
+  if (page === 1) {
+    listLoading.value = true
+  } else {
+    listLoadingMore.value = true
+  }
+
   try {
-    const data = await listTutorials()
-    allTutorials.value = data.items || []
-    // Auto-select the first tutorial if list is not empty
-    if (allTutorials.value.length > 0 && !selectedTutorial.value && allTutorials.value[0]) {
-      handleSelectTutorial(String(allTutorials.value[0].id))
+    const data = await listTutorials({
+      q: searchQuery.value || undefined,
+      page,
+      pageSize: listPageSize,
+    })
+    const items = data.items || []
+    listTotal.value = typeof data.total === 'number' ? data.total : 0
+    if (page === 1) {
+      allTutorials.value = items
+    } else if (items.length) {
+      allTutorials.value = [...allTutorials.value, ...items]
+    }
+    listPage.value = page + 1
+    const firstItem = items[0]
+    if (page === 1 && firstItem && !selectedTutorial.value) {
+      handleSelectTutorial(String(firstItem.id))
     }
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.error || '获取教程列表失败')
+  } finally {
+    listLoading.value = false
+    listLoadingMore.value = false
+    if (pendingSearch) {
+      pendingSearch = false
+      resetTutorialList()
+      fetchTutorialPage()
+      return
+    }
+    nextTick(() => {
+      ensureListScrollable()
+    })
   }
 }
 
@@ -490,7 +594,8 @@ async function onCreateTutorial() {
     newDesc.value = ''
     newContent.value = ''
     createDialogVisible.value = false
-    await fetchAllTutorials() // Refresh list
+    resetTutorialList()
+    await fetchTutorialPage()
     if (data.id) {
       handleSelectTutorial(data.id) // Select the new one
     }
@@ -507,12 +612,17 @@ onMounted(() => {
   if (typeof window !== 'undefined') {
     window.addEventListener('resize', updateIsMobile)
   }
-  fetchAllTutorials()
+  searchQuery.value = searchTerm.value.trim()
+  resetTutorialList()
+  fetchTutorialPage()
 })
 
 onUnmounted(() => {
   if (typeof window !== 'undefined') {
     window.removeEventListener('resize', updateIsMobile)
+  }
+  if (typeof window !== 'undefined' && searchTimer) {
+    window.clearTimeout(searchTimer)
   }
   if (scrollContainerRef.value) {
     scrollContainerRef.value.removeEventListener('scroll', updateActiveSectionOnScroll)
@@ -602,10 +712,28 @@ onUnmounted(() => {
   padding: 12px;
   border-bottom: 1px solid #e5e7eb;
 }
-.tutorial-menu {
+.tutorial-menu-wrap {
   flex: 1;
   overflow-y: auto;
+}
+.tutorial-menu-wrap.mobile {
+  overflow-y: visible;
+}
+.tutorial-menu {
   border-right: none;
+}
+.list-skeleton {
+  padding: 12px;
+}
+.list-loading-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 0 12px;
+}
+.loading-icon-small {
+  font-size: 18px;
+  animation: rotating 1.6s linear infinite;
 }
 .menu-item-content {
   display: flex;

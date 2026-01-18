@@ -16,6 +16,7 @@ from .label.watermark_indexer import (
     canonicalize,
     fnv1a64,
 )
+from .notifications import create_notification
 
 
 router = APIRouter()
@@ -79,7 +80,9 @@ def _require_user_id(request: Request) -> Optional[int]:
         return None
 
 
-def _require_owner(request: Request, resource_id: int) -> Tuple[Optional[int], Optional[str]]:
+def _require_owner(
+    request: Request, resource_id: int
+) -> Tuple[Optional[int], Optional[str]]:
     """
     Ensure the current user is the owner of the given resource.
     Returns (user_id, error_message). When error_message is None, the check passed.
@@ -89,7 +92,9 @@ def _require_owner(request: Request, resource_id: int) -> Tuple[Optional[int], O
         return None, "未登录"
     conn = get_connection()
     cur = conn.cursor()
-    r = cur.execute("SELECT id, created_by FROM resources WHERE id = ?", (resource_id,)).fetchone()
+    r = cur.execute(
+        "SELECT id, created_by FROM resources WHERE id = ?", (resource_id,)
+    ).fetchone()
     if not r:
         return uid, "资源不存在"
     if int(r["created_by"] or 0) != uid:
@@ -98,7 +103,12 @@ def _require_owner(request: Request, resource_id: int) -> Tuple[Optional[int], O
 
 
 @router.post("/api/resources")
-async def create_resource(request: Request, title: Optional[str] = Form(None), description: Optional[str] = Form(None), usage: Optional[str] = Form(None)):
+async def create_resource(
+    request: Request,
+    title: Optional[str] = Form(None),
+    description: Optional[str] = Form(None),
+    usage: Optional[str] = Form(None),
+):
     # Accept both JSON and form payloads for compatibility
     if title is None:
         try:
@@ -128,10 +138,19 @@ async def create_resource(request: Request, title: Optional[str] = Form(None), d
     )
     conn.commit()
     rid = int(info.lastrowid)
-    return {"id": rid, "slug": slug, "title": title, "description": description or "", "usage": usage or "", "shareUrl": _share_url(slug)}
+    return {
+        "id": rid,
+        "slug": slug,
+        "title": title,
+        "description": description or "",
+        "usage": usage or "",
+        "shareUrl": _share_url(slug),
+    }
 
 
-async def _save_upload_atomic(request: Request, file: UploadFile, dest_dir: Path) -> Optional[Path]:
+async def _save_upload_atomic(
+    request: Request, file: UploadFile, dest_dir: Path
+) -> Optional[Path]:
     """Save an uploaded file via a temporary .part file and atomically rename.
     Returns final destination path on success, or None on failure.
     Aborts and cleans up if client disconnects or file exceeds MAX_FILE_SIZE.
@@ -211,6 +230,7 @@ async def upload_to_resource(
     # Debug logging for watermark persistence path
     try:
         import logging as _logging
+
         _logging.getLogger("msut.files").info(
             "upload_to_resource: resourceId=%s saveWatermark_raw=%s files_count=%s",
             resourceId,
@@ -224,11 +244,15 @@ async def upload_to_resource(
         return JSONResponse(status_code=401, content={"error": "未登录"})
     conn = get_connection()
     cur = conn.cursor()
-    res = cur.execute("SELECT id, created_by FROM resources WHERE id = ?", (resourceId,)).fetchone()
+    res = cur.execute(
+        "SELECT id, created_by FROM resources WHERE id = ?", (resourceId,)
+    ).fetchone()
     if not res:
         return JSONResponse(status_code=404, content={"error": "资源不存在"})
     if int(res["created_by"] or 0) != uid:
-        return JSONResponse(status_code=403, content={"error": "无法操作其他用户的资源"})
+        return JSONResponse(
+            status_code=403, content={"error": "无法操作其他用户的资源"}
+        )
     if not files:
         return JSONResponse(status_code=400, content={"error": "没有文件"})
     saved = []
@@ -262,19 +286,23 @@ async def upload_to_resource(
             if _is_image_file(uf.content_type, uf.filename):
                 if first_uploaded_image_id is None:
                     first_uploaded_image_id = file_id
-        # Attempt watermark extraction for .melsave/.zip when requested
+            # Attempt watermark extraction for .melsave/.zip when requested
             try:
                 suffix = str(dest.suffix).lower()
                 if do_wm and suffix in {".melsave", ".zip"}:
                     logger.info(
                         "wm: extracting fileId=%s name=%s suffix=%s",
-                        int(info.lastrowid), uf.filename or dest.name, suffix,
+                        int(info.lastrowid),
+                        uf.filename or dest.name,
+                        suffix,
                     )
                     raw_seq, embedded = extract_sequence_from_melsave(str(dest))
                     seq_canon = canonicalize([str(x) for x in raw_seq])
                     wm_u64 = int(fnv1a64(seq_canon))
                     wm_i64 = _u64_to_i64(wm_u64)
-                    emb_i64 = _u64_to_i64(int(embedded)) if embedded is not None else None
+                    emb_i64 = (
+                        _u64_to_i64(int(embedded)) if embedded is not None else None
+                    )
                     cur.execute(
                         """
                         INSERT OR REPLACE INTO file_watermarks (file_id, watermark_u64, seq_len, embedded_watermark)
@@ -284,19 +312,26 @@ async def upload_to_resource(
                     )
                     logger.info(
                         "wm: saved fileId=%s watermark_u64=%s watermark_i64=%s length=%s embedded=%s embedded_i64=%s",
-                        int(info.lastrowid), wm_u64, wm_i64, int(len(seq_canon)),
+                        int(info.lastrowid),
+                        wm_u64,
+                        wm_i64,
+                        int(len(seq_canon)),
                         embedded if embedded is not None else None,
                         emb_i64,
                     )
                 else:
                     logger.info(
                         "wm: skipped (saveWatermark=%s suffix=%s) fileId=%s",
-                        do_wm, suffix, int(info.lastrowid),
+                        do_wm,
+                        suffix,
+                        int(info.lastrowid),
                     )
             except Exception as ex:
                 # Do not fail the whole upload if watermark extraction fails
                 try:
-                    logger.exception("wm: extract failed fileId=%s error=%s", int(info.lastrowid), ex)
+                    logger.exception(
+                        "wm: extract failed fileId=%s error=%s", int(info.lastrowid), ex
+                    )
                 except Exception:
                     pass
             saved.append(
@@ -310,10 +345,19 @@ async def upload_to_resource(
             )
         # After all files are uploaded, set the cover if it's the first image and no cover exists
         if first_uploaded_image_id is not None:
-            current_cover = cur.execute("SELECT cover_file_id FROM resources WHERE id = ?", (resourceId,)).fetchone()
+            current_cover = cur.execute(
+                "SELECT cover_file_id FROM resources WHERE id = ?", (resourceId,)
+            ).fetchone()
             if current_cover and current_cover["cover_file_id"] is None:
-                cur.execute("UPDATE resources SET cover_file_id = ? WHERE id = ?", (first_uploaded_image_id, resourceId))
-                logger.info("Auto-set cover for resource %s to file %s", resourceId, first_uploaded_image_id)
+                cur.execute(
+                    "UPDATE resources SET cover_file_id = ? WHERE id = ?",
+                    (first_uploaded_image_id, resourceId),
+                )
+                logger.info(
+                    "Auto-set cover for resource %s to file %s",
+                    resourceId,
+                    first_uploaded_image_id,
+                )
 
         conn.commit()
     except Exception:
@@ -397,10 +441,19 @@ async def upload_resource_images(
             )
         # After all files are uploaded, set the cover if it's the first image and no cover exists
         if first_uploaded_image_id is not None:
-            current_cover = cur.execute("SELECT cover_file_id FROM resources WHERE id = ?", (rid,)).fetchone()
+            current_cover = cur.execute(
+                "SELECT cover_file_id FROM resources WHERE id = ?", (rid,)
+            ).fetchone()
             if current_cover and current_cover["cover_file_id"] is None:
-                cur.execute("UPDATE resources SET cover_file_id = ? WHERE id = ?", (first_uploaded_image_id, rid))
-                logger.info("Auto-set cover for resource %s to file %s", rid, first_uploaded_image_id)
+                cur.execute(
+                    "UPDATE resources SET cover_file_id = ? WHERE id = ?",
+                    (first_uploaded_image_id, rid),
+                )
+                logger.info(
+                    "Auto-set cover for resource %s to file %s",
+                    rid,
+                    first_uploaded_image_id,
+                )
 
         conn.commit()
     except Exception:
@@ -427,7 +480,9 @@ async def check_watermark(file: UploadFile = File(...)):
         except Exception:
             pass
         if suffix not in {".melsave", ".zip"}:
-            return JSONResponse(status_code=400, content={"error": "仅支持 .melsave 或 .zip"})
+            return JSONResponse(
+                status_code=400, content={"error": "仅支持 .melsave 或 .zip"}
+            )
         # Save to a temp file for processing
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
             while True:
@@ -458,7 +513,9 @@ async def check_watermark(file: UploadFile = File(...)):
         try:
             logger.info(
                 "wm-check: computed watermark_u64=%s watermark_i64=%s length=%s embedded=%s embedded_i64=%s",
-                wm_u64, wm_i64, length,
+                wm_u64,
+                wm_i64,
+                length,
                 embedded if embedded is not None else None,
                 emb_i64,
             )
@@ -490,7 +547,9 @@ async def check_watermark(file: UploadFile = File(...)):
         matches = [
             {
                 "fileId": int(r["file_id"]),
-                "resourceId": int(r["resource_id"]) if r["resource_id"] is not None else None,
+                "resourceId": int(r["resource_id"])
+                if r["resource_id"] is not None
+                else None,
                 "resourceSlug": r["resource_slug"],
                 "resourceTitle": r["resource_title"],
                 "originalName": r["original_name"],
@@ -499,7 +558,11 @@ async def check_watermark(file: UploadFile = File(...)):
             for r in rows
         ]
         try:
-            logger.info("wm-check: matches=%s fileIds=%s", len(matches), [m.get("fileId") for m in matches])
+            logger.info(
+                "wm-check: matches=%s fileIds=%s",
+                len(matches),
+                [m.get("fileId") for m in matches],
+            )
         except Exception:
             pass
     except Exception:
@@ -574,7 +637,9 @@ def list_my_resources(request: Request):
                 "created_at": r["created_at"],
                 "files": files_out,
                 "imageFiles": image_files_out,
-                "coverFileId": int(cover_file_id) if cover_file_id is not None else None,
+                "coverFileId": int(cover_file_id)
+                if cover_file_id is not None
+                else None,
                 "coverUrlPath": cover_url_path,
                 "shareUrl": _share_url(r["slug"]),
             }
@@ -633,17 +698,26 @@ def list_resource_images(request: Request, rid: int):
 
 
 @router.patch("/api/resources/{rid}")
-async def update_resource(request: Request, rid: int, description: Optional[str] = Form(None), usage: Optional[str] = Form(None)):
+async def update_resource(
+    request: Request,
+    rid: int,
+    description: Optional[str] = Form(None),
+    usage: Optional[str] = Form(None),
+):
     uid = _require_user_id(request)
     if uid is None:
         return JSONResponse(status_code=401, content={"error": "未登录"})
     conn = get_connection()
     cur = conn.cursor()
-    r = cur.execute("SELECT id, slug, created_by FROM resources WHERE id = ?", (rid,)).fetchone()
+    r = cur.execute(
+        "SELECT id, slug, created_by FROM resources WHERE id = ?", (rid,)
+    ).fetchone()
     if not r:
         return JSONResponse(status_code=404, content={"error": "资源不存在"})
     if int(r["created_by"] or 0) != uid:
-        return JSONResponse(status_code=403, content={"error": "无法操作其他用户的资源"})
+        return JSONResponse(
+            status_code=403, content={"error": "无法操作其他用户的资源"}
+        )
     # Accept JSON body as well as form fields
     if description is None and usage is None:
         try:
@@ -666,13 +740,18 @@ async def update_resource(request: Request, rid: int, description: Optional[str]
     if not updates:
         return JSONResponse(status_code=400, content={"error": "没有需要更新的字段"})
     params.append(rid)
-    cur.execute(f"UPDATE resources SET {', '.join(updates)} WHERE id = ?", tuple(params))
+    cur.execute(
+        f"UPDATE resources SET {', '.join(updates)} WHERE id = ?", tuple(params)
+    )
     conn.commit()
     updated = cur.execute(
         "SELECT id, slug, title, description, usage, created_at FROM resources WHERE id = ?",
         (rid,),
     ).fetchone()
-    return {**{k: updated[k] for k in updated.keys()}, "shareUrl": _share_url(updated["slug"]) }
+    return {
+        **{k: updated[k] for k in updated.keys()},
+        "shareUrl": _share_url(updated["slug"]),
+    }
 
 
 @router.delete("/api/resources/{rid}")
@@ -682,12 +761,18 @@ def delete_resource(request: Request, rid: int):
         return JSONResponse(status_code=401, content={"error": "未登录"})
     conn = get_connection()
     cur = conn.cursor()
-    r = cur.execute("SELECT id, created_by FROM resources WHERE id = ?", (rid,)).fetchone()
+    r = cur.execute(
+        "SELECT id, created_by FROM resources WHERE id = ?", (rid,)
+    ).fetchone()
     if not r:
         return JSONResponse(status_code=404, content={"error": "资源不存在"})
     if int(r["created_by"] or 0) != uid:
-        return JSONResponse(status_code=403, content={"error": "无法操作其他用户的资源"})
-    files = cur.execute("SELECT stored_name FROM resource_files WHERE resource_id = ?", (rid,)).fetchall()
+        return JSONResponse(
+            status_code=403, content={"error": "无法操作其他用户的资源"}
+        )
+    files = cur.execute(
+        "SELECT stored_name FROM resource_files WHERE resource_id = ?", (rid,)
+    ).fetchall()
     # Transaction-like operations
     cur.execute("DELETE FROM resource_files WHERE resource_id = ?", (rid,))
     cur.execute("DELETE FROM resources WHERE id = ?", (rid,))
@@ -740,7 +825,9 @@ def get_file_likes(request: Request, ids: str = Query(default="")):
         liked_set = {int(r["file_id"]) for r in liked_rows}
     items = []
     for fid in file_ids:
-        items.append({"id": fid, "likes": int(count_map.get(fid, 0)), "liked": fid in liked_set})
+        items.append(
+            {"id": fid, "likes": int(count_map.get(fid, 0)), "liked": fid in liked_set}
+        )
     return {"items": items}
 
 
@@ -751,13 +838,20 @@ def like_file(request: Request, fid: int):
         return JSONResponse(status_code=401, content={"error": "未登录"})
     conn = get_connection()
     cur = conn.cursor()
-    exists = cur.execute("SELECT id FROM resource_files WHERE id = ?", (fid,)).fetchone()
+    exists = cur.execute(
+        "SELECT id FROM resource_files WHERE id = ?", (fid,)
+    ).fetchone()
     if not exists:
         return JSONResponse(status_code=404, content={"error": "文件不存在"})
     # idempotent like
-    cur.execute("INSERT OR IGNORE INTO resource_file_likes (file_id, user_id) VALUES (?, ?)", (fid, uid))
+    cur.execute(
+        "INSERT OR IGNORE INTO resource_file_likes (file_id, user_id) VALUES (?, ?)",
+        (fid, uid),
+    )
     conn.commit()
-    total = cur.execute("SELECT COUNT(1) as c FROM resource_file_likes WHERE file_id = ?", (fid,)).fetchone()["c"]
+    total = cur.execute(
+        "SELECT COUNT(1) as c FROM resource_file_likes WHERE file_id = ?", (fid,)
+    ).fetchone()["c"]
     return {"liked": True, "likes": int(total)}
 
 
@@ -768,12 +862,18 @@ def unlike_file(request: Request, fid: int):
         return JSONResponse(status_code=401, content={"error": "未登录"})
     conn = get_connection()
     cur = conn.cursor()
-    exists = cur.execute("SELECT id FROM resource_files WHERE id = ?", (fid,)).fetchone()
+    exists = cur.execute(
+        "SELECT id FROM resource_files WHERE id = ?", (fid,)
+    ).fetchone()
     if not exists:
         return JSONResponse(status_code=404, content={"error": "文件不存在"})
-    cur.execute("DELETE FROM resource_file_likes WHERE file_id = ? AND user_id = ?", (fid, uid))
+    cur.execute(
+        "DELETE FROM resource_file_likes WHERE file_id = ? AND user_id = ?", (fid, uid)
+    )
     conn.commit()
-    total = cur.execute("SELECT COUNT(1) as c FROM resource_file_likes WHERE file_id = ?", (fid,)).fetchone()["c"]
+    total = cur.execute(
+        "SELECT COUNT(1) as c FROM resource_file_likes WHERE file_id = ?", (fid,)
+    ).fetchone()["c"]
     return {"liked": False, "likes": int(total)}
 
 
@@ -827,7 +927,11 @@ def get_resource(slug: str):
 
 
 @router.get("/api/resources")
-def list_resources(q: str = Query(default=""), page: int = Query(default=1), pageSize: int = Query(default=12)):
+def list_resources(
+    q: str = Query(default=""),
+    page: int = Query(default=1),
+    pageSize: int = Query(default=12),
+):
     q = (q or "").strip()
     page = max(1, int(page or 1))
     page_size = min(50, max(1, int(pageSize or 12)))
@@ -837,7 +941,9 @@ def list_resources(q: str = Query(default=""), page: int = Query(default=1), pag
     where = "WHERE r.title LIKE ? OR r.description LIKE ?" if q else ""
     args: List = [f"%{q}%", f"%{q}%"] if q else []
     # Use the same table alias as in the items query to avoid 'no such column: r.title'
-    total = cur.execute(f"SELECT COUNT(1) as c FROM resources r {where}", tuple(args)).fetchone()["c"]
+    total = cur.execute(
+        f"SELECT COUNT(1) as c FROM resources r {where}", tuple(args)
+    ).fetchone()["c"]
     items = cur.execute(
         f"""
         SELECT
@@ -912,6 +1018,7 @@ async def set_resource_cover(
 
 # ----- Resource likes (collections) -----
 
+
 @router.get("/api/resources/likes")
 def get_resource_likes(request: Request, ids: str = Query(default="")):
     ids = (ids or "").strip()
@@ -941,7 +1048,9 @@ def get_resource_likes(request: Request, ids: str = Query(default="")):
         liked_set = {int(r["resource_id"]) for r in liked_rows}
     items = []
     for rid in resource_ids:
-        items.append({"id": rid, "likes": int(count_map.get(rid, 0)), "liked": rid in liked_set})
+        items.append(
+            {"id": rid, "likes": int(count_map.get(rid, 0)), "liked": rid in liked_set}
+        )
     return {"items": items}
 
 
@@ -955,9 +1064,34 @@ def like_resource(request: Request, rid: int):
     exists = cur.execute("SELECT id FROM resources WHERE id = ?", (rid,)).fetchone()
     if not exists:
         return JSONResponse(status_code=404, content={"error": "资源不存在"})
-    cur.execute("INSERT OR IGNORE INTO resource_likes (resource_id, user_id) VALUES (?, ?)", (rid, uid))
-    conn.commit()
-    total = cur.execute("SELECT COUNT(1) as c FROM resource_likes WHERE resource_id = ?", (rid,)).fetchone()["c"]
+    already_liked = cur.execute(
+        "SELECT 1 FROM resource_likes WHERE resource_id = ? AND user_id = ?",
+        (rid, uid),
+    ).fetchone()
+    if not already_liked:
+        cur.execute(
+            "INSERT INTO resource_likes (resource_id, user_id) VALUES (?, ?)",
+            (rid, uid),
+        )
+        try:
+            owner_row = cur.execute(
+                "SELECT created_by, title FROM resources WHERE id = ?",
+                (rid,),
+            ).fetchone()
+            if owner_row and owner_row["created_by"] is not None:
+                create_notification(
+                    user_id=int(owner_row["created_by"]),
+                    actor_id=uid,
+                    notif_type="resource_like",
+                    resource_id=rid,
+                    content=owner_row["title"],
+                )
+        except Exception:
+            pass
+        conn.commit()
+    total = cur.execute(
+        "SELECT COUNT(1) as c FROM resource_likes WHERE resource_id = ?", (rid,)
+    ).fetchone()["c"]
     return {"liked": True, "likes": int(total)}
 
 
@@ -971,9 +1105,13 @@ def unlike_resource(request: Request, rid: int):
     exists = cur.execute("SELECT id FROM resources WHERE id = ?", (rid,)).fetchone()
     if not exists:
         return JSONResponse(status_code=404, content={"error": "资源不存在"})
-    cur.execute("DELETE FROM resource_likes WHERE resource_id = ? AND user_id = ?", (rid, uid))
+    cur.execute(
+        "DELETE FROM resource_likes WHERE resource_id = ? AND user_id = ?", (rid, uid)
+    )
     conn.commit()
-    total = cur.execute("SELECT COUNT(1) as c FROM resource_likes WHERE resource_id = ?", (rid,)).fetchone()["c"]
+    total = cur.execute(
+        "SELECT COUNT(1) as c FROM resource_likes WHERE resource_id = ?", (rid,)
+    ).fetchone()["c"]
     return {"liked": False, "likes": int(total)}
 
 
@@ -981,13 +1119,16 @@ def unlike_resource(request: Request, rid: int):
 def download_file(fid: int):
     conn = get_connection()
     cur = conn.cursor()
-    row = cur.execute("SELECT original_name, stored_name FROM resource_files WHERE id = ?", (fid,)).fetchone()
+    row = cur.execute(
+        "SELECT original_name, stored_name FROM resource_files WHERE id = ?", (fid,)
+    ).fetchone()
     if not row:
         return JSONResponse(status_code=404, content={"error": "文件不存在"})
     path = UPLOAD_DIR / row["stored_name"]
     if not path.exists():
         return JSONResponse(status_code=404, content={"error": "文件丢了"})
     from urllib.parse import quote
+
     filename = row["original_name"]
     safe_name = _safe_ascii_filename(filename)
     headers = {

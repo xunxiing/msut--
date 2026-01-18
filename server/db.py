@@ -194,8 +194,56 @@ def run_migrations(conn: Optional[sqlite3.Connection] = None) -> None:
               FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             );
 
+            -- 资源评论（支持嵌套）
+            CREATE TABLE IF NOT EXISTS resource_comments (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              resource_id INTEGER NOT NULL,
+              user_id INTEGER NOT NULL,
+              parent_id INTEGER,
+              content TEXT NOT NULL,
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+              FOREIGN KEY (resource_id) REFERENCES resources(id) ON DELETE CASCADE,
+              FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+              FOREIGN KEY (parent_id) REFERENCES resource_comments(id) ON DELETE CASCADE
+            );
+
+            CREATE TRIGGER IF NOT EXISTS trg_resource_comments_updated_at
+            AFTER UPDATE ON resource_comments
+            FOR EACH ROW BEGIN
+              UPDATE resource_comments SET updated_at = datetime('now') WHERE id = OLD.id;
+            END;
+
+            CREATE TABLE IF NOT EXISTS resource_comment_likes (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              comment_id INTEGER NOT NULL,
+              user_id INTEGER NOT NULL,
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              UNIQUE(comment_id, user_id),
+              FOREIGN KEY (comment_id) REFERENCES resource_comments(id) ON DELETE CASCADE,
+              FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+
+            -- 通知
+            CREATE TABLE IF NOT EXISTS notifications (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              user_id INTEGER NOT NULL,
+              actor_id INTEGER NOT NULL,
+              type TEXT NOT NULL,
+              resource_id INTEGER,
+              comment_id INTEGER,
+              content TEXT,
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+              FOREIGN KEY (actor_id) REFERENCES users(id) ON DELETE CASCADE,
+              FOREIGN KEY (resource_id) REFERENCES resources(id) ON DELETE CASCADE,
+              FOREIGN KEY (comment_id) REFERENCES resource_comments(id) ON DELETE CASCADE
+            );
+
             -- 独立教程内容（用于文档系统 + RAG）
             CREATE TABLE IF NOT EXISTS tutorials (
+
+
               id INTEGER PRIMARY KEY AUTOINCREMENT,
               slug TEXT NOT NULL UNIQUE,
               title TEXT NOT NULL,
@@ -227,38 +275,16 @@ def run_migrations(conn: Optional[sqlite3.Connection] = None) -> None:
         )
         cur.executescript(
             """
+            CREATE INDEX IF NOT EXISTS idx_resource_comments_resource ON resource_comments(resource_id);
+            CREATE INDEX IF NOT EXISTS idx_resource_comments_parent ON resource_comments(parent_id);
+            CREATE INDEX IF NOT EXISTS idx_resource_comment_likes_comment ON resource_comment_likes(comment_id);
+            CREATE INDEX IF NOT EXISTS idx_resource_comment_likes_user ON resource_comment_likes(user_id);
+            CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
+            CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at);
             CREATE INDEX IF NOT EXISTS idx_tutorials_slug ON tutorials(slug);
-            CREATE INDEX IF NOT EXISTS idx_tutorial_embeddings_tutorial ON tutorial_embeddings(tutorial_id);
-            """
-        )
-        # Extra columns for resources (idempotent, added for image cover support)
-        cur.execute("PRAGMA table_info(resources)")
-        res_cols = [row["name"] for row in cur.fetchall() or []]
-        if "cover_file_id" not in res_cols:
-            cur.execute("ALTER TABLE resources ADD COLUMN cover_file_id INTEGER")
-        # Extra columns for tutorial chunk optimization (idempotent)
-        cur.execute("PRAGMA table_info(tutorial_embeddings)")
-        cols = [row["name"] for row in cur.fetchall() or []]
-        if "chunk_title" not in cols:
-            cur.execute("ALTER TABLE tutorial_embeddings ADD COLUMN chunk_title TEXT")
-        if "optimized_chunk_text" not in cols:
-            cur.execute("ALTER TABLE tutorial_embeddings ADD COLUMN optimized_chunk_text TEXT")
-        if "optimized_at" not in cols:
-            cur.execute("ALTER TABLE tutorial_embeddings ADD COLUMN optimized_at TEXT")
-        # Agent chat storage (sessions, runs, messages)
-        cur.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS agent_sessions (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              user_id INTEGER NOT NULL,
-              title TEXT,
-              last_status TEXT DEFAULT 'idle',
-              last_error TEXT,
-              created_at TEXT NOT NULL DEFAULT (datetime('now')),
-              updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-              FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-            );
 
+            CREATE INDEX IF NOT EXISTS idx_tutorial_embeddings_tutorial ON tutorial_embeddings(tutorial_id);
+            
             CREATE TRIGGER IF NOT EXISTS trg_agent_sessions_updated_at
             AFTER UPDATE ON agent_sessions
             FOR EACH ROW BEGIN

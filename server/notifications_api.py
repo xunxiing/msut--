@@ -67,7 +67,7 @@ def list_unread(request: Request):
     conn = get_connection()
     _cleanup_old(conn)
     total = conn.execute(
-        "SELECT COUNT(1) as c FROM notifications WHERE user_id = ?",
+        "SELECT COUNT(1) as c FROM notifications WHERE user_id = ? AND read_at IS NULL",
         (uid,),
     ).fetchone()["c"]
     rows = conn.execute(
@@ -88,3 +88,17 @@ def list_unread(request: Request):
     ).fetchall()
     items = [build_notification_payload(dict(r)) for r in rows]
     return {"items": items, "total": int(total)}
+
+
+@router.post("/api/notifications/read-all")
+def mark_all_read(request: Request):
+    uid = _require_user_id(request)
+    if uid is None:
+        return JSONResponse(status_code=401, content={"error": "隆鞠村"})
+    conn = get_connection()
+    _cleanup_old(conn)
+    conn.execute(
+        "UPDATE notifications SET read_at = datetime('now') WHERE user_id = ? AND read_at IS NULL",
+        (uid,),
+    )
+    return {"ok": True}

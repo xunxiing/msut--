@@ -31,7 +31,8 @@ Additional tool routes (non-breaking additions):
   - `DELETE /api/resources/:id/like` → remove like
 - Notifications (authenticated):
   - `GET /api/notifications` → list notifications
-  - `GET /api/notifications/unread` → latest notifications for bell preview
+  - `GET /api/notifications/unread` → latest notifications for bell preview (`total` is unread count)
+  - `POST /api/notifications/read-all` → mark all notifications as read
 - Watermark check (anonymous): `POST /api/watermark/check` with multipart `file` (`.melsave`/`.zip`). Returns `{ watermark, length, embedded, matches: [{ fileId, resourceId, resourceSlug, resourceTitle, originalName, urlPath }] }`.
 - Tutorial management (authenticated, per-user):
  - `GET /api/my/tutorials` → `{ items: [{ id, slug, title, description, created_at, updated_at }] }`

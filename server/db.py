@@ -233,6 +233,7 @@ def run_migrations(conn: Optional[sqlite3.Connection] = None) -> None:
               resource_id INTEGER,
               comment_id INTEGER,
               content TEXT,
+              read_at TEXT,
               created_at TEXT NOT NULL DEFAULT (datetime('now')),
               FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
               FOREIGN KEY (actor_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -273,6 +274,15 @@ def run_migrations(conn: Optional[sqlite3.Connection] = None) -> None:
             );
             """
         )
+
+        # Non-destructive schema evolution: add columns if missing.
+        try:
+            cols = [r["name"] for r in conn.execute("PRAGMA table_info(notifications)").fetchall()]
+            if "read_at" not in cols:
+                conn.execute("ALTER TABLE notifications ADD COLUMN read_at TEXT")
+        except Exception:
+            pass
+
         cur.executescript(
             """
             CREATE INDEX IF NOT EXISTS idx_resource_comments_resource ON resource_comments(resource_id);
@@ -281,6 +291,7 @@ def run_migrations(conn: Optional[sqlite3.Connection] = None) -> None:
             CREATE INDEX IF NOT EXISTS idx_resource_comment_likes_user ON resource_comment_likes(user_id);
             CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
             CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at);
+            CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, read_at);
             CREATE INDEX IF NOT EXISTS idx_tutorials_slug ON tutorials(slug);
 
             CREATE INDEX IF NOT EXISTS idx_tutorial_embeddings_tutorial ON tutorial_embeddings(tutorial_id);

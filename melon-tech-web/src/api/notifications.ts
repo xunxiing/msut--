@@ -37,3 +37,8 @@ export async function listUnreadNotifications() {
   const { data } = await http.get('/notifications/unread')
   return data as { items: NotificationItem[]; total: number }
 }
+
+export async function markAllNotificationsRead() {
+  const { data } = await http.post('/notifications/read-all')
+  return data as { ok: boolean }
+}

@@ -1,5 +1,5 @@
 <template>
-  <div class="resource-detail-container">
+  <div class="resource-detail-container" v-if="data">
     <div class="breadcrumb-wrapper">
       <el-breadcrumb separator="/">
         <el-breadcrumb-item :to="{ path: '/resources' }">资源库</el-breadcrumb-item>
@@ -7,30 +7,22 @@
       </el-breadcrumb>
     </div>
 
-    <div v-if="loading" class="loading-skeleton">
-      <el-skeleton animated :rows="6" />
-    </div>
-
-    <div v-else-if="error" class="error-card">
-      <el-alert :title="error" type="error" show-icon />
-    </div>
-
-    <div v-else-if="info" class="detail-header-card">
+    <div class="detail-header-card">
       <div class="header-main">
         <div class="icon-wrapper">
           <el-icon><Link /></el-icon>
         </div>
         <div class="header-info">
-          <h1 class="resource-title">{{ info.name || info.full_name }}</h1>
+          <h1 class="resource-title">{{ data.name || data.full_name }}</h1>
           <p class="resource-desc">来源：me.loveall.icu（外站直连，不经过本站文件 API）</p>
           <div class="header-meta">
             <span class="meta-item">
               <el-icon><Calendar /></el-icon>
-              {{ info.date || '-' }}
+              {{ data.date || '-' }}
             </span>
             <span class="meta-item">
               <el-icon><Document /></el-icon>
-              {{ prettySize(info.size_bytes) }}
+              {{ prettySize(data.size_bytes) }}
             </span>
           </div>
         </div>
@@ -57,7 +49,7 @@
       </div>
     </div>
 
-    <div v-if="info" class="detail-content">
+    <div class="detail-content">
       <el-row :gutter="24" class="top-row">
         <el-col :xs="24" :md="16">
           <div class="files-section">
@@ -69,8 +61,8 @@
                     <el-icon><Paperclip /></el-icon>
                   </div>
                   <div class="file-info">
-                    <div class="file-name" :title="info.full_name">{{ info.full_name }}</div>
-                    <div class="file-meta">{{ prettySize(info.size_bytes) }} · ZIP</div>
+                    <div class="file-name" :title="data.full_name">{{ data.full_name }}</div>
+                    <div class="file-meta">{{ prettySize(data.size_bytes) }} · ZIP</div>
                   </div>
                 </div>
                 <el-button class="download-btn-large" @click="openExternalDownload(downloadHref)">下载</el-button>
@@ -94,6 +86,14 @@
       </el-row>
     </div>
   </div>
+
+  <div v-else-if="error" class="error-card">
+    <el-alert :title="error" type="error" show-icon />
+  </div>
+
+  <div v-else class="loading-skeleton">
+    <el-skeleton animated :rows="6" />
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -101,18 +101,13 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Calendar, CopyDocument, Document, Download, Link, Paperclip } from '@element-plus/icons-vue'
-import {
-  getMeLoveallResourceInfo,
-  meLoveallDownloadUrl,
-  meLoveallPreviewUrl,
-  type MeLoveallFileInfo,
-} from '../api/meLoveall'
+import { getMeLoveallResourceInfo, meLoveallDownloadUrl, meLoveallPreviewUrl, type MeLoveallFileInfo } from '../api/meLoveall'
 
 const route = useRoute()
 
 const loading = ref(false)
 const error = ref('')
-const info = ref<MeLoveallFileInfo | null>(null)
+const data = ref<MeLoveallFileInfo | null>(null)
 
 const fileName = computed(() => String(route.query.file || '').trim())
 const shareUrl = ref('')
@@ -139,13 +134,13 @@ function resolveExternalUrl(raw: string | null) {
 }
 
 const previewSrc = computed(() => {
-  if (!info.value) return ''
-  return resolveExternalUrl(info.value.preview_url) || meLoveallPreviewUrl(info.value.full_name)
+  if (!data.value) return ''
+  return resolveExternalUrl(data.value.preview_url) || meLoveallPreviewUrl(data.value.full_name)
 })
 
 const downloadHref = computed(() => {
-  if (!info.value) return ''
-  return resolveExternalUrl(info.value.download_url) || meLoveallDownloadUrl(info.value.full_name)
+  if (!data.value) return ''
+  return resolveExternalUrl(data.value.download_url) || meLoveallDownloadUrl(data.value.full_name)
 })
 
 function openExternalDownload(href: string) {
@@ -162,7 +157,7 @@ function copy(text: string) {
 
 async function fetchInfo() {
   error.value = ''
-  info.value = null
+  data.value = null
 
   if (!fileName.value) {
     error.value = '缺少 file 参数（示例：/external?file=资源.zip）'
@@ -171,7 +166,7 @@ async function fetchInfo() {
 
   loading.value = true
   try {
-    info.value = await getMeLoveallResourceInfo(fileName.value)
+    data.value = await getMeLoveallResourceInfo(fileName.value)
     shareUrl.value = window.location.href
   } catch (e: any) {
     error.value = e?.message || '加载外站资源失败'

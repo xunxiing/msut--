@@ -2,72 +2,52 @@
   <div class="rag-page">
     <div class="rag-container">
       <div class="rag-inner">
-        <header class="rag-header">
+        <header class="rag-header" v-if="!isMobile || !isReadingMode">
           <div class="rag-title-block">
 
           </div>
           <div class="rag-header-actions">
-            <el-button @click="goUpload">上传文件</el-button>
+            <el-button link @click="startGuide" class="guide-link-btn">
+              <el-icon><InfoFilled /></el-icon> 帮助说明
+            </el-button>
             <el-button type="success" plain @click="goAI">AI 问答</el-button>
             <el-button type="primary" plain @click="createDialogVisible = true">新增教程</el-button>
           </div>
         </header>
 
-        <p v-if="isMobile" class="mobile-hint">
-          手机端默认收起左侧“教程列表”和右侧“内容导航”，可通过下方按钮随时展开查看。
-        </p>
+        
 
-        <div class="content-layout">
-          <!-- Left side: Tutorial List -->
-          <div v-if="!isMobile" class="tutorial-list-column">
-            <div class="search-box">
-              <el-input
-                v-model="searchTerm"
-                placeholder="搜索教程标题或简介"
-                clearable
-                :prefix-icon="SearchIcon"
-              />
-            </div>
-            <div class="tutorial-menu-wrap" ref="listScrollRef" @scroll="onListScroll">
-              <el-skeleton v-if="listLoading && !allTutorials.length" :rows="6" animated class="list-skeleton" />
-              <el-menu
-                v-else
-                :default-active="selectedTutorial ? String(selectedTutorial.id) : ''"
-                class="tutorial-menu"
-                @select="handleSelectTutorial"
-              >
-                <el-menu-item
-                  v-for="tutorial in filteredTutorials"
-                  :key="tutorial.id"
-                  :index="String(tutorial.id)"
-                >
-                  <template #title>
-                    <div class="menu-item-content">
-                      <span class="item-title">{{ tutorial.title }}</span>
-                    </div>
-                  </template>
-                </el-menu-item>
-              </el-menu>
-              <div v-if="listLoadingMore" class="list-loading-more">
-                <el-icon class="loading-icon-small"><Loading /></el-icon>
-              </div>
-            </div>
-          </div>
+        <div class="content-layout" :class="{ 'is-reading': isMobile && isReadingMode }">
+          <!-- Left side: Tutorial List (Hidden on mobile when reading) -->
+          <TutorialSidebar
+            v-if="!isMobile || !isReadingMode"
+            v-model="searchTerm"
+            :items="filteredTutorials"
+            :selected-id="selectedTutorial?.id"
+            :loading="listLoading"
+            :loading-more="listLoadingMore"
+            @select="handleSelectTutorial"
+            @scroll="onListScroll"
+          />
 
           <!-- Right side: Tutorial Viewer -->
-          <div class="tutorial-viewer-column">
-            <div v-if="isMobile" class="mobile-toolbar">
-              <el-button size="small" @click="mobileListOpen = true">
-                打开教程列表
+          <div v-if="!isMobile || isReadingMode" class="tutorial-viewer-column">
+            <div v-if="isMobile" class="mobile-nav-header">
+              <el-button link @click="isReadingMode = false" class="back-btn">
+                <el-icon><ArrowLeft /></el-icon> 返回目录
               </el-button>
-              <el-button
-                size="small"
-                v-if="tocItems.length"
-                @click="mobileTocOpen = true"
-              >
-                打开内容导航
-              </el-button>
+              <div class="mobile-actions">
+                <el-button
+                  circle
+                  v-if="tocItems.length"
+                  @click="mobileTocOpen = true"
+                  class="toc-fab-trigger"
+                >
+                  <el-icon><Menu /></el-icon>
+                </el-button>
+              </div>
             </div>
+            
             <transition name="fade-slide" mode="out-in">
               <div v-if="tutorialLoading" key="loading" class="doc-loading">
                 <el-icon class="loading-icon"><Loading /></el-icon>
@@ -84,30 +64,46 @@
                     <h1>{{ selectedTutorial.title }}</h1>
                     <p class="doc-desc">{{ selectedTutorial.description || '暂无简介' }}</p>
                   </div>
-                  <div class="doc-body" v-html="renderedMarkdown"></div>
-                </div>
-                <div v-if="!isMobile && tocItems.length" class="doc-toc-sidebar">
-                  <h3 class="toc-title">内容导航</h3>
-                  <div class="toc-scroll-indicator-container">
-                    <div class="toc-scroll-indicator" :style="getScrollIndicatorStyle()"></div>
-                    <ul class="toc-list" ref="tocListRef">
-                      <li
-                        v-for="(item, idx) in tocItems"
-                        :key="idx"
-                        class="toc-item"
-                        :class="{ active: activeChunkId === item.slug }"
-                        @click="onSelectChunk(item.slug)"
-                      >
-                        <a :href="`#${item.slug}`" @click.prevent="onSelectChunk(item.slug)" :style="{ paddingLeft: (item.level - 1) * 12 + 10 + 'px' }">
-                          {{ item.text }}
-                        </a>
-                      </li>
-                    </ul>
+                  <div class="doc-body">
+                    <div v-for="(para, idx) in paragraphList" :key="idx" class="para-block">
+                      <div class="para-content-wrap">
+                        <div v-html="marked.parse(para.text)"></div>
+                        <button
+                          v-if="para.hasButton"
+                          class="ai-explain-btn"
+                          type="button"
+                          @click="onExplainParagraph(idx, para.text)"
+                        >
+                          ✨ AI 解释
+                        </button>
+                      </div>
+                      <TutorialExplainCard
+                        v-if="inlineExplanations[idx]"
+                        :content="inlineExplanations[idx]"
+                        :loading="explainingIdx === idx"
+                        @close="onCloseExplain(idx)"
+                      />
+                    </div>
+                  </div>
+                  <div class="doc-footer-qna">
+                    <el-divider>对本篇教程有疑问？</el-divider>
+                    <el-button class="ai-qna-button full-width" type="primary" @click="goAI">
+                      <el-icon class="ai-icon"><ChatDotRound /></el-icon>
+                      咨询 AI 助手获取精准解答
+                    </el-button>
                   </div>
                 </div>
+                <TutorialTOC
+                  v-if="!isMobile && tocItems.length"
+                  :items="tocItems"
+                  :active-slug="activeChunkId"
+                  @select="onSelectChunk"
+                />
               </div>
               <div v-else key="placeholder" class="doc-placeholder">
-                <p>从左侧选择一篇教程以开始阅读。</p>
+                <el-icon :size="64" class="placeholder-icon"><Reading /></el-icon>
+                <h3>选择一篇教程开始阅读</h3>
+                <p>在这里，您可以找到所有官方指引。</p>
               </div>
             </transition>
           </div>
@@ -222,6 +218,12 @@
             :autosize="{ minRows: 8, maxRows: 16 }"
             placeholder="在这里粘贴或编写完整教程文本（支持 Markdown 格式）"
           />
+          <div class="ai-assist-tip">
+            <el-button link type="primary" :loading="aiAssisting" @click="onAiAssist">
+              <el-icon><MagicStick /></el-icon> AI 辅助优化内容
+            </el-button>
+            <span class="tip-text">输入标题或简稿，AI 将为您扩充并美化 Markdown</span>
+          </div>
         </el-form-item>
         <div class="qc-actions">
           <el-button @click="createDialogVisible = false">取消</el-button>
@@ -231,14 +233,18 @@
         </div>
       </el-form>
     </el-dialog>
+
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch, reactive } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
-import { Search as SearchIcon, Loading } from '@element-plus/icons-vue'
+import {
+  Search as SearchIcon, Loading, ArrowLeft, Menu,
+  Reading, MagicStick, InfoFilled, ChatDotRound
+} from '@element-plus/icons-vue'
 import { marked, Renderer } from 'marked'
 import {
   createTutorial,
@@ -246,8 +252,21 @@ import {
   type TutorialDetail,
   listTutorials,
   type TutorialItem,
+  searchAndAskStream
 } from '../api/tutorials'
+import {
+  askAgent,
+  getRunStatus,
+  getSessionMessages
+} from '../api/agent'
 import { useAuth } from '../stores/auth'
+import { driver } from 'driver.js'
+import 'driver.js/dist/driver.css'
+
+// Components
+import TutorialSidebar from '../components/tutorial/TutorialSidebar.vue'
+import TutorialTOC from '../components/tutorial/TutorialTOC.vue'
+import TutorialExplainCard from '../components/tutorial/TutorialExplainCard.vue'
 
 const auth = useAuth()
 const router = useRouter()
@@ -258,11 +277,11 @@ const isMobile = ref(false)
 const mobileListOpen = ref(false)
 const mobileTocOpen = ref(false)
 const selectedTutorial = ref<TutorialDetail | null>(null)
+const isReadingMode = ref(false)
 const tutorialLoading = ref(false)
 const tocItems = ref<{ text: string; level: number; slug: string }[]>([])
 const activeChunkId = ref<string | null>(null)
 const scrollContainerRef = ref<HTMLElement | null>(null)
-const tocListRef = ref<HTMLElement | null>(null)
 const listScrollRef = ref<HTMLElement | null>(null)
 const mobileListScrollRef = ref<HTMLElement | null>(null)
 const listPage = ref(1)
@@ -278,34 +297,99 @@ const newTitle = ref('')
 const newDesc = ref('')
 const newContent = ref('')
 const creating = ref(false)
+const aiAssisting = ref(false)
 const createDialogVisible = ref(false)
+
+const explainingIdx = ref<number | null>(null)
+const inlineExplanations = reactive<Record<number, string>>({})
+const paragraphList = ref<{ text: string, hasButton: boolean }[]>([])
+let explainAbortController: AbortController | null = null
+
+const startGuide = () => {
+  const driverObj = driver({
+    showProgress: true,
+    nextBtnText: '下一步',
+    prevBtnText: '上一步',
+    doneBtnText: '完成',
+    steps: [
+      {
+        element: '.modern-search',
+        popover: {
+          title: '智能搜索',
+          description: '输入关键词，快速在海量教程中找到您需要的指引。',
+          side: "bottom",
+          align: 'start'
+        }
+      },
+      {
+        element: isMobile.value ? '.tutorial-card' : '.tutorial-card-list',
+        popover: {
+          title: '教程目录',
+          description: isMobile.value ? '点击教程卡片，即可进入沉浸式阅读模式。' : '浏览左侧目录，点击即可切换不同篇章。',
+          side: "right",
+          align: 'start'
+        }
+      },
+      {
+        element: '.ai-qna-button',
+        popover: {
+          title: 'AI 智能问答',
+          description: '对教程有疑问？点击这里，AI 将根据文档内容为您精准答疑。',
+          side: "left",
+          align: 'center'
+        }
+      },
+      {
+        element: '.rag-header-actions .el-button--primary',
+        popover: {
+          title: '创作教程',
+          description: '您也可以贡献智慧，支持 AI 辅助生成，让分享更简单。',
+          side: "bottom",
+          align: 'end'
+        }
+      },
+    ]
+  });
+
+  driverObj.drive();
+}
 
 const filteredTutorials = computed(() => allTutorials.value)
 const listHasMore = computed(() => listTotal.value < 0 || allTutorials.value.length < listTotal.value)
 
-const renderedMarkdown = computed(() => {
-  if (!selectedTutorial.value?.content) return ''
-  
-  const renderer = new Renderer()
-  const items: { text: string; level: number; slug: string }[] = []
-  
-  renderer.heading = ({ text, depth }: { text: string; depth: number }) => {
-    const level = depth
-    const slug = text.toLowerCase()
-      .replace(/[^\w\u4e00-\u9fa5]+/g, '-')
-      .replace(/^-+|-+$/g, '') || `heading-${items.length}`
-      
-    items.push({ text, level, slug })
-    return `<h${level} id="${slug}">${text}</h${level}>`
+watch(() => selectedTutorial.value?.content, (newContent) => {
+  if (!newContent) {
+    paragraphList.value = []
+    tocItems.value = []
+    return
   }
   
-  // Update tocItems as a side effect
-  setTimeout(() => {
-    tocItems.value = items
-  }, 0)
+  // 清空之前的解释
+  for (const key in inlineExplanations) delete inlineExplanations[key]
 
-  return marked.parse(selectedTutorial.value.content, { renderer })
-})
+  const rawParas = newContent.split(/\n\n/)
+  let charCountSinceLastBtn = 0
+  
+  paragraphList.value = rawParas.map(text => {
+    charCountSinceLastBtn += text.length
+    let hasButton = false
+    if (charCountSinceLastBtn >= 70 && text.trim().length > 10) {
+      charCountSinceLastBtn = 0
+      hasButton = true
+    }
+    return { text, hasButton }
+  })
+
+  const renderer = new Renderer()
+  const items: { text: string; level: number; slug: string }[] = []
+  renderer.heading = ({ text, depth }: { text: string; depth: number }) => {
+    const slug = text.toLowerCase().replace(/[^\w\u4e00-\u9fa5]+/g, '-').replace(/^-+|-+$/g, '') || `h-${items.length}`
+    items.push({ text, level: depth, slug })
+    return `<h${depth} id="${slug}">${text}</h${depth}>`
+  }
+  marked.parse(newContent, { renderer })
+  tocItems.value = items
+}, { immediate: true })
 
 function updateIsMobile() {
   if (typeof window === 'undefined') return
@@ -401,7 +485,7 @@ async function fetchTutorialPage() {
     }
     listPage.value = page + 1
     const firstItem = items[0]
-    if (page === 1 && firstItem && !selectedTutorial.value) {
+    if (page === 1 && firstItem && !selectedTutorial.value && !isMobile.value) {
       handleSelectTutorial(String(firstItem.id))
     }
   } catch (e: any) {
@@ -423,7 +507,14 @@ async function fetchTutorialPage() {
 
 async function handleSelectTutorial(id: string | number) {
   const numericId = Number(id)
-  if (selectedTutorial.value?.id === numericId) return
+  if (selectedTutorial.value?.id === numericId) {
+    if (isMobile.value) isReadingMode.value = true
+    return
+  }
+
+  if (isMobile.value) {
+    isReadingMode.value = true
+  }
 
   mobileListOpen.value = false
   tutorialLoading.value = true
@@ -437,6 +528,46 @@ async function handleSelectTutorial(id: string | number) {
   } finally {
     tutorialLoading.value = false
   }
+}
+
+async function onExplainParagraph(idx: number, text: string) {
+  if (inlineExplanations[idx] && inlineExplanations[idx] !== '正在思考中...') return
+  
+  if (explainAbortController) explainAbortController.abort()
+  explainAbortController = new AbortController()
+
+  explainingIdx.value = idx
+  inlineExplanations[idx] = '正在思考中...'
+  
+  try {
+    let fullText = ''
+    const query = `请深入解释一下这段教程内容，要求：语言通俗易懂，字数控制在 200 字以内：\n\n${text}`
+    
+    await searchAndAskStream({ query, mode: 'both' }, {
+      signal: explainAbortController.signal,
+      onEvent: (evt) => {
+        if (evt.event === 'token' && evt.text) {
+          if (inlineExplanations[idx] === '正在思考中...') {
+            inlineExplanations[idx] = ''
+          }
+          fullText += evt.text
+          inlineExplanations[idx] = fullText
+        } else if (evt.event === 'error') {
+          inlineExplanations[idx] = (evt as any).message || '解释出错'
+        }
+      }
+    })
+  } catch (e: any) {
+    if (e.name === 'AbortError') return
+    inlineExplanations[idx] = '请求 AI 失败。'
+  } finally {
+    explainingIdx.value = null
+    explainAbortController = null
+  }
+}
+
+function onCloseExplain(idx: number) {
+  delete inlineExplanations[idx]
 }
 
 function onSelectChunk(slug: string) {
@@ -455,33 +586,6 @@ function onSelectChunk(slug: string) {
   }
 }
 
-function getScrollIndicatorStyle() {
-  if (!activeChunkId.value || tocItems.value.length === 0 || !tocListRef.value) {
-    return { display: 'none' }
-  }
-
-  const activeIndex = tocItems.value.findIndex(item => item.slug === activeChunkId.value)
-  if (activeIndex === -1) {
-    return { display: 'none' }
-  }
-
-  const listEl = tocListRef.value
-  const items = listEl.querySelectorAll<HTMLElement>('.toc-item')
-  const activeEl = items[activeIndex]
-  if (!activeEl) {
-    return { display: 'none' }
-  }
-
-  const listRect = listEl.getBoundingClientRect()
-  const itemRect = activeEl.getBoundingClientRect()
-  const topPosition = itemRect.top - listRect.top
-  
-  return {
-    transform: `translateY(${topPosition}px)`,
-    height: `${itemRect.height}px`,
-    display: 'block'
-  }
-}
 
 function updateActiveSectionOnScroll() {
   if (!scrollContainerRef.value || tocItems.value.length === 0) return
@@ -567,9 +671,6 @@ watch(
   }
 )
 
-function goUpload() {
-  router.push('/upload')
-}
 
 function goAI() {
   router.push('/tutorials/ai')
@@ -598,12 +699,58 @@ async function onCreateTutorial() {
     await fetchTutorialPage()
     if (data.id) {
       handleSelectTutorial(data.id) // Select the new one
+      isReadingMode.value = true
     }
   } catch (e: any) {
     const msg = e?.response?.data?.error || '保存失败，请稍后重试'
     ElMessage.error(msg)
   } finally {
     creating.value = false
+  }
+}
+
+async function onAiAssist() {
+  const title = newTitle.value.trim()
+  const content = newContent.value.trim()
+  if (!title) {
+    ElMessage.warning('请先输入教程标题')
+    return
+  }
+  
+  aiAssisting.value = true
+  try {
+    // 借用 Agent 接口进行教程辅助创造
+    // 我们发送一个特定的指令给 Agent
+    const prompt = `帮我根据标题“${title}”和以下内容草稿，整理并扩充成一篇结构清晰、带有 Markdown 格式的详细教程。\n\n内容草稿：\n${content || '（暂无，请根据标题自由发挥）'}`
+    
+    const res = await askAgent(undefined, prompt)
+    const runId = res.runId
+    
+    // 轮询获取结果
+    let pollCount = 0
+    const maxPoll = 30
+    const poll = setInterval(async () => {
+      pollCount++
+      const status = await getRunStatus(runId)
+      if (status.status === 'succeeded') {
+        clearInterval(poll)
+        const msgs = await getSessionMessages(status.sessionId)
+        const lastMsg = msgs[msgs.length - 1]
+        if (lastMsg && lastMsg.role === 'assistant') {
+          newContent.value = lastMsg.content
+          ElMessage.success('AI 辅助优化完成')
+        }
+        aiAssisting.value = false
+      } else if (status.status === 'failed' || pollCount >= maxPoll) {
+        clearInterval(poll)
+        ElMessage.error('AI 辅助失败，请重试')
+        aiAssisting.value = false
+      }
+    }, 1500)
+    
+  } catch (e: any) {
+    ElMessage.error('AI 辅助请求失败')
+    aiAssisting.value = false
   }
 }
 
@@ -615,6 +762,15 @@ onMounted(() => {
   searchQuery.value = searchTerm.value.trim()
   resetTutorialList()
   fetchTutorialPage()
+
+  // 首次进入自动触发指引
+  const hasSeenGuide = localStorage.getItem('msut_tutorial_guide_seen')
+  if (!hasSeenGuide) {
+    setTimeout(() => {
+      startGuide()
+      localStorage.setItem('msut_tutorial_guide_seen', 'true')
+    }, 1000)
+  }
 })
 
 onUnmounted(() => {
@@ -634,7 +790,7 @@ onUnmounted(() => {
 .rag-page {
   height: calc(100vh - 80px);
   overflow: hidden;
-  background: #f3f4f6;
+  background: #f1f5f9; /* 稍微加深背景色，降低整体亮度 */
   display: flex;
   flex-direction: column;
 }
@@ -645,22 +801,41 @@ onUnmounted(() => {
   overflow: hidden;
 }
 .rag-inner {
-  max-width: 1400px;
+  max-width: 1440px;
   margin: 0 auto;
-  padding: 16px;
+  padding: 20px;
   width: 100%;
   display: flex;
   flex-direction: column;
   flex: 1;
   overflow: hidden;
 }
+
+@media (max-width: 900px) {
+  .rag-inner {
+    padding: 0;
+  }
+}
+
 .rag-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: 16px;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
   flex-shrink: 0;
+}
+
+@media (max-width: 900px) {
+  .rag-header {
+    padding: 12px 16px;
+    margin-bottom: 0;
+    background: #fff;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .rag-header-actions {
+    display: none;
+  }
 }
 .rag-title-block h1 {
   margin: 0 0 6px;
@@ -673,8 +848,13 @@ onUnmounted(() => {
 }
 .rag-header-actions {
   display: flex;
+  align-items: center;
   gap: 8px;
   flex-shrink: 0;
+}
+.guide-link-btn {
+  margin-right: 8px;
+  color: #64748b;
 }
 
 .mobile-hint {
@@ -685,17 +865,19 @@ onUnmounted(() => {
 
 .content-layout {
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
+  grid-template-columns: 320px minmax(0, 1fr);
   gap: 24px;
   flex: 1;
   overflow: hidden;
-  height: calc(100vh - 120px); /* Adjust based on header height */
+  height: calc(100vh - 140px);
+  transition: all 0.3s ease;
 }
 
 @media (max-width: 900px) {
   .content-layout {
-    grid-template-columns: minmax(0, 1fr);
-    height: auto;
+    grid-template-columns: 1fr;
+    height: calc(100vh - 57px);
+    gap: 0;
   }
 }
 
@@ -703,24 +885,108 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   background: #ffffff;
-  border-radius: 12px;
+  border-radius: 16px;
   overflow: hidden;
-  border: 1px solid #e5e7eb;
-  min-height: 0; /* Important for nested flex scrolling */
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  min-height: 0;
+}
+
+@media (max-width: 900px) {
+  .tutorial-list-column {
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
+  }
 }
 .search-box {
-  padding: 12px;
-  border-bottom: 1px solid #e5e7eb;
+  padding: 16px;
+  background: #fff;
+  z-index: 10;
 }
+.modern-search :deep(.el-input__wrapper) {
+  border-radius: 10px;
+  box-shadow: 0 0 0 1px #e2e8f0 inset;
+  padding: 4px 12px;
+}
+.modern-search :deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 1px var(--el-color-primary) inset;
+}
+
 .tutorial-menu-wrap {
   flex: 1;
   overflow-y: auto;
+  padding: 0 8px 16px;
 }
-.tutorial-menu-wrap.mobile {
-  overflow-y: visible;
+
+.tutorial-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px;
 }
-.tutorial-menu {
-  border-right: none;
+
+.tutorial-card {
+  padding: 16px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid #f1f5f9;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tutorial-card:hover {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  transform: translateY(-1px);
+}
+
+.tutorial-card.active {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.08);
+}
+
+.card-title {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e293b;
+  line-height: 1.4;
+}
+
+.card-desc {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: #64748b;
+  display: -webkit-box;
+  line-clamp: 2;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.5;
+}
+
+.card-arrow {
+  color: #cbd5e1;
+  font-size: 16px;
+  transition: transform 0.2s;
+}
+
+.tutorial-card:hover .card-arrow {
+  transform: translateX(3px);
+  color: var(--el-color-primary);
+}
+
+.empty-hint {
+  text-align: center;
+  padding: 40px 20px;
+  color: #94a3b8;
+  font-size: 14px;
 }
 .list-skeleton {
   padding: 12px;
@@ -753,15 +1019,41 @@ onUnmounted(() => {
 
 .tutorial-viewer-column {
   background: #ffffff;
-  border-radius: 12px;
+  border-radius: 16px;
   overflow: hidden;
   position: relative;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+@media (max-width: 900px) {
+  .tutorial-viewer-column {
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
+  }
+}
+
+.mobile-nav-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fff;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.back-btn {
+  font-weight: 600;
+  font-size: 15px;
 }
 
 .doc-viewer-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 240px;
+  grid-template-columns: minmax(0, 1fr) 260px;
   gap: 24px;
   height: 100%;
   overflow: hidden;
@@ -772,6 +1064,12 @@ onUnmounted(() => {
 .doc-main-content {
   padding: 24px 32px;
   overflow-y: auto;
+}
+
+@media (max-width: 900px) {
+  .doc-main-content {
+    padding: 20px 16px;
+  }
 }
 .doc-toc-sidebar {
   padding: 24px 16px;
@@ -839,8 +1137,17 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: var(--el-text-color-secondary);
+  color: #64748b;
   text-align: center;
+  padding: 40px;
+}
+.placeholder-icon {
+  margin-bottom: 20px;
+  color: #e2e8f0;
+}
+.doc-placeholder h3 {
+  margin: 0 0 10px;
+  color: #1e293b;
 }
 .loading-icon {
   font-size: 32px;
@@ -869,16 +1176,26 @@ onUnmounted(() => {
 
 .doc-body {
   font-size: 16px;
-  line-height: 1.7;
-  color: #333;
+  line-height: 1.8; /* 增加行高，提升阅读舒适度 */
+  color: #1e293b;   /* 使用蓝灰色调文字，比纯黑更柔和 */
 }
+
+.para-block {
+  margin-bottom: 1.5em;
+}
+
+.para-content-wrap {
+  position: relative;
+}
+
 .doc-body :deep(h1),
 .doc-body :deep(h2),
 .doc-body :deep(h3),
 .doc-body :deep(h4) {
-  margin-top: 1.5em;
-  margin-bottom: 0.8em;
-  font-weight: 600;
+  margin-top: 1.8em;
+  margin-bottom: 1em;
+  font-weight: 700;
+  color: #0f172a;
 }
 .doc-body :deep(h1) { font-size: 1.8em; }
 .doc-body :deep(h2) { font-size: 1.5em; border-bottom: 1px solid #eee; padding-bottom: 0.3em; }
@@ -926,6 +1243,68 @@ onUnmounted(() => {
 }
 .doc-body :deep(a:hover) {
   text-decoration: underline;
+}
+
+.doc-body :deep(.ai-explain-btn) {
+  appearance: none;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-left: 8px;
+  transition: all 0.2s ease;
+  vertical-align: middle;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.doc-body :deep(.ai-explain-btn:hover) {
+  background: #dcfce7;
+  border-color: #86efac;
+  transform: scale(1.05);
+  box-shadow: 0 4px 6px rgba(22, 101, 52, 0.1);
+}
+
+.explain-container {
+  min-height: 200px;
+}
+
+.explain-source {
+  background: #f8fafc;
+  padding: 12px;
+  border-radius: 8px;
+  border-left: 4px solid #cbd5e1;
+  margin-bottom: 20px;
+}
+
+.explain-source .label {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.source-text {
+  margin: 4px 0 0;
+  font-size: 14px;
+  color: #475569;
+  font-style: italic;
+  line-height: 1.5;
+}
+
+.explain-result {
+  font-size: 16px;
+  line-height: 1.7;
+  color: #1e293b;
+}
+
+.explain-dialog :deep(.el-dialog__body) {
+  padding-top: 10px;
 }
 
 .qc-intro {

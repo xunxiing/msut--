@@ -11,15 +11,16 @@
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",
     "axios": "^1.12.2",
+    "driver.js": "^1.4.0",
     "element-plus": "^2.11.2",
+    "marked": "^13.0.2",
     "pinia": "^3.0.3",
     "vue": "^3.5.21",
-    "vue-router": "^4.5.1",
-    "marked": "^13.0.2"
+    "vue-router": "^4.5.1"
   },
   "devDependencies": {
-    "@types/marked": "^6.0.0",
     "@element-plus/components": "^0.0.5",
+    "@types/marked": "^6.0.0",
     "@vitejs/plugin-vue": "^6.0.1",
     "@vue/tsconfig": "^0.8.1",
     "typescript": "~5.8.3",

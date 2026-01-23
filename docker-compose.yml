@@ -23,15 +23,23 @@ services:
       - RAG_EMBED_DIM=${RAG_EMBED_DIM:-}
     volumes:
       - ./uploads:/app/server/uploads:rw
-      # Bind the whole data dir so SQLite can create the DB file inside it.
-      # Binding a non-existent host file path (./data/data.sqlite) causes Docker
-      # to mount a directory at the file path inside the container, making SQLite
-      # fail with "unable to open database file" and uploads appear to succeed
-      # but metadata insertions fail.
       - ./data:/app/server/data:rw
     restart: unless-stopped
     networks:
       - msut-network
+
+    # --- 针对 2C2G 机器的极限配置 ---
+    deploy:
+      resources:
+        limits:
+          # CPU: 限制使用 1.8 核，预留 0.2 核给系统，防止 CPU 100% 时服务器失联
+          cpus: '1.8'
+          # 内存: 硬限制 1.5G。绝对不要超过 1.6G，必须给宿主机留 400M+ 救命
+          memory: 1536M
+        reservations:
+          # 预留: 保证至少有 512M 可用才启动
+          memory: 512M
+    # -------------------------------
 
 networks:
   msut-network:

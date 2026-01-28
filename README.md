@@ -182,6 +182,9 @@ Agent LLM 相关（用于智能对话 + 代码生成）：
 - `POST /api/auth/logout` - 登出
 - `GET /api/auth/me` - 获取当前登录用户（基于 `token` Cookie）
 - `POST /api/auth/refresh` - 使用 `refresh_token` 刷新登录状态（返回 `user` 并续期）
+- `GET /api/auth/profile` - 获取用户资料（头像/个性签名）
+- `PATCH /api/auth/profile` - 更新用户资料（`{ avatarUrl?, signature? }`）
+- `POST /api/auth/avatar/upload` - 上传头像（multipart: `file`，返回 `{ avatarUrl }`）
 
 ### 资源与文件
 

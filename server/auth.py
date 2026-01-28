@@ -2,17 +2,18 @@ import os
 import time
 import secrets
 import hashlib
+from pathlib import Path
 from typing import Optional
 
 import bcrypt
 import jwt
-from fastapi import APIRouter, Body, Request, Response
+from fastapi import APIRouter, Body, Request, Response, UploadFile, File
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from .db import get_connection
 from .schemas import JWTPayload
-from .utils import cookie_kwargs, parse_bool
+from .utils import cookie_kwargs, parse_bool, nanoid, now_ms
 
 
 router = APIRouter()
@@ -21,6 +22,10 @@ JWT_SECRET = os.getenv("JWT_SECRET", "dev")
 ACCESS_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60
 ACCESS_TOKEN_TTL_SHORT_SECONDS = 7 * 24 * 60 * 60
 REFRESH_TOKEN_TTL_SECONDS = 90 * 24 * 60 * 60
+
+UPLOAD_DIR = Path(__file__).resolve().parent / "uploads"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+MAX_AVATAR_SIZE = 5 * 1024 * 1024  # 5MB
 
 
 def is_https_enabled() -> bool:
@@ -103,6 +108,11 @@ class LoginBody(BaseModel):
     username: str = Field(min_length=3, max_length=32)
     password: str = Field(min_length=6, max_length=72)
     remember: Optional[bool] = False
+
+
+class ProfilePatchBody(BaseModel):
+    avatarUrl: Optional[str] = Field(default=None, max_length=300)
+    signature: Optional[str] = Field(default=None, max_length=200)
 
 
 @router.post("/api/auth/register")
@@ -304,3 +314,145 @@ def refresh(request: Request, response: Response):
             "name": user["name"],
         }
     }
+
+
+@router.get("/api/auth/profile")
+def get_profile(request: Request):
+    payload = get_current_user(request)
+    if not payload:
+        return JSONResponse(status_code=401, content={"error": "未登录"})
+    uid = payload.get("uid")
+    if uid is None:
+        return JSONResponse(status_code=401, content={"error": "未登录"})
+    conn = get_connection()
+    cur = conn.cursor()
+    row = cur.execute(
+        "SELECT id, username, name, avatar_url, signature FROM users WHERE id = ?",
+        (int(uid),),
+    ).fetchone()
+    if not row:
+        return JSONResponse(status_code=404, content={"error": "用户不存在"})
+    return {
+        "user": {
+            "id": int(row["id"]),
+            "username": row["username"],
+            "name": row["name"],
+            "avatarUrl": row["avatar_url"] or "",
+            "signature": row["signature"] or "",
+        }
+    }
+
+
+@router.patch("/api/auth/profile")
+def patch_profile(request: Request, body: ProfilePatchBody = Body(default=ProfilePatchBody())):
+    payload = get_current_user(request)
+    if not payload:
+        return JSONResponse(status_code=401, content={"error": "未登录"})
+    uid = payload.get("uid")
+    if uid is None:
+        return JSONResponse(status_code=401, content={"error": "未登录"})
+
+    updates = []
+    params = []
+    if body.avatarUrl is not None:
+        updates.append("avatar_url = ?")
+        params.append(body.avatarUrl)
+    if body.signature is not None:
+        updates.append("signature = ?")
+        params.append(body.signature)
+    if not updates:
+        return JSONResponse(status_code=400, content={"error": "没有可更新的字段"})
+
+    conn = get_connection()
+    try:
+        conn.execute(
+            f"UPDATE users SET {', '.join(updates)} WHERE id = ?",
+            (*params, int(uid)),
+        )
+        conn.commit()
+    except Exception:
+        return JSONResponse(status_code=500, content={"error": "更新失败"})
+
+    cur = conn.cursor()
+    row = cur.execute(
+        "SELECT id, username, name, avatar_url, signature FROM users WHERE id = ?",
+        (int(uid),),
+    ).fetchone()
+    if not row:
+        return JSONResponse(status_code=404, content={"error": "用户不存在"})
+    return {
+        "user": {
+            "id": int(row["id"]),
+            "username": row["username"],
+            "name": row["name"],
+            "avatarUrl": row["avatar_url"] or "",
+            "signature": row["signature"] or "",
+        }
+    }
+
+
+@router.post("/api/auth/avatar/upload")
+async def upload_avatar(request: Request, file: UploadFile = File(...)):
+    payload = get_current_user(request)
+    if not payload:
+        return JSONResponse(status_code=401, content={"error": "未登录"})
+    uid = payload.get("uid")
+    if uid is None:
+        return JSONResponse(status_code=401, content={"error": "未登录"})
+
+    ct = (file.content_type or "").lower()
+    if not ct.startswith("image/"):
+        return JSONResponse(status_code=400, content={"error": "只支持图片文件"})
+
+    orig = file.filename or "avatar"
+    ext = Path(orig).suffix.lower()
+    if ext not in {".png", ".jpg", ".jpeg", ".gif", ".webp"}:
+        # best-effort infer extension from content-type
+        if ct.endswith("png"):
+            ext = ".png"
+        elif ct.endswith("jpeg") or ct.endswith("jpg"):
+            ext = ".jpg"
+        elif ct.endswith("gif"):
+            ext = ".gif"
+        elif ct.endswith("webp"):
+            ext = ".webp"
+        else:
+            ext = ".png"
+
+    stored_name = f"avatar-{int(uid)}-{now_ms()}-{nanoid()}{ext}"
+    tmp = UPLOAD_DIR / f"{stored_name}.part"
+    dest = UPLOAD_DIR / stored_name
+    size = 0
+    try:
+        with tmp.open("wb") as f:
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > MAX_AVATAR_SIZE:
+                    try:
+                        tmp.unlink(missing_ok=True)  # type: ignore[arg-type]
+                    except Exception:
+                        pass
+                    return JSONResponse(status_code=413, content={"error": "头像文件过大（最大 5MB）"})
+                f.write(chunk)
+        tmp.replace(dest)
+    except Exception:
+        try:
+            tmp.unlink(missing_ok=True)  # type: ignore[arg-type]
+        except Exception:
+            pass
+        return JSONResponse(status_code=500, content={"error": "上传失败"})
+
+    avatar_url = f"/uploads/{stored_name}"
+    conn = get_connection()
+    try:
+        conn.execute(
+            "UPDATE users SET avatar_url = ? WHERE id = ?",
+            (avatar_url, int(uid)),
+        )
+        conn.commit()
+    except Exception:
+        return JSONResponse(status_code=500, content={"error": "保存失败"})
+    return {"avatarUrl": avatar_url}

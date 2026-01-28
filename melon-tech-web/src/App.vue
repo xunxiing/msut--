@@ -23,7 +23,7 @@
       <el-menu-item index="/tutorials" class="nav-item">教程中心 <span class="ai-badge">AI+</span></el-menu-item>
       <el-menu-item index="/watermark" class="nav-item">水印检测</el-menu-item>
       <el-menu-item index="/resources" class="nav-item">文件库</el-menu-item>
-      <el-menu-item v-if="auth.user" index="/dashboard" class="nav-item">控制台</el-menu-item>
+      <el-menu-item v-if="auth.user" index="/dashboard" class="nav-item">设置</el-menu-item>
       <el-menu-item v-if="auth.user" index="/my/resources" class="nav-item">作品管理</el-menu-item>
       <el-menu-item v-if="auth.user" index="/upload" class="nav-item">上传文件</el-menu-item>
 
@@ -136,7 +136,7 @@ const commonItems = computed<MenuItem[]>(() => [
 const myItems = computed<MenuItem[]>(() => {
   if (auth.user) {
     return [
-      { label: '控制台', icon: DataAnalysis, path: '/dashboard' },
+      { label: '设置', icon: DataAnalysis, path: '/dashboard' },
       { label: '作品管理', icon: Collection, path: '/my/resources' },
       { label: '上传文件', icon: Upload, path: '/upload' },
       { label: '退出登录', icon: SwitchButton, key: 'logout', action: onLogout },

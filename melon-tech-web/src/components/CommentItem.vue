@@ -2,7 +2,13 @@
   <div class="comment-item" :class="{ 'is-reply': depth > 0 }">
     <div class="comment-header">
       <div class="comment-author">
-        <div class="avatar">{{ initials }}</div>
+        <el-avatar 
+          :size="40" 
+          :src="item.user.avatarUrl || undefined" 
+          class="avatar-el"
+        >
+          {{ initials }}
+        </el-avatar>
         <div class="author-info">
           <div class="author-name">{{ item.user.name || item.user.username || '用户' }}</div>
           <div class="comment-meta">{{ formatTime(item.created_at) }}</div>
@@ -177,16 +183,11 @@ function emitLike(id: number) {
   align-items: center;
 }
 
-.avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
+.avatar-el {
   background: #e0f2fe;
   color: #0f172a;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   font-weight: 700;
+  border: 1px solid #e0f2fe;
 }
 
 .author-info {
@@ -212,6 +213,7 @@ function emitLike(id: number) {
 
 .comment-body {
   margin-top: 12px;
+  padding-left: 52px; /* Align with text start (40px avatar + 12px gap) */
 }
 
 .comment-content {
@@ -227,6 +229,7 @@ function emitLike(id: number) {
   align-items: center;
   gap: 12px;
   color: #64748b;
+  padding-left: 52px; /* Align with text start */
 }
 
 .like-btn.is-liked {
@@ -239,6 +242,7 @@ function emitLike(id: number) {
 
 .reply-form {
   margin-top: 12px;
+  padding-left: 52px;
 }
 
 .comment-children {
@@ -248,6 +252,7 @@ function emitLike(id: number) {
   gap: 12px;
   border-left: 2px solid #e2e8f0;
   padding-left: 16px;
+  margin-left: 20px; /* Slightly indented */
 }
 
 @media (max-width: 768px) {
@@ -259,6 +264,13 @@ function emitLike(id: number) {
   .comment-actions {
     width: 100%;
     justify-content: flex-start;
+    padding-left: 52px; /* Align with text */
+    margin-top: -8px;
+    margin-bottom: 8px;
+  }
+  
+  .comment-body, .comment-footer, .reply-form {
+    padding-left: 0; /* Reset indentation on mobile for space */
   }
 }
 </style>

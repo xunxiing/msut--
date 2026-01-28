@@ -197,7 +197,13 @@ def login(body: LoginBody, request: Request, response: Response):
         ck = cookie_kwargs(max_age_seconds=0)
         response.set_cookie("refresh_token", value="", **ck)
     return {
-        "user": {"id": int(row["id"]), "username": row["username"], "name": row["name"]}
+        "user": {
+            "id": int(row["id"]),
+            "username": row["username"],
+            "name": row["name"],
+            "avatarUrl": row["avatar_url"] or "",
+            "signature": row["signature"] or "",
+        }
     }
 
 
@@ -231,15 +237,26 @@ def me(request: Request):
     if not isinstance(payload, dict):
         return {"user": None}
     uid = payload.get("uid")
-    username = payload.get("username")
-    name = payload.get("name")
-    if uid is None or username is None or name is None:
+    if uid is None:
         return {"user": None}
+    
+    # Fetch latest details from DB
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT id, username, name, avatar_url, signature FROM users WHERE id = ?",
+        (int(uid),),
+    ).fetchone()
+    
+    if not row:
+        return {"user": None}
+
     return {
         "user": {
-            "id": int(uid),
-            "username": username,
-            "name": name,
+            "id": int(row["id"]),
+            "username": row["username"],
+            "name": row["name"],
+            "avatarUrl": row["avatar_url"] or "",
+            "signature": row["signature"] or "",
         }
     }
 
@@ -271,7 +288,7 @@ def refresh(request: Request, response: Response):
         return JSONResponse(status_code=401, content={"error": "登录已过期"})
 
     user = cur.execute(
-        "SELECT id, username, name FROM users WHERE id = ?",
+        "SELECT id, username, name, avatar_url, signature FROM users WHERE id = ?",
         (int(row["user_id"]),),
     ).fetchone()
     if not user:
@@ -312,6 +329,8 @@ def refresh(request: Request, response: Response):
             "id": int(user["id"]),
             "username": user["username"],
             "name": user["name"],
+            "avatarUrl": user["avatar_url"] or "",
+            "signature": user["signature"] or "",
         }
     }
 

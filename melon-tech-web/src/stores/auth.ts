@@ -1,7 +1,13 @@
 import { defineStore } from 'pinia'
 import { http } from '../api/http'
 
-type User = { id: number; username: string; name: string } | null
+type User = {
+  id: number
+  username: string
+  name: string
+  avatarUrl?: string
+  signature?: string
+} | null
 
 export const useAuth = defineStore('auth', {
   state: () => ({ user: null as User, loading: false, error: '' as string | null }),

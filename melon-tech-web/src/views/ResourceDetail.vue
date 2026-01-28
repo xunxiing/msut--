@@ -17,8 +17,10 @@
           <p class="resource-desc" v-if="data.description">{{ data.description }}</p>
           <div class="header-meta">
             <span class="meta-item">
-              <el-icon><User /></el-icon>
-              {{ (data as any).author_name || '未知作者' }}
+              <el-avatar :size="24" :src="data.author_avatar || undefined" class="meta-avatar">
+                {{ (data.author_name || 'U').charAt(0).toUpperCase() }}
+              </el-avatar>
+              {{ data.author_name || '未知作者' }}
             </span>
             <span class="meta-item">
               <el-icon><Calendar /></el-icon>
@@ -175,7 +177,7 @@ import { ElMessage } from 'element-plus'
 import { getResourceLikes, likeResource, unlikeResource, type LikeInfo } from '../api/likes'
 import { useAuth } from '../stores/auth'
 import { 
-  Document, User, Calendar, CopyDocument, 
+  Document, Calendar, CopyDocument, 
   Star, StarFilled, Paperclip, Download, InfoFilled 
 } from '@element-plus/icons-vue'
 import DownloadButton from '../components/DownloadButton.vue'
@@ -261,9 +263,6 @@ async function handlePopupLike() {
   // Close popup immediately after liking
   showLikePopup.value = false
   if (popupTimer) clearTimeout(popupTimer)
-  // Don't auto close if user interacts, or maybe close after a short delay? 
-  // Let's keep it simple: if they like, we can close it after a moment or let the timer handle it.
-  // User requirement said "6 seconds auto disappear", so we stick to that timer mostly.
 }
 
 async function toggleResourceLike() {
@@ -367,6 +366,14 @@ onMounted(fetch)
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.meta-avatar {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+  font-size: 10px;
+  font-weight: 600;
 }
 
 .header-actions {

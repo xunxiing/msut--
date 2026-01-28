@@ -19,6 +19,7 @@ export type ResourceItem = {
   created_at: string
   author_name?: string
   author_username?: string
+  author_avatar?: string
   files: ResourceFile[]
   imageFiles?: ResourceFile[]
   coverFileId?: number | null

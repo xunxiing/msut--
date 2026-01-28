@@ -4,6 +4,7 @@ export type CommentUser = {
   id: number
   name: string
   username: string
+  avatarUrl?: string
 }
 
 export type CommentItem = {

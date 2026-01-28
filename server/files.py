@@ -883,7 +883,7 @@ def get_resource(slug: str):
     cur = conn.cursor()
     r = cur.execute(
         """
-        SELECT r.*, u.name AS author_name, u.username AS author_username
+        SELECT r.*, u.name AS author_name, u.username AS author_username, u.avatar_url AS author_avatar
         FROM resources r
         LEFT JOIN users u ON u.id = r.created_by
         WHERE r.slug = ?
@@ -922,6 +922,7 @@ def get_resource(slug: str):
         "shareUrl": _share_url(r["slug"]),
         "coverFileId": int(cover_file_id) if cover_file_id is not None else None,
         "coverUrlPath": cover_url_path,
+        "author_avatar": r["author_avatar"] or "",
     }
     return data
 
@@ -955,6 +956,7 @@ def list_resources(
           r.cover_file_id,
           u.name AS author_name,
           u.username AS author_username,
+          u.avatar_url AS author_avatar,
           cf.url_path AS cover_url_path
         FROM resources r
         LEFT JOIN users u ON u.id = r.created_by
@@ -973,6 +975,7 @@ def list_resources(
         # Preserve existing fields; add camelCase cover metadata
         d["coverFileId"] = int(cover_file_id) if cover_file_id is not None else None
         d["coverUrlPath"] = cover_url_path
+        d["author_avatar"] = d.pop("author_avatar", None) or ""
         items_out.append(d)
     return {"items": items_out, "page": page, "pageSize": page_size, "total": total}
 

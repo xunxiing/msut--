@@ -521,15 +521,18 @@ onMounted(() => {
 }
 
 :deep(.el-input__wrapper) {
-  box-shadow: 0 0 0 1px #e2e8f0 inset;
-  border-radius: 10px;
+  box-shadow: none !important;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
   padding: 8px 12px;
-  background-color: #f8fafc;
+  background-color: #f9fafb;
+  transition: all 0.2s;
 }
 
 :deep(.el-input__wrapper.is-focus) {
-  box-shadow: 0 0 0 2px var(--el-color-success) inset;
   background-color: #fff;
+  border-color: var(--el-color-primary);
+  box-shadow: 0 0 0 3px rgba(var(--el-color-primary-rgb), 0.1) !important;
 }
 
 .upload-btn {
@@ -669,7 +672,7 @@ onMounted(() => {
 
 .resource-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 24px;
 }
 
@@ -872,16 +875,22 @@ onMounted(() => {
 }
 
 @media (max-width: 768px) {
+  .file-library-container {
+    padding: 20px 16px;
+  }
+
   .library-header {
     flex-direction: column;
     align-items: flex-start;
     gap: 20px;
+    margin-bottom: 32px;
   }
   
   .header-actions {
     width: 100%;
     flex-direction: column;
     align-items: stretch;
+    gap: 12px;
   }
   
   .search-input {
@@ -890,6 +899,25 @@ onMounted(() => {
   
   .search-input:focus-within {
     width: 100%;
+  }
+
+  .resource-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .card-body {
+    flex-direction: column;
+  }
+  
+  .card-icon {
+    width: 100%;
+    height: 120px;
+    border-radius: 12px 12px 0 0;
+  }
+  
+  .resource-card {
+    height: auto;
   }
 }
 </style>

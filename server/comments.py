@@ -82,7 +82,8 @@ def list_resource_comments(
           rc.created_at,
           rc.updated_at,
           u.name AS user_name,
-          u.username AS user_username
+          u.username AS user_username,
+          u.avatar_url AS user_avatar_url
         FROM resource_comments rc
         LEFT JOIN users u ON u.id = rc.user_id
         WHERE rc.resource_id = ?
@@ -127,6 +128,7 @@ def list_resource_comments(
                     "id": int(item["user_id"]),
                     "name": item["user_name"] or "",
                     "username": item["user_username"] or "",
+                    "avatarUrl": item["user_avatar_url"] or "",
                 },
                 "likes": likes_map.get(comment_id, 0),
                 "liked": comment_id in liked_set,
@@ -201,7 +203,7 @@ def create_resource_comment(
     row = cur.execute(
         """
         SELECT rc.id, rc.resource_id, rc.user_id, rc.parent_id, rc.content, rc.created_at, rc.updated_at,
-               u.name AS user_name, u.username AS user_username
+               u.name AS user_name, u.username AS user_username, u.avatar_url AS user_avatar_url
         FROM resource_comments rc
         LEFT JOIN users u ON u.id = rc.user_id
         WHERE rc.id = ?
@@ -225,6 +227,7 @@ def create_resource_comment(
                 "id": int(row["user_id"]),
                 "name": row["user_name"] or "",
                 "username": row["user_username"] or "",
+                "avatarUrl": row["user_avatar_url"] or "",
             },
             "likes": 0,
             "liked": False,
@@ -262,7 +265,7 @@ def update_comment(
     updated = cur.execute(
         """
         SELECT rc.id, rc.resource_id, rc.user_id, rc.parent_id, rc.content, rc.created_at, rc.updated_at,
-               u.name AS user_name, u.username AS user_username
+               u.name AS user_name, u.username AS user_username, u.avatar_url AS user_avatar_url
         FROM resource_comments rc
         LEFT JOIN users u ON u.id = rc.user_id
         WHERE rc.id = ?
@@ -286,6 +289,7 @@ def update_comment(
                 "id": int(updated["user_id"]),
                 "name": updated["user_name"] or "",
                 "username": updated["user_username"] or "",
+                "avatarUrl": updated["user_avatar_url"] or "",
             },
         }
     }

@@ -25,6 +25,10 @@ Additional tool routes (non-breaking additions):
 - DSL generator (anonymous): `POST /api/melsave/generate` with JSON `{ dsl: string }` returns a `.melsave` file stream with UTF-8 filename header.
 - Auth refresh (cookie-based):
   - `POST /api/auth/refresh` → refreshes access cookie using `refresh_token`, returns `{ user }` or `{ error }`.
+- User profile settings (authenticated):
+  - `GET /api/auth/profile` → `{ user: { id, username, name, avatarUrl, signature } }`
+  - `PATCH /api/auth/profile` with JSON `{ avatarUrl?: string, signature?: string }` → `{ user }`
+  - Avatar upload: `POST /api/auth/avatar/upload` with multipart field `file` (image) → `{ avatarUrl }` (also persists it to the current user)
 - Resource likes (authenticated):
   - `GET /api/resources/likes?ids=1,2,3` → `{ items: [{ id, likes, liked }] }`
   - `POST /api/resources/:id/like` → like a resource (idempotent)

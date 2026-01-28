@@ -93,6 +93,8 @@ def run_migrations(conn: Optional[sqlite3.Connection] = None) -> None:
                   username TEXT NOT NULL UNIQUE,
                   password_hash TEXT NOT NULL,
                   name TEXT NOT NULL,
+                  avatar_url TEXT NOT NULL DEFAULT '',
+                  signature TEXT NOT NULL DEFAULT '',
                   created_at TEXT NOT NULL DEFAULT (datetime('now')),
                   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
                 );
@@ -114,6 +116,8 @@ def run_migrations(conn: Optional[sqlite3.Connection] = None) -> None:
               username TEXT NOT NULL UNIQUE,
               password_hash TEXT NOT NULL,
               name TEXT NOT NULL,
+              avatar_url TEXT NOT NULL DEFAULT '',
+              signature TEXT NOT NULL DEFAULT '',
               created_at TEXT NOT NULL DEFAULT (datetime('now')),
               updated_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
@@ -280,6 +284,16 @@ def run_migrations(conn: Optional[sqlite3.Connection] = None) -> None:
             cols = [r["name"] for r in conn.execute("PRAGMA table_info(notifications)").fetchall()]
             if "read_at" not in cols:
                 conn.execute("ALTER TABLE notifications ADD COLUMN read_at TEXT")
+        except Exception:
+            pass
+
+        # users: avatar_url/signature for settings page (non-breaking additions)
+        try:
+            cols = [r["name"] for r in conn.execute("PRAGMA table_info(users)").fetchall()]
+            if "avatar_url" not in cols:
+                conn.execute("ALTER TABLE users ADD COLUMN avatar_url TEXT NOT NULL DEFAULT ''")
+            if "signature" not in cols:
+                conn.execute("ALTER TABLE users ADD COLUMN signature TEXT NOT NULL DEFAULT ''")
         except Exception:
             pass
 

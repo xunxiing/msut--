@@ -1326,6 +1326,8 @@ onBeforeUnmount(() => {
   .header-right {
     width: 100%;
     justify-content: space-between;
+    flex-wrap: wrap; /* Allow wrapping */
+    gap: 12px;
   }
 
   .tab-item {

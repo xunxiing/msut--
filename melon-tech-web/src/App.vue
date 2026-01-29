@@ -168,10 +168,10 @@ const onMenuItemClick = async (item: MenuItem) => {
   z-index: 100;
   height: 56px;
   line-height: 56px;
-  padding: 0 20px;
+  padding: 0 16px;
   box-shadow: 0 2px 10px rgba(0,0,0,.04);
   align-items: center;
-  width: 100%;
+  width: 100%; /* Changed from 100vw to 100% to prevent scrollbar overflow */
   max-width: 100vw;
   box-sizing: border-box;
   transition: padding-left 0.2s ease;
@@ -308,6 +308,17 @@ const onMenuItemClick = async (item: MenuItem) => {
 /* 移动端仅保留品牌与汉堡按钮 */
 @media (max-width: 768px) {
   .topbar :deep(.el-menu-item).nav-item { display: none !important; }
+  
+  /* Make brand smaller on mobile */
+  .brand {
+    padding: 0 12px !important;
+    font-size: 14px !important;
+    margin-right: auto !important; /* Push everything else to right */
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
 
 /* 隐藏 Element Plus 横向菜单的“更多”入口（...） */

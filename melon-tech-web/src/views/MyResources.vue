@@ -1081,7 +1081,8 @@ onBeforeUnmount(() => {
   position: relative;
   display: flex;
   flex-direction: column;
-  height: 200px;
+  height: auto; /* Changed from 200px to auto for better flexibility */
+  min-height: 200px;
 }
 
 .work-card:hover {
@@ -1311,19 +1312,78 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 768px) {
+  .container {
+    padding: 16px;
+  }
+
   .header-section {
     flex-direction: column;
     align-items: flex-start;
     gap: 16px;
+    margin-bottom: 24px;
   }
   
   .header-right {
     width: 100%;
     justify-content: space-between;
   }
+
+  .tab-item {
+    padding: 8px 12px;
+    font-size: 14px;
+  }
   
+  .works-grid {
+    grid-template-columns: 1fr; /* Single column on mobile */
+    gap: 16px;
+  }
+
+  .work-card {
+    padding: 16px;
+    min-height: 0;
+  }
+
+  .card-content {
+    flex-direction: row; /* Horizontal layout on mobile */
+    align-items: center;
+    gap: 16px;
+  }
+
+  .card-icon {
+    width: 80px;
+    height: 80px;
+    margin-bottom: 0;
+    flex-shrink: 0;
+  }
+
+  .work-title {
+    font-size: 15px;
+    margin-bottom: 4px;
+  }
+
+  .work-meta {
+    margin-bottom: 4px;
+  }
+
   .card-actions {
     opacity: 1;
+    margin-top: 12px;
+    padding-top: 12px;
+  }
+
+  .add-card {
+    flex-direction: row;
+    height: 60px;
+    min-height: 0;
+    padding: 0 16px;
+    justify-content: flex-start;
+    gap: 12px;
+  }
+
+  .add-icon {
+    width: 32px;
+    height: 32px;
+    font-size: 16px;
   }
 }
 </style>

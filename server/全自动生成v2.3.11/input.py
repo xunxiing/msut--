@@ -1,75 +1,67 @@
-# --- 1. 输入参数定义 ---
+"""
+名称: Universal_Gravitation_Calculator
+描述: 计算两个物体之间的万有引力，并施加作用力与反作用力。
+公式: F = G * (m1 * m2) / r^2
+"""
 
-# 核心实体
-entity_body = INPUT(attrs={"name": "车身(Body)", "data_type": 1})
-entity_wheel = INPUT(attrs={"name": "轮子(Wheel)", "data_type": 1})
+# --- 1. 输入参数 (Inputs) ---
+entity_a = INPUT(attrs={"name": "Object A", "data_type": 1})
+entity_b = INPUT(attrs={"name": "Object B", "data_type": 1})
+g_const  = INPUT(attrs={"name": "G Constant", "data_type": 2})
 
-# 悬挂参数
-# LocalOffset 是轮子相对于车身中心的理想位置（向量，例如 {"x":0, "y":-2.5, "z":0, "w":0}）
-target_local_offset = INPUT(attrs={"name": "理想局部偏移", "data_type": 8})
+# --- 2. 获取物理数据 (Sensors) ---
+pos_a_node  = Position(object=entity_a["OUTPUT"])
+pos_b_node  = Position(object=entity_b["OUTPUT"])
+mass_a_node = MASS(Entity=entity_a["OUTPUT"])
+mass_b_node = MASS(Entity=entity_b["OUTPUT"])
 
-# PID 增益 (控制悬挂硬度和回弹)
-kp_stiffness = INPUT(attrs={"name": "弹簧硬度(Kp)", "data_type": 2})
-kd_damping = INPUT(attrs={"name": "阻尼系数(Kd)", "data_type": 2})
-
-# --- 2. 获取当前状态 ---
-
-# 获取车身和轮子的世界坐标
-body_pos = Position(object=entity_body["OUTPUT"])
-wheel_pos = Position(object=entity_wheel["OUTPUT"])
-
-# 获取速度用于计算阻尼
-body_vel = Velocity(object=entity_body["OUTPUT"])
-wheel_vel = Velocity(object=entity_wheel["OUTPUT"])
-
-# --- 3. 坐标转换与误差计算 ---
-
-# 将车身的局部目标偏移转换成世界坐标，这样车身旋转时，轮子目标点也会跟着转
-target_world_pos_node = LocalPositionToWorld(
-    object=entity_body["OUTPUT"], 
-    **{"Local Position": target_local_offset["OUTPUT"]}
+# --- 3. 向量与距离计算 (Vector Math) ---
+# 计算位移向量 delta = PosB - PosA (从A指向B)
+delta_pos = SUBTRACT(
+    A=pos_b_node["Position"], 
+    B=pos_a_node["Position"], 
+    attrs={"datatype": 8}
 )
 
-# 计算位置误差 (目标位置 - 当前轮子位置)
-# pos_error = target_world_pos - wheel_pos
-pos_error = target_world_pos_node["world position"] - wheel_pos["Position"]
+# 计算距离的平方 r^2
+r_sqr = SQR_MAGNITUDE(INPUT=delta_pos["A-B"])
 
-# 计算相对速度 (车身速度 - 轮子速度)
-# vel_error = body_vel - wheel_vel
-vel_error = body_vel["Velocity"] - wheel_vel["Velocity"]
+# 计算单位方向向量 (Normalize)
+dir_vec = NORMALIZE(input=delta_pos["A-B"])
 
-# --- 4. 悬挂物理逻辑计算 (PD 控制) ---
+# --- 4. 引力公式计算 (Gravity Formula) ---
+# 计算质量乘积: m1 * m2
+mass_prod = MULTIPLY(A=mass_a_node["Mass"], B=mass_b_node["Mass"])
 
-# 1. 弹簧力 (P项): 误差越大，拉力越大
-# spring_force = pos_error * kp
-spring_force = MULTIPLY(A=pos_error, B=kp_stiffness["OUTPUT"], attrs={"datatype": 8})
+# 计算分子部分: G * (m1 * m2)
+g_m_prod  = MULTIPLY(A=g_const["OUTPUT"], B=mass_prod["A*B"])
 
-# 2. 阻尼力 (D项): 抑制震荡，消耗能量
-# damper_force = vel_error * kd
-damper_force = MULTIPLY(A=vel_error, B=kd_damping["OUTPUT"], attrs={"datatype": 8})
+# 计算引力标量大小: F = (G * m1 * m2) / r^2
+force_mag = divide(A=g_m_prod["A*B"], B=r_sqr["RESULT"])
 
-# 3. 合力
-# total_force = spring_force + damper_force
-total_suspension_force = ADD(A=spring_force["A*B"], B=damper_force["A*B"], attrs={"datatype": 8})
-
-# --- 5. 施加力 ---
-
-# 对轮子施加悬挂力
-apply_to_wheel = add_FORCE(
-    object=entity_wheel["OUTPUT"], 
-    Force=total_suspension_force["A+B"]
+# 转换为引力向量 (方向指向B): F_vec = dir * F
+gravity_vec = MULTIPLY(
+    A=dir_vec["result"], 
+    B=force_mag["A / B"], 
+    attrs={"datatype": 8}
 )
 
-# 根据牛顿第三定律，对车身施加反作用力 (防止车身因为轮子的力而无中生有获得动量)
+# --- 5. 施加作用力与反作用力 (Apply Forces) ---
+# 对物体 A 施加指向 B 的正向力
+apply_a = ADD_FORCE(object=entity_a["OUTPUT"], Force=gravity_vec["A*B"])
+
+# 对物体 B 施加指向 A 的反向力 (-1 * gravity_vec)
 neg_one = Constant(attrs={"value": -1.0})
-reaction_force = MULTIPLY(A=total_suspension_force["A+B"], B=neg_one["OUT"], attrs={"datatype": 8})
-
-apply_to_body = add_FORCE(
-    object=entity_body["OUTPUT"], 
-    Force=reaction_force["A*B"]
+neg_gravity_vec = MULTIPLY(
+    A=gravity_vec["A*B"], 
+    B=neg_one["OUT"], 
+    attrs={"datatype": 8}
 )
+apply_b = ADD_FORCE(object=entity_b["OUTPUT"], Force=neg_gravity_vec["A*B"])
 
-# --- 6. 调试输出 (可选) ---
-# 将偏移误差转换成字符串，方便连接到 Text Screen 观察
-error_val = MAGNITUDE(pos_error)
-OUTPUT(INPUT=TO_STRING(error_val["result"]), attrs={"name": "CurrentError"})
+# --- 6. 输出结果 (Outputs) ---
+# 输出引力标量大小
+OUTPUT(INPUT=force_mag["A / B"], attrs={"name": "Gravity_Force_Magnitude"})
+
+# 输出物体 A 受到的引力向量
+OUTPUT(INPUT=gravity_vec["A*B"], attrs={"name": "Gravity_Vector_A"})

@@ -606,10 +606,40 @@ onMounted(fetch)
   .detail-header-card {
     flex-direction: column;
     align-items: stretch;
+    padding: 20px; /* Reduced padding on mobile */
+    gap: 20px;
   }
   
+  .header-main {
+    flex-direction: row; /* Keep icon and text side-by-side if possible */
+    align-items: flex-start;
+    min-width: 0; /* Allow shrinking */
+  }
+
+  .icon-wrapper {
+    width: 48px;
+    height: 48px;
+    font-size: 24px;
+    border-radius: 12px;
+  }
+
+  .resource-title {
+    font-size: 20px; /* Smaller title on mobile */
+  }
+
   .header-actions {
     width: 100%;
+  }
+
+  /* Adjust top row spacing on mobile */
+  .top-row {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+  
+  .top-row > .el-col {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
   }
 }
 

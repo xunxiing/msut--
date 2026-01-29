@@ -907,17 +907,38 @@ onMounted(() => {
   }
 
   .card-body {
-    flex-direction: column;
+    flex-direction: row;
+    align-items: center; /* 垂直居中 */
   }
   
   .card-icon {
-    width: 100%;
-    height: 120px;
-    border-radius: 12px 12px 0 0;
+    width: 80px; /* 进一步减小图标尺寸以适应窄屏 */
+    height: 80px;
+    border-radius: 8px;
+    flex-shrink: 0; /* 防止被压缩 */
+  }
+
+  .card-info {
+    min-width: 0; /* 关键：允许子元素文本截断 */
+    padding-left: 0;
   }
   
   .resource-card {
     height: auto;
+  }
+
+  .resource-card :deep(.el-card__body) {
+    padding: 12px;
+  }
+
+  .resource-desc {
+    -webkit-line-clamp: 2;
+  }
+
+  .author-avatar {
+    width: 16px;
+    height: 16px;
+    font-size: 10px;
   }
 }
 </style>

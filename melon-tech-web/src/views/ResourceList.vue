@@ -932,6 +932,7 @@ onMounted(() => {
   }
 
   .resource-desc {
+    line-clamp: 2;
     -webkit-line-clamp: 2;
   }
 

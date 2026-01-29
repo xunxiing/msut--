@@ -296,6 +296,8 @@ onMounted(fetch)
   padding: 32px 24px;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   color: #1e293b;
+  box-sizing: border-box; /* Ensure padding is included in width */
+  width: 100%;
 }
 
 .breadcrumb-wrapper {
@@ -603,6 +605,10 @@ onMounted(fetch)
 }
 
 @media (max-width: 768px) {
+  .resource-detail-container {
+    padding: 16px; /* Explicit mobile padding */
+  }
+
   .detail-header-card {
     flex-direction: column;
     align-items: stretch;
@@ -611,9 +617,10 @@ onMounted(fetch)
   }
   
   .header-main {
-    flex-direction: row; /* Keep icon and text side-by-side if possible */
+    flex-direction: row;
     align-items: flex-start;
-    min-width: 0; /* Allow shrinking */
+    min-width: 0; /* Remove fixed min-width to prevent overflow on small screens (320px) */
+    width: 100%; /* Ensure it takes available space */
   }
 
   .icon-wrapper {

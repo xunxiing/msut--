@@ -668,6 +668,7 @@ onMounted(() => {
   align-items: center;
   justify-content: flex-end;
   margin-left: auto;
+  flex-wrap: wrap; /* Important: allow buttons to wrap */
 }
 
 .resource-grid {
@@ -819,6 +820,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 15px;
+  flex-wrap: wrap; /* Prevent overflow if buttons/tags are too wide */
 }
 
 .date {
@@ -876,14 +878,17 @@ onMounted(() => {
 
 @media (max-width: 768px) {
   .file-library-container {
-    padding: 20px 16px;
+    padding: 16px;
+    width: 100%; /* Changed from 100vw to 100% to respect parent container */
+    overflow-x: hidden;
   }
 
   .library-header {
     flex-direction: column;
     align-items: flex-start;
-    gap: 20px;
-    margin-bottom: 32px;
+    gap: 16px;
+    margin-bottom: 24px;
+    width: 100%;
   }
   
   .header-actions {
@@ -891,6 +896,17 @@ onMounted(() => {
     flex-direction: column;
     align-items: stretch;
     gap: 12px;
+  }
+  
+  /* Ensure no horizontal overflow */
+  .resource-card-wrapper {
+    max-width: 100%;
+  }
+
+  .el-pagination {
+    flex-wrap: wrap;
+    justify-content: center;
+    --el-pagination-button-width: 32px;
   }
   
   .search-input {
@@ -931,6 +947,11 @@ onMounted(() => {
     padding: 12px;
   }
 
+  .stream-toolbar {
+    flex-wrap: wrap; /* Allow wrapping for stats and page size */
+    gap: 8px;
+  }
+
   .resource-desc {
     line-clamp: 2;
     -webkit-line-clamp: 2;
@@ -940,6 +961,20 @@ onMounted(() => {
     width: 16px;
     height: 16px;
     font-size: 10px;
+  }
+
+  /* Fix for button overflow on small screens */
+  .external-mini-actions {
+    margin-left: 0;
+    justify-content: flex-start;
+    width: 100%;
+    margin-top: 8px;
+  }
+
+  .external-mini-actions .el-button {
+    padding: 6px 10px;
+    height: 28px;
+    font-size: 12px;
   }
 }
 </style>

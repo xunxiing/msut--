@@ -641,6 +641,14 @@ onMounted(fetch)
     padding-left: 0 !important;
     padding-right: 0 !important;
   }
+
+  .file-item {
+    padding: 12px;
+  }
+
+  .file-name {
+    font-size: 14px;
+  }
 }
 
 .file-item {

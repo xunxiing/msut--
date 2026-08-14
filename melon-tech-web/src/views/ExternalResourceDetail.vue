@@ -3,7 +3,7 @@
     <div class="breadcrumb-wrapper">
       <el-breadcrumb separator="/">
         <el-breadcrumb-item :to="{ path: '/resources' }">资源库</el-breadcrumb-item>
-        <el-breadcrumb-item>外站资源</el-breadcrumb-item>
+        <el-breadcrumb-item>{{ data.name }}</el-breadcrumb-item>
       </el-breadcrumb>
     </div>
 
@@ -13,8 +13,8 @@
           <el-icon><Link /></el-icon>
         </div>
         <div class="header-info">
-          <h1 class="resource-title">{{ data.name || data.full_name }}</h1>
-          <p class="resource-desc">来源：me.loveall.icu（外站直连，不经过本站文件 API）</p>
+          <h1 class="resource-title">{{ data.name }}</h1>
+          <p class="resource-desc">来源：m.mgw.os.kg</p>
           <div class="header-meta">
             <span class="meta-item">
               <el-icon><Calendar /></el-icon>
@@ -22,7 +22,7 @@
             </span>
             <span class="meta-item">
               <el-icon><Document /></el-icon>
-              {{ prettySize(data.size_bytes) }}
+              {{ data.size || '-' }}
             </span>
           </div>
         </div>
@@ -41,9 +41,9 @@
         </div>
 
         <div class="action-buttons">
-          <el-button type="primary" class="download-btn-large" @click="openExternalDownload(downloadHref)">
+          <el-button type="primary" class="download-btn-large" @click="openDownload">
             <el-icon><Download /></el-icon>
-            下载（外站）
+            下载
           </el-button>
         </div>
       </div>
@@ -61,11 +61,11 @@
                     <el-icon><Paperclip /></el-icon>
                   </div>
                   <div class="file-info">
-                    <div class="file-name" :title="data.full_name">{{ data.full_name }}</div>
-                    <div class="file-meta">{{ prettySize(data.size_bytes) }} · ZIP</div>
+                    <div class="file-name" :title="data.name">{{ data.name }}</div>
+                    <div class="file-meta">{{ data.size || '-' }} · ZIP</div>
                   </div>
                 </div>
-                <el-button class="download-btn-large" @click="openExternalDownload(downloadHref)">下载</el-button>
+                <el-button class="download-btn-large" @click="openDownload">下载</el-button>
               </div>
             </div>
           </div>
@@ -76,8 +76,7 @@
             <h3 class="section-title">预览图</h3>
             <div v-if="previewSrc" class="images-content">
               <div class="cover-preview">
-                <img :src="previewSrc" alt="预览图" class="cover-image" loading="lazy" />
-                <span class="cover-badge">外站预览</span>
+                <img :src="previewSrc" alt="预览图" class="cover-image" loading="lazy" referrerpolicy="no-referrer" @error="previewBroken = true" />
               </div>
             </div>
             <div v-else class="no-files-placeholder">暂无预览图</div>
@@ -97,55 +96,33 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Calendar, CopyDocument, Document, Download, Link, Paperclip } from '@element-plus/icons-vue'
-import { getMeLoveallResourceInfo, meLoveallDownloadUrl, meLoveallPreviewUrl, type MeLoveallFileInfo } from '../api/meLoveall'
+import { getExternalResourceInfo, externalPreviewUrl, externalDownloadUrl, type ExternalFileInfo } from '../api/external'
 
 const route = useRoute()
 
 const loading = ref(false)
 const error = ref('')
-const data = ref<MeLoveallFileInfo | null>(null)
+const data = ref<ExternalFileInfo | null>(null)
+const previewBroken = ref(false)
 
-const fileName = computed(() => String(route.query.file || '').trim())
+const fileId = computed(() => String(route.query.file || '').trim())
 const shareUrl = ref('')
 
-function prettySize(n: number) {
-  if (!n && n !== 0) return '-'
-  const units = ['B', 'KB', 'MB', 'GB']
-  let i = 0
-  let v = n
-  while (v >= 1024 && i < units.length - 1) {
-    v /= 1024
-    i++
-  }
-  return `${v.toFixed(1)} ${units[i]}`
-}
-
-function resolveExternalUrl(raw: string | null) {
-  if (!raw) return ''
-  try {
-    return new URL(raw, 'https://me.loveall.icu').toString()
-  } catch {
-    return raw
-  }
-}
-
 const previewSrc = computed(() => {
-  if (!data.value) return ''
-  return resolveExternalUrl(data.value.preview_url) || meLoveallPreviewUrl(data.value.full_name)
+  if (!data.value || previewBroken.value) return ''
+  if (data.value.preview_url) return data.value.preview_url
+  if (fileId.value) return externalPreviewUrl(fileId.value)
+  return ''
 })
 
-const downloadHref = computed(() => {
-  if (!data.value) return ''
-  return resolveExternalUrl(data.value.download_url) || meLoveallDownloadUrl(data.value.full_name)
-})
-
-function openExternalDownload(href: string) {
-  if (!href) return
-  window.open(href, '_blank', 'noopener,noreferrer')
+function openDownload() {
+  if (!data.value) return
+  const url = data.value.download_url || (fileId.value ? externalDownloadUrl(fileId.value) : '')
+  if (url) window.open(url, '_blank', 'noopener,noreferrer')
 }
 
 function copy(text: string) {
@@ -158,24 +135,29 @@ function copy(text: string) {
 async function fetchInfo() {
   error.value = ''
   data.value = null
+  previewBroken.value = false
 
-  if (!fileName.value) {
-    error.value = '缺少 file 参数（示例：/external?file=资源.zip）'
+  if (!fileId.value) {
+    error.value = '缺少 file 参数'
     return
   }
 
   loading.value = true
   try {
-    data.value = await getMeLoveallResourceInfo(fileName.value)
+    data.value = await getExternalResourceInfo(fileId.value)
     shareUrl.value = window.location.href
   } catch (e: any) {
-    error.value = e?.message || '加载外站资源失败'
+    error.value = e?.message || '加载资源失败'
   } finally {
     loading.value = false
   }
 }
 
 onMounted(fetchInfo)
+
+watch(fileId, () => {
+  if (fileId.value) fetchInfo()
+})
 </script>
 
 <style scoped>
@@ -368,17 +350,6 @@ onMounted(fetchInfo)
   display: block;
 }
 
-.cover-badge {
-  position: absolute;
-  left: 12px;
-  top: 12px;
-  padding: 4px 10px;
-  font-size: 12px;
-  border-radius: 999px;
-  background: rgba(15, 23, 42, 0.8);
-  color: #e5e7eb;
-}
-
 .no-files-placeholder {
   color: #94a3b8;
   font-size: 14px;
@@ -392,4 +363,3 @@ onMounted(fetchInfo)
   border: 1px solid #fee2e2;
 }
 </style>
-

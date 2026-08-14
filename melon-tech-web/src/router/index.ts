@@ -3,6 +3,7 @@ import { useAuth } from '../stores/auth'
 
 const routes: RouteRecordRaw[] = [
   { path: '/', name: 'home', component: () => import('../views/Home.vue') },
+  { path: '/m', name: 'home-mobile', component: () => import('../views/HomeMobile.vue') },
   { path: '/about', name: 'about', component: () => import('../views/About.vue') },
   { path: '/dashboard', name: 'dashboard', meta: { requiresAuth: true }, component: () => import('../views/Dashboard.vue') },
   { path: '/my/resources', name: 'my-resources', meta: { requiresAuth: true }, component: () => import('../views/MyResources.vue') },

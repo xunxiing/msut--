@@ -7,6 +7,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/about', name: 'about', component: () => import('../views/About.vue') },
   { path: '/dashboard', name: 'dashboard', meta: { requiresAuth: true }, component: () => import('../views/Dashboard.vue') },
   { path: '/my/resources', name: 'my-resources', meta: { requiresAuth: true }, component: () => import('../views/MyResources.vue') },
+  { path: '/m/my/resources', name: 'my-resources-mobile', meta: { requiresAuth: true }, component: () => import('../views/MyResourcesMobile.vue') },
   { path: '/login', name: 'login', component: () => import('../views/Login.vue') },
   { path: '/register', name: 'register', component: () => import('../views/Register.vue') },
   { path: '/tutorials', name: 'tutorials', component: () => import('../views/TutorialRAG.vue') },

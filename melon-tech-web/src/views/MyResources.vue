@@ -218,6 +218,7 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref, onBeforeUnmount } from 'vue'
+import { useRouter } from 'vue-router'
 import type { UploadInstance, UploadUserFile } from 'element-plus'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -537,7 +538,15 @@ function onRefresh() {
   else fetchTutorials()
 }
 
-onMounted(() => { fetchResources(); fetchTutorials() })
+const router = useRouter()
+
+onMounted(() => {
+  if (window.innerWidth < 768) {
+    router.replace('/m/my/resources')
+    return
+  }
+  fetchResources(); fetchTutorials()
+})
 
 function abortAllUploads() {
   if (drawerUploadRef.value) {

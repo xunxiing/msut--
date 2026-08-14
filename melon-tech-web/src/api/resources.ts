@@ -36,12 +36,12 @@ export type OptimizeResult = {
 }
 
 export async function optimizeContent(data: { title: string; description: string; usage: string }): Promise<OptimizeResult> {
-  const res = await http.post("/api/resources/optimize", data)
+  const res = await http.post("/resources/optimize", data)
   return res.data
 }
 
 export async function classifyResource(rid: number): Promise<{ tags: string[] }> {
-  const res = await http.post(`/api/resources/${rid}/classify`)
+  const res = await http.post(`/resources/${rid}/classify`)
   return res.data
 }
 

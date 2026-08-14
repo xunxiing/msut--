@@ -276,18 +276,16 @@ def _call_llm_v2(messages: List[dict]) -> dict:
 
 
 def _store_tool_file(dsl: str) -> dict:
-    """Generate a .melsave file and persist it under uploads/agent."""
+    """Generate a .melsave file and upload it to R2."""
     try:
         logger.info("agent tool generate_melsave: dsl length=%s", len(dsl or ""))
     except Exception:
         pass
     result = generate_melsave_bytes(dsl)
-    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
-    agent_dir = UPLOADS_DIR / "agent"
-    agent_dir.mkdir(parents=True, exist_ok=True)
     stored_name = f"agent_{nanoid(6)}_{result.filename}"
-    dest = agent_dir / stored_name
-    dest.write_bytes(result.data)
+    r2_key = f"agent/{stored_name}"
+    from . import storage as r2
+    url = r2.upload_bytes(r2_key, result.data, "application/octet-stream")
     return {
         "ok": True,
         "type": "melsave",
@@ -296,7 +294,7 @@ def _store_tool_file(dsl: str) -> dict:
             "filename": result.filename,
             "storedName": stored_name,
             "size": len(result.data),
-            "url": f"/uploads/agent/{stored_name}",
+            "url": url,
         },
     }
 

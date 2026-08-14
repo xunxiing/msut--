@@ -20,8 +20,12 @@ services:
       - RAG_LLM_MODEL=${RAG_LLM_MODEL:-}
       - RAG_EMBED_MODEL=${RAG_EMBED_MODEL:-}
       - RAG_EMBED_DIM=${RAG_EMBED_DIM:-}
+      - R2_ACCOUNT_ID=${R2_ACCOUNT_ID}
+      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
+      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
+      - R2_BUCKET=${R2_BUCKET:-msut}
+      - R2_PUBLIC_URL=${R2_PUBLIC_URL}
     volumes:
-      - ./uploads:/app/server/uploads:rw
       - ./data:/app/server/data:rw
     restart: unless-stopped
     networks:

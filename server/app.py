@@ -90,13 +90,14 @@ async def security_headers(request: Request, call_next: Callable):
     return response
 
 
-# Static files for uploads (public)
+# Static files for uploads (legacy local files — kept for backward compat during R2 migration)
 uploads_path = Path(__file__).resolve().parent / "uploads"
-app.mount(
-    "/uploads",
-    StaticFiles(directory=str(uploads_path), html=False, check_dir=True),
-    name="uploads",
-)
+if uploads_path.exists():
+    app.mount(
+        "/uploads",
+        StaticFiles(directory=str(uploads_path), html=False, check_dir=False),
+        name="uploads",
+    )
 
 
 # Routers

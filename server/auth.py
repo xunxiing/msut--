@@ -439,8 +439,8 @@ async def upload_avatar(request: Request, file: UploadFile = File(...)):
             ext = ".png"
 
     stored_name = f"avatar-{int(uid)}-{now_ms()}-{nanoid()}{ext}"
+    r2_key = f"avatars/{stored_name}"
     tmp = UPLOAD_DIR / f"{stored_name}.part"
-    dest = UPLOAD_DIR / stored_name
     size = 0
     try:
         with tmp.open("wb") as f:
@@ -456,15 +456,21 @@ async def upload_avatar(request: Request, file: UploadFile = File(...)):
                         pass
                     return JSONResponse(status_code=413, content={"error": "头像文件过大（最大 5MB）"})
                 f.write(chunk)
-        tmp.replace(dest)
+        # Upload to R2
+        from . import storage as r2
+        avatar_url = r2.upload_file(r2_key, tmp, ct)
     except Exception:
         try:
             tmp.unlink(missing_ok=True)  # type: ignore[arg-type]
         except Exception:
             pass
         return JSONResponse(status_code=500, content={"error": "上传失败"})
+    finally:
+        try:
+            tmp.unlink(missing_ok=True)  # type: ignore[arg-type]
+        except Exception:
+            pass
 
-    avatar_url = f"/uploads/{stored_name}"
     conn = get_connection()
     try:
         conn.execute(

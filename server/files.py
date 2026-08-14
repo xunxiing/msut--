@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from fastapi import APIRouter, File, Form, Query, Request, UploadFile, Body
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 
 from .auth import get_current_user
 from .db import get_connection
@@ -17,6 +17,7 @@ from .label.watermark_indexer import (
     fnv1a64,
 )
 from .notifications import create_notification
+from . import storage as r2
 
 
 router = APIRouter()
@@ -24,8 +25,12 @@ logger = logging.getLogger("msut.files")
 
 PUBLIC_BASE = os.getenv("PUBLIC_BASE_URL", "http://127.0.0.1:5173")
 
+# Keep for backward compat (temp file staging during uploads)
 UPLOAD_DIR = Path(__file__).resolve().parent / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+TEMP_DIR = Path(tempfile.gettempdir()) / "msut_uploads"
+TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 
@@ -148,28 +153,27 @@ async def create_resource(
     }
 
 
-async def _save_upload_atomic(
-    request: Request, file: UploadFile, dest_dir: Path
-) -> Optional[Path]:
-    """Save an uploaded file via a temporary .part file and atomically rename.
-    Returns final destination path on success, or None on failure.
+async def _save_upload_to_r2(
+    request: Request, file: UploadFile
+) -> Optional[Tuple[str, str, int, Path]]:
+    """Save an uploaded file to a temp path, upload to R2, and return
+    (r2_key, url_path, size, temp_path) on success, or None on failure.
+    The temp file is kept for optional watermark extraction and cleaned up by caller.
     Aborts and cleans up if client disconnects or file exceeds MAX_FILE_SIZE.
     """
     ext = Path(file.filename or "").suffix
     stored_name = f"{now_ms()}-{nanoid()}{ext}"
-    final_path = dest_dir / stored_name
-    temp_path = dest_dir / (stored_name + ".part")
+    r2_key = f"uploads/{stored_name}"
+    temp_path = TEMP_DIR / stored_name
     size = 0
     try:
         with temp_path.open("wb") as f:
             while True:
-                # Read in 1MB chunks
                 chunk = await file.read(1024 * 1024)
                 if not chunk:
                     break
                 f.write(chunk)
                 size += len(chunk)
-                # Size limit per file
                 if size > MAX_FILE_SIZE:
                     try:
                         f.flush()
@@ -181,7 +185,6 @@ async def _save_upload_atomic(
                         pass
                     temp_path.unlink(missing_ok=True)
                     return None
-                # Check client disconnect mid-stream
                 try:
                     if await request.is_disconnected():
                         try:
@@ -195,18 +198,18 @@ async def _save_upload_atomic(
                         temp_path.unlink(missing_ok=True)
                         return None
                 except Exception:
-                    # If disconnect check fails, continue best-effort
                     pass
-        # Final disconnect check after write complete
         try:
             if await request.is_disconnected():
                 temp_path.unlink(missing_ok=True)
                 return None
         except Exception:
             pass
-        # Atomic replace to final name
-        os.replace(str(temp_path), str(final_path))
-        return final_path
+        # Upload to R2
+        content_type = file.content_type or ""
+        r2.upload_file(r2_key, temp_path, content_type)
+        url_path = r2.build_public_url(r2_key)
+        return (r2_key, url_path, size, temp_path)
     except Exception:
         try:
             temp_path.unlink(missing_ok=True)
@@ -258,15 +261,17 @@ async def upload_to_resource(
     saved = []
     do_wm = parse_bool(saveWatermark, False)
     # 使用 autocommit，每条语句独立事务，避免长时间持有写锁
-    created_file_paths: List[Path] = []
+    created_r2_keys: List[str] = []
+    created_temp_paths: List[Path] = []
     first_uploaded_image_id: Optional[int] = None
     try:
         for uf in files[:10]:
-            dest = await _save_upload_atomic(request, uf, UPLOAD_DIR)
-            if dest is None:
+            result = await _save_upload_to_r2(request, uf)
+            if result is None:
                 raise RuntimeError("upload_failed")
-            created_file_paths.append(dest)
-            url_path = f"/uploads/{dest.name}"
+            r2_key, url_path, file_size, temp_path = result
+            created_r2_keys.append(r2_key)
+            created_temp_paths.append(temp_path)
             info = cur.execute(
                 """
                 INSERT INTO resource_files (resource_id, original_name, stored_name, mime, size, url_path)
@@ -274,10 +279,10 @@ async def upload_to_resource(
                 """,
                 (
                     resourceId,
-                    uf.filename or dest.name,
-                    dest.name,
+                    uf.filename or r2_key,
+                    r2_key,
                     uf.content_type or None,
-                    dest.stat().st_size,
+                    file_size,
                     url_path,
                 ),
             )
@@ -288,15 +293,15 @@ async def upload_to_resource(
                     first_uploaded_image_id = file_id
             # Attempt watermark extraction for .melsave/.zip when requested
             try:
-                suffix = str(dest.suffix).lower()
+                suffix = Path(uf.filename or "").suffix.lower()
                 if do_wm and suffix in {".melsave", ".zip"}:
                     logger.info(
                         "wm: extracting fileId=%s name=%s suffix=%s",
-                        int(info.lastrowid),
-                        uf.filename or dest.name,
+                        file_id,
+                        uf.filename or r2_key,
                         suffix,
                     )
-                    raw_seq, embedded = extract_sequence_from_melsave(str(dest))
+                    raw_seq, embedded = extract_sequence_from_melsave(str(temp_path))
                     seq_canon = canonicalize([str(x) for x in raw_seq])
                     wm_u64 = int(fnv1a64(seq_canon))
                     wm_i64 = _u64_to_i64(wm_u64)
@@ -308,11 +313,11 @@ async def upload_to_resource(
                         INSERT OR REPLACE INTO file_watermarks (file_id, watermark_u64, seq_len, embedded_watermark)
                         VALUES (?, ?, ?, ?)
                         """,
-                        (int(info.lastrowid), wm_i64, int(len(seq_canon)), emb_i64),
+                        (file_id, wm_i64, int(len(seq_canon)), emb_i64),
                     )
                     logger.info(
                         "wm: saved fileId=%s watermark_u64=%s watermark_i64=%s length=%s embedded=%s embedded_i64=%s",
-                        int(info.lastrowid),
+                        file_id,
                         wm_u64,
                         wm_i64,
                         int(len(seq_canon)),
@@ -324,21 +329,21 @@ async def upload_to_resource(
                         "wm: skipped (saveWatermark=%s suffix=%s) fileId=%s",
                         do_wm,
                         suffix,
-                        int(info.lastrowid),
+                        file_id,
                     )
             except Exception as ex:
                 # Do not fail the whole upload if watermark extraction fails
                 try:
                     logger.exception(
-                        "wm: extract failed fileId=%s error=%s", int(info.lastrowid), ex
+                        "wm: extract failed fileId=%s error=%s", file_id, ex
                     )
                 except Exception:
                     pass
             saved.append(
                 {
-                    "id": int(info.lastrowid),
-                    "originalName": uf.filename or dest.name,
-                    "size": dest.stat().st_size,
+                    "id": file_id,
+                    "originalName": uf.filename or r2_key,
+                    "size": file_size,
                     "mime": uf.content_type or None,
                     "urlPath": url_path,
                 }
@@ -361,17 +366,23 @@ async def upload_to_resource(
 
         conn.commit()
     except Exception:
-        # Roll back DB and delete any files saved during this request
+        # Roll back DB and delete any R2 objects uploaded during this request
         try:
             conn.rollback()
         except Exception:
             pass
-        for p in created_file_paths:
+        for key in created_r2_keys:
+            try:
+                r2.delete_object(key)
+            except Exception:
+                pass
+        return JSONResponse(status_code=400, content={"error": "上传失败"})
+    finally:
+        for p in created_temp_paths:
             try:
                 p.unlink(missing_ok=True)
             except Exception:
                 pass
-        return JSONResponse(status_code=400, content={"error": "上传失败"})
     return {"ok": True, "files": saved}
 
 
@@ -403,15 +414,17 @@ async def upload_resource_images(
     conn = get_connection()
     cur = conn.cursor()
     saved = []
-    created_file_paths: List[Path] = []
+    created_r2_keys: List[str] = []
+    created_temp_paths: List[Path] = []
     first_uploaded_image_id: Optional[int] = None
     try:
         for uf in files[:10]:
-            dest = await _save_upload_atomic(request, uf, UPLOAD_DIR)
-            if dest is None:
+            result = await _save_upload_to_r2(request, uf)
+            if result is None:
                 raise RuntimeError("upload_failed")
-            created_file_paths.append(dest)
-            url_path = f"/uploads/{dest.name}"
+            r2_key, url_path, file_size, temp_path = result
+            created_r2_keys.append(r2_key)
+            created_temp_paths.append(temp_path)
             info = cur.execute(
                 """
                 INSERT INTO resource_files (resource_id, original_name, stored_name, mime, size, url_path)
@@ -419,10 +432,10 @@ async def upload_resource_images(
                 """,
                 (
                     rid,
-                    uf.filename or dest.name,
-                    dest.name,
+                    uf.filename or r2_key,
+                    r2_key,
                     uf.content_type or None,
-                    dest.stat().st_size,
+                    file_size,
                     url_path,
                 ),
             )
@@ -432,9 +445,9 @@ async def upload_resource_images(
             saved.append(
                 {
                     "id": file_id,
-                    "original_name": uf.filename or dest.name,
-                    "stored_name": dest.name,
-                    "size": dest.stat().st_size,
+                    "original_name": uf.filename or r2_key,
+                    "stored_name": r2_key,
+                    "size": file_size,
                     "mime": uf.content_type or None,
                     "url_path": url_path,
                 }
@@ -461,12 +474,18 @@ async def upload_resource_images(
             conn.rollback()
         except Exception:
             pass
-        for p in created_file_paths:
+        for key in created_r2_keys:
+            try:
+                r2.delete_object(key)
+            except Exception:
+                pass
+        return JSONResponse(status_code=400, content={"error": "上传失败"})
+    finally:
+        for p in created_temp_paths:
             try:
                 p.unlink(missing_ok=True)
             except Exception:
                 pass
-        return JSONResponse(status_code=400, content={"error": "上传失败"})
     return {"ok": True, "files": saved}
 
 
@@ -778,12 +797,15 @@ def delete_resource(request: Request, rid: int):
     cur.execute("DELETE FROM resources WHERE id = ?", (rid,))
     conn.commit()
     for f in files:
-        path = UPLOAD_DIR / f["stored_name"]
+        stored = f["stored_name"]
         try:
-            if path.exists():
-                path.unlink()
+            if "/" in stored:
+                r2.delete_object(stored)
+            else:
+                path = UPLOAD_DIR / stored
+                if path.exists():
+                    path.unlink()
         except Exception:
-            # ignore individual file deletion errors
             pass
     return {"ok": True}
 
@@ -1127,16 +1149,24 @@ def download_file(fid: int):
     ).fetchone()
     if not row:
         return JSONResponse(status_code=404, content={"error": "文件不存在"})
-    path = UPLOAD_DIR / row["stored_name"]
+    stored = row["stored_name"]
+    filename = row["original_name"]
+    # If stored_name looks like an R2 key (contains /), generate presigned URL
+    if "/" in stored:
+        try:
+            presigned = r2.get_presigned_download_url(stored, filename)
+            return RedirectResponse(url=presigned, status_code=302)
+        except Exception:
+            return JSONResponse(status_code=500, content={"error": "下载失败"})
+    # Legacy: file still on local disk
+    path = UPLOAD_DIR / stored
     if not path.exists():
         return JSONResponse(status_code=404, content={"error": "文件丢了"})
     from urllib.parse import quote
 
-    filename = row["original_name"]
     safe_name = _safe_ascii_filename(filename)
     headers = {
         "Content-Disposition": f"attachment; filename=\"{safe_name}\"; filename*=UTF-8''{quote(filename)}",
         "X-Content-Type-Options": "nosniff",
     }
-    # FastAPI's FileResponse sets correct headers and content-type
     return FileResponse(path, headers=headers, media_type="application/octet-stream")

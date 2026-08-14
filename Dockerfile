@@ -96,7 +96,7 @@ ENV NODE_ENV=production \
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
     CMD sh -c 'curl -f http://localhost:${PORT:-3400}/api/auth/me || exit 1'
 
-VOLUME ["/app/server/uploads", "/app/server/data"]
+VOLUME ["/app/server/data"]
 
 EXPOSE 3400
 

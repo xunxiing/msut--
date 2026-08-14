@@ -228,7 +228,8 @@ function isDownloadUrl(href: string) {
     return (
       path.endsWith('.melsave') ||
       path.startsWith('/api/files/') ||
-      path.startsWith('/uploads/')
+      path.startsWith('/uploads/') ||
+      path.startsWith('/msut/agent/')
     )
   } catch {
     return false

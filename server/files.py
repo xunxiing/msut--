@@ -972,8 +972,12 @@ def list_resources(
     offset = (page - 1) * page_size
     conn = get_connection()
     cur = conn.cursor()
-    where = "WHERE r.title LIKE ? OR r.description LIKE ?" if q else ""
-    args: List = [f"%{q}%", f"%{q}%"] if q else []
+    if q:
+        where = "WHERE r.title LIKE ? OR r.description LIKE ? OR r.tags LIKE ? OR EXISTS (SELECT 1 FROM resource_files rf WHERE rf.resource_id = r.id AND rf.original_name LIKE ?)"
+        args: List = [f"%{q}%", f"%{q}%", f"%{q}%", f"%{q}%"]
+    else:
+        where = ""
+        args = []
     # Use the same table alias as in the items query to avoid 'no such column: r.title'
     total = cur.execute(
         f"SELECT COUNT(1) as c FROM resources r {where}", tuple(args)
@@ -1026,10 +1030,19 @@ async def optimize_resource_content(request: Request):
     title = (body or {}).get("title", "").strip()
     description = (body or {}).get("description", "").strip()
     usage = (body or {}).get("usage", "").strip()
+    resource_id = (body or {}).get("resourceId")
     if not title:
         return JSONResponse(status_code=400, content={"error": "标题不能为空"})
-    from .llm2 import optimize_content
+    from .llm2 import optimize_content, tags_to_json
     result = optimize_content(title, description, usage)
+    if result.get("tags") and resource_id:
+        try:
+            rid = int(resource_id)
+            conn = get_connection()
+            conn.execute("UPDATE resources SET tags = ? WHERE id = ?", (tags_to_json(result["tags"]), rid))
+            conn.commit()
+        except Exception:
+            pass
     return result
 
 

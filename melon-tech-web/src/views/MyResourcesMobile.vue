@@ -75,6 +75,7 @@
           :files="resourceSheet.files"
           :images="resourceSheet.images"
           :coverFileId="resourceSheet.coverFileId"
+          :resourceId="resourceSheet.id"
           @update:title="resourceSheet.title = $event"
           @update:description="resourceSheet.description = $event"
           @update:usage="resourceSheet.usage = $event"

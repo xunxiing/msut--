@@ -15,6 +15,9 @@
         <div class="header-info">
           <h1 class="resource-title">{{ data.title }}</h1>
           <p class="resource-desc" v-if="data.description">{{ data.description }}</p>
+          <div v-if="(data as any).tags?.length" class="detail-tags">
+            <el-tag v-for="t in (data as any).tags" :key="t" size="small" effect="plain" round>{{ t }}</el-tag>
+          </div>
           <div class="header-meta">
             <span class="meta-item">
               <el-avatar :size="24" :src="data.author_avatar || undefined" class="meta-avatar">
@@ -355,6 +358,13 @@ onMounted(fetch)
   color: #64748b;
   margin: 0 0 16px 0;
   line-height: 1.6;
+}
+
+.detail-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
 }
 
 .header-meta {

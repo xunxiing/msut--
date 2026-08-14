@@ -85,6 +85,7 @@ const props = defineProps({
   files: { type: Array as PropType<ResourceFile[]>, default: () => [] },
   images: { type: Array as PropType<ResourceFile[]>, default: () => [] },
   coverFileId: { type: Number as PropType<number | null>, default: null },
+  resourceId: { type: Number, default: 0 },
   showTitle: { type: Boolean, default: true },
   showAI: { type: Boolean, default: true },
   size: { type: String as PropType<'default' | 'small' | 'large'>, default: 'default' },
@@ -134,6 +135,7 @@ async function onAIOptimize() {
       title: form.value.title,
       description: form.value.description,
       usage: form.value.usage,
+      resourceId: props.resourceId || undefined,
     })
     form.value.title = result.title
     form.value.description = result.description

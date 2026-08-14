@@ -23,6 +23,7 @@ export type ResourceItem = {
   imageFiles?: ResourceFile[]
   coverFileId?: number | null
   coverUrlPath?: string | null
+  tags?: string[]
   shareUrl: string
 }
 
@@ -35,7 +36,7 @@ export type OptimizeResult = {
   tags: string[]
 }
 
-export async function optimizeContent(data: { title: string; description: string; usage: string }): Promise<OptimizeResult> {
+export async function optimizeContent(data: { title: string; description: string; usage: string; resourceId?: number }): Promise<OptimizeResult> {
   const res = await http.post("/resources/optimize", data)
   return res.data
 }

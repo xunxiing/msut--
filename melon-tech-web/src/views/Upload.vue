@@ -126,7 +126,7 @@ import { ref, computed, onBeforeUnmount } from 'vue'
 import { onBeforeRouteLeave, useRouter } from 'vue-router'
 import type { FormInstance, FormRules, UploadInstance, UploadUserFile } from 'element-plus'
 import { ElMessage } from 'element-plus'
-import { createResource, optimizeContent } from '../api/resources'
+import { createResource, optimizeContent, classifyResource } from '../api/resources'
 import { http } from '../api/http'
 import { UploadFilled, MagicStick, Plus, Picture, CircleCheckFilled } from '@element-plus/icons-vue'
 
@@ -215,6 +215,10 @@ async function onSubmit() {
         if (raw) cfd.append('files', raw)
       }
       await http.post(`/resources/${resourceId}/images/upload`, cfd, { headers: { 'Content-Type': 'multipart/form-data' } })
+    }
+
+    if (aiTags.value.length) {
+      await classifyResource(resourceId).catch(() => {})
     }
 
     successVisible.value = true

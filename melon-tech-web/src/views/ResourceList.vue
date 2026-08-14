@@ -83,6 +83,9 @@
                     <p class="resource-desc">
                       {{ getDescription(it) }}
                     </p>
+                    <div v-if="it.source === 'internal' && (it.internal as any).tags?.length" class="card-tags">
+                      <el-tag v-for="t in (it.internal as any).tags" :key="t" size="small" effect="plain" round @click.stop="searchTag(t)">{{ t }}</el-tag>
+                    </div>
                   </div>
 
                   <div class="info-bottom">
@@ -253,6 +256,12 @@ function handleOpen(it: CombinedItem) {
   }
   const fid = getExternalFileId(it.external)
   if (fid) router.push({ name: 'external-resource', query: { file: fid } })
+}
+
+function searchTag(tag: string) {
+  query.value = tag
+  queryDraft.value = tag
+  applySearch()
 }
 
 function applySearch() {
@@ -662,6 +671,13 @@ onMounted(() => {
   -webkit-box-orient: vertical;
   overflow: hidden;
   line-height: 1.5;
+}
+
+.card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
 }
 
 .info-bottom {

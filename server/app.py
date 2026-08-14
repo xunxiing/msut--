@@ -49,6 +49,7 @@ from .melsave import router as melsave_router
 from .tutorials import router as tutorials_router
 from .comments import router as comments_router
 from .notifications_api import router as notifications_router
+from .lua_sandbox import router as lua_router
 
 
 app = FastAPI()
@@ -108,6 +109,7 @@ app.include_router(agent_router)
 app.include_router(tutorials_router)
 app.include_router(comments_router)
 app.include_router(notifications_router)
+app.include_router(lua_router)
 
 
 @app.get("/api/private/ping")

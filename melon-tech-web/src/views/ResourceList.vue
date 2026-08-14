@@ -130,13 +130,15 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Search, Upload, Document, Star, StarFilled } from '@element-plus/icons-vue'
-import { useRouter } from 'vue-router'
 import { listResources, type ResourceItem } from '../api/resources'
 import { getResourceLikes, likeResource, unlikeResource, type LikeInfo } from '../api/likes'
 import { useAuth } from '../stores/auth'
 import { listExternalResources, externalPreviewUrl, type ExternalFileInfo } from '../api/external'
+
+const router = useRouter()
 
 const queryDraft = ref('')
 const query = ref('')
@@ -149,7 +151,6 @@ const internalTotal = ref(0)
 const loading = ref(false)
 const likesMap = ref<Record<number, LikeInfo>>({})
 const auth = useAuth()
-const router = useRouter()
 
 const externalLoading = ref(false)
 const externalAll = ref<ExternalFileInfo[]>([])
@@ -375,6 +376,10 @@ watch([query], () => {
 })
 
 onMounted(() => {
+  if (window.innerWidth < 768) {
+    router.replace('/m/resources')
+    return
+  }
   queryDraft.value = query.value
   refreshAll()
 })

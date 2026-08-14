@@ -12,6 +12,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/tutorials', name: 'tutorials', component: () => import('../views/TutorialRAG.vue') },
   { path: '/tutorials/library', name: 'tutorials-library', component: () => import('../views/TutorialLibrary.vue') },
   { path: '/resources', name: 'resources', component: () => import('../views/ResourceList.vue') },
+  { path: '/m/resources', name: 'resources-mobile', component: () => import('../views/ResourceListMobile.vue') },
   { path: '/external', name: 'external-resource', component: () => import('../views/ExternalResourceDetail.vue') },
   { path: '/upload', name: 'upload', meta: { requiresAuth: true }, component: () => import('../views/Upload.vue') },
   { path: '/dsl', name: 'dsl-tool', component: () => import('../views/DSLTool.vue') },

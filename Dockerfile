@@ -23,27 +23,22 @@ FROM python:3.11-alpine${ALPINE_VERSION}
 
 WORKDIR /app
 
-# Runtime deps: curl for healthcheck, sqlite for CLI access, su-exec for dropping privileges, nodejs/npm for static frontend server
+# Runtime deps: curl for healthcheck, sqlite for CLI access, su-exec for dropping privileges
 RUN apk add --no-cache \
     curl \
     sqlite \
     su-exec \
-    nodejs \
-    npm \
     && rm -rf /var/cache/apk/*
 
 # Non-root user
 RUN addgroup -g 10001 -S appgroup && \
     adduser -u 10001 -S appuser -G appgroup
 
-# Copy built frontend (optional; can be served by external Nginx or another static server)
+# Copy built frontend (served by FastAPI SPAStaticFiles)
 COPY --from=frontend-builder /app/web/dist /app/web/dist
 
 # Copy backend code
 COPY server /app/server
-
-# Install Node-based static file server for frontend
-RUN npm install -g serve
 
 # Install Python deps (with build deps for native wheels), then clean up
 RUN echo "=== apk update ===" && apk update \
@@ -81,15 +76,11 @@ RUN echo '#!/bin/sh' > /app/start.sh && \
     echo 'chmod 0666 "$DB_FILE" || true' >> /app/start.sh && \
     echo 'echo "[init] DB_DIR=$DATA_DIR"' >> /app/start.sh && \
     echo 'echo "[init] DB_FILE=$DB_FILE"' >> /app/start.sh && \
-    echo 'echo "[init] ls -ld $DATA_DIR:" && ls -ld "$DATA_DIR" || true' >> /app/start.sh && \
-    echo 'echo "[init] ls -l $DATA_DIR:" && ls -l "$DATA_DIR" || true' >> /app/start.sh && \
     echo '' >> /app/start.sh && \
     echo 'PORT="${PORT:-3400}"' >> /app/start.sh && \
-    echo 'FRONTEND_PORT="${FRONTEND_PORT:-80}"' >> /app/start.sh && \
     echo 'cd /app' >> /app/start.sh && \
     echo 'if [ -d "/app/web/dist" ]; then' >> /app/start.sh && \
-    echo '  echo "[init] Starting static frontend on port $FRONTEND_PORT (serve /app/web/dist)"' >> /app/start.sh && \
-    echo '  su-exec appuser serve -s /app/web/dist -l "tcp://0.0.0.0:$FRONTEND_PORT" --single &' >> /app/start.sh && \
+    echo '  echo "[init] Frontend dist found; FastAPI will serve SPA"' >> /app/start.sh && \
     echo 'else' >> /app/start.sh && \
     echo '  echo "[init] WARNING: /app/web/dist not found; frontend will not be served"' >> /app/start.sh && \
     echo 'fi' >> /app/start.sh && \
@@ -107,7 +98,7 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
 
 VOLUME ["/app/server/uploads", "/app/server/data"]
 
-EXPOSE 80 3400
+EXPOSE 3400
 
 LABEL org.opencontainers.image.title="MSUT fullstack auth system" \
       org.opencontainers.image.description="Python + Vue.js fullstack auth and resource management (backend-only container, no Nginx)" \

@@ -7,6 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 from starlette.middleware.cors import CORSMiddleware
 from starlette.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -116,7 +117,20 @@ def private_ping(request: Request):
     return {"pong": True}
 
 
-# Root health for convenience
-@app.get("/")
-def root():
-    return {"ok": True}
+class SPAStaticFiles(StaticFiles):
+    """StaticFiles subclass that falls back to index.html for SPA routing."""
+
+    async def get_response(self, path: str, scope):
+        try:
+            return await super().get_response(path, scope)
+        except (StarletteHTTPException, Exception):
+            return await super().get_response("index.html", scope)
+
+
+frontend_dist = BASE_DIR / "melon-tech-web" / "dist"
+if frontend_dist.exists():
+    app.mount(
+        "/",
+        SPAStaticFiles(directory=str(frontend_dist), html=True),
+        name="spa",
+    )

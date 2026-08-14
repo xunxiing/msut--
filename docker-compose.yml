@@ -5,14 +5,13 @@ services:
     security_opt:
       - label=disable
     ports:
-      - "1122:80"
       - "3400:3400"
     environment:
       - NODE_ENV=production
       - PORT=3400
       - PYTHONPATH=/app
       - JWT_SECRET=${JWT_SECRET:-please-change-this-secret-in-production}
-      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-http://localhost:1122}
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-http://localhost:3400}
       - HTTPS_ENABLED=${HTTPS_ENABLED:-false}
       - COOKIE_DOMAIN=${COOKIE_DOMAIN:-}
       - DATA_DIR=/app/server/data

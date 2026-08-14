@@ -1014,6 +1014,25 @@ def list_resources(
     return {"items": items_out, "page": page, "pageSize": page_size, "total": total}
 
 
+@router.post("/api/resources/optimize")
+async def optimize_resource_content(request: Request):
+    uid = _require_user_id(request)
+    if uid is None:
+        return JSONResponse(status_code=401, content={"error": "未登录"})
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "无效请求"})
+    title = (body or {}).get("title", "").strip()
+    description = (body or {}).get("description", "").strip()
+    usage = (body or {}).get("usage", "").strip()
+    if not title:
+        return JSONResponse(status_code=400, content={"error": "标题不能为空"})
+    from .llm2 import optimize_content
+    result = optimize_content(title, description, usage)
+    return result
+
+
 @router.post("/api/resources/{rid}/classify")
 async def classify_resource_endpoint(request: Request, rid: int):
     uid = _require_user_id(request)

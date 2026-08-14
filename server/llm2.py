@@ -71,6 +71,49 @@ def tags_to_json(tags: List[str]) -> str:
     return json.dumps(tags, ensure_ascii=False)
 
 
+def optimize_content(title: str, description: str = "", usage: str = "") -> dict:
+    if not title:
+        return {"title": title, "description": description, "usage": usage, "tags": []}
+    prompt = f"""你是一个甜瓜游乐场模组内容优化助手。请根据用户提供的模组信息，优化标题和简介，并生成标签。
+
+输入：
+标题：{title}
+简介：{description or '无'}
+使用方法：{usage or '无'}
+
+要求：
+1. 标题：保持原意，更简洁吸引人（不超过30字）
+2. 简介：用1-2句话概括这个模组的特点（不超过100字）
+3. 使用方法：如果用户已填写则优化措辞，如果为空则根据标题推测可能的安装使用方法
+4. 标签：1-5个简短中文标签（2-6个字）
+
+返回 JSON：
+{{"title": "优化后标题", "description": "优化后简介", "usage": "优化后使用方法", "tags": ["标签1", "标签2"]}}
+
+只返回 JSON，不要解释。"""
+    raw = _chat([
+        {"role": "system", "content": "你是甜瓜游乐场模组内容优化助手，只返回JSON。"},
+        {"role": "user", "content": prompt},
+    ], max_tokens=800)
+    if not raw:
+        return {"title": title, "description": description, "usage": usage, "tags": []}
+    try:
+        text = raw.strip()
+        if text.startswith("```"):
+            text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+        data = json.loads(text)
+        if isinstance(data, dict):
+            return {
+                "title": str(data.get("title", title)),
+                "description": str(data.get("description", description)),
+                "usage": str(data.get("usage", usage)),
+                "tags": [str(t).strip() for t in data.get("tags", []) if str(t).strip()][:5],
+            }
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return {"title": title, "description": description, "usage": usage, "tags": []}
+
+
 def tags_from_json(raw: Optional[str]) -> List[str]:
     if not raw:
         return []
@@ -81,3 +124,4 @@ def tags_from_json(raw: Optional[str]) -> List[str]:
     except (json.JSONDecodeError, TypeError):
         pass
     return []
+

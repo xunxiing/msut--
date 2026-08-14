@@ -28,6 +28,23 @@ export type ResourceItem = {
 
 export type MyResourceItem = ResourceItem
 
+export type OptimizeResult = {
+  title: string
+  description: string
+  usage: string
+  tags: string[]
+}
+
+export async function optimizeContent(data: { title: string; description: string; usage: string }): Promise<OptimizeResult> {
+  const res = await http.post("/api/resources/optimize", data)
+  return res.data
+}
+
+export async function classifyResource(rid: number): Promise<{ tags: string[] }> {
+  const res = await http.post(`/api/resources/${rid}/classify`)
+  return res.data
+}
+
 export type ResourceImagesResponse = {
   items: ResourceFile[]
   coverFileId?: number | null

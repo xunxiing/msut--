@@ -17,10 +17,14 @@
         <el-form-item label="使用方法">
           <el-input v-model="form.usage" type="textarea" :rows="6" placeholder="如何安装、如何使用，写清楚，减少问答" />
         </el-form-item>
-        <el-space>
+        <el-form-item>
           <el-button type="primary" @click="onCreate" :loading="loading">下一步</el-button>
           <el-button @click="$router.back()">取消</el-button>
-        </el-space>
+          <el-button :loading="aiLoading" @click="onAIOptimize" type="success" plain>
+            <el-icon class="el-icon--left"><MagicStick /></el-icon>
+            AI 一键优化
+          </el-button>
+        </el-form-item>
       </el-form>
     </el-card>
 
@@ -99,14 +103,15 @@ import { ref, onBeforeUnmount } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import type { FormInstance, FormRules, UploadInstance, UploadUserFile } from 'element-plus'
 import { ElMessage } from 'element-plus'
-import { createResource } from '../api/resources'
-import { UploadFilled } from '@element-plus/icons-vue'
+import { createResource, optimizeContent } from '../api/resources'
+import { UploadFilled, MagicStick } from '@element-plus/icons-vue'
 
 const step = ref(0)
 const formRef = ref<FormInstance>()
 const uploadRef = ref<UploadInstance>()
 const coverUploadRef = ref<UploadInstance>()
 const loading = ref(false)
+const aiLoading = ref(false)
 const form = ref({ title: '', description: '', usage: '' })
 const rules: FormRules = { title: [{ required: true, message: '请输入标题', trigger: 'blur' }] }
 
@@ -132,6 +137,33 @@ async function onCreate() {
     ElMessage.error(e?.response?.data?.error || '创建失败')
   } finally {
     loading.value = false
+  }
+}
+
+async function onAIOptimize() {
+  if (!form.value.title.trim()) {
+    ElMessage.warning('请先输入标题')
+    return
+  }
+  aiLoading.value = true
+  try {
+    const result = await optimizeContent({
+      title: form.value.title,
+      description: form.value.description,
+      usage: form.value.usage,
+    })
+    form.value.title = result.title
+    form.value.description = result.description
+    form.value.usage = result.usage
+    if (result.tags?.length) {
+      ElMessage.success(`AI 已优化内容，生成标签：${result.tags.join('、')}`)
+    } else {
+      ElMessage.success('AI 已优化内容')
+    }
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error || 'AI 优化失败')
+  } finally {
+    aiLoading.value = false
   }
 }
 

@@ -8,12 +8,12 @@ export default defineConfig({
     host: '0.0.0.0',
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:3001',
         changeOrigin: true,
       },
       // 代理上传文件目录，确保开发环境下访问 /uploads/* 会转发到后端
       '/uploads': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:3001',
         changeOrigin: true,
       },
     },

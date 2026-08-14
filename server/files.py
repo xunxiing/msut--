@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from .auth import get_current_user
 from .db import get_connection
 from .utils import nanoid, now_ms, slugify_str, parse_bool
+from .llm2 import tags_from_json
 from .label.watermark_indexer import (
     extract_sequence_from_melsave,
     canonicalize,
@@ -143,12 +144,21 @@ async def create_resource(
     )
     conn.commit()
     rid = int(info.lastrowid)
+    try:
+        from .llm2 import classify_resource, tags_to_json, tags_from_json
+        tags = classify_resource(title, description or "")
+        if tags:
+            conn.execute("UPDATE resources SET tags = ? WHERE id = ?", (tags_to_json(tags), rid))
+            conn.commit()
+    except Exception:
+        tags = []
     return {
         "id": rid,
         "slug": slug,
         "title": title,
         "description": description or "",
         "usage": usage or "",
+        "tags": tags or [],
         "shareUrl": _share_url(slug),
     }
 
@@ -945,6 +955,7 @@ def get_resource(slug: str):
         "coverFileId": int(cover_file_id) if cover_file_id is not None else None,
         "coverUrlPath": cover_url_path,
         "author_avatar": r["author_avatar"] or "",
+        "tags": tags_from_json(r["tags"] if "tags" in r.keys() else None),
     }
     return data
 
@@ -976,6 +987,7 @@ def list_resources(
           r.description,
           r.created_at,
           r.cover_file_id,
+          r.tags,
           u.username AS author_username,
           u.avatar_url AS author_avatar,
           cf.url_path AS cover_url_path
@@ -997,8 +1009,30 @@ def list_resources(
         d["coverFileId"] = int(cover_file_id) if cover_file_id is not None else None
         d["coverUrlPath"] = cover_url_path
         d["author_avatar"] = d.pop("author_avatar", None) or ""
+        d["tags"] = tags_from_json(d.pop("tags", None))
         items_out.append(d)
     return {"items": items_out, "page": page, "pageSize": page_size, "total": total}
+
+
+@router.post("/api/resources/{rid}/classify")
+async def classify_resource_endpoint(request: Request, rid: int):
+    uid = _require_user_id(request)
+    if uid is None:
+        return JSONResponse(status_code=401, content={"error": "未登录"})
+    conn = get_connection()
+    cur = conn.cursor()
+    row = cur.execute(
+        "SELECT id, title, description, created_by FROM resources WHERE id = ?", (rid,)
+    ).fetchone()
+    if not row:
+        return JSONResponse(status_code=404, content={"error": "资源不存在"})
+    if int(row["created_by"] or 0) != uid:
+        return JSONResponse(status_code=403, content={"error": "无权操作"})
+    from .llm2 import classify_resource, tags_to_json
+    tags = classify_resource(row["title"], row["description"] or "")
+    conn.execute("UPDATE resources SET tags = ? WHERE id = ?", (tags_to_json(tags), rid))
+    conn.commit()
+    return {"tags": tags}
 
 
 @router.patch("/api/resources/{rid}/cover")

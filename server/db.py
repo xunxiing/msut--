@@ -379,6 +379,14 @@ def run_migrations(conn: Optional[sqlite3.Connection] = None) -> None:
             CREATE INDEX IF NOT EXISTS idx_agent_runs_session ON agent_runs(session_id);
             """
         )
+        # resources: tags column for LLM auto-classification
+        try:
+            cols = [r["name"] for r in conn.execute("PRAGMA table_info(resources)").fetchall()]
+            if "tags" not in cols:
+                conn.execute("ALTER TABLE resources ADD COLUMN tags TEXT NOT NULL DEFAULT ''")
+        except Exception:
+            pass
+
         conn.commit()
     finally:
         if owns:

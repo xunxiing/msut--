@@ -1,91 +1,82 @@
 <template>
   <div class="container">
-    <el-steps :active="step" finish-status="success" align-center class="mb">
-      <el-step title="填写信息" />
-      <el-step title="上传文件" />
-      <el-step title="完成" />
-    </el-steps>
-
-    <el-card v-if="step === 0" class="card">
+    <el-card class="card">
+      <template #header>
+        <span style="font-weight:600;font-size:18px">上传作品</span>
+      </template>
       <el-form :model="form" :rules="rules" ref="formRef" label-width="96px" @submit.prevent>
         <el-form-item label="标题" prop="title">
-          <el-input v-model="form.title" maxlength="80" show-word-limit />
+          <el-input v-model="form.title" maxlength="80" show-word-limit placeholder="给作品起个名字" />
         </el-form-item>
         <el-form-item label="简介">
-          <el-input v-model="form.description" type="textarea" :rows="3" maxlength="300" show-word-limit />
+          <el-input v-model="form.description" type="textarea" :rows="3" maxlength="300" show-word-limit placeholder="一句话描述你的作品" />
         </el-form-item>
         <el-form-item label="使用方法">
-          <el-input v-model="form.usage" type="textarea" :rows="6" placeholder="如何安装、如何使用，写清楚，减少问答" />
+          <el-input v-model="form.usage" type="textarea" :rows="4" placeholder="如何安装、如何使用，写清楚，减少问答" />
         </el-form-item>
+
         <el-form-item>
-          <el-button type="primary" @click="onCreate" :loading="loading">下一步</el-button>
-          <el-button @click="$router.back()">取消</el-button>
           <el-button :loading="aiLoading" @click="onAIOptimize" type="success" plain>
             <el-icon class="el-icon--left"><MagicStick /></el-icon>
             AI 一键优化
           </el-button>
         </el-form-item>
-      </el-form>
-    </el-card>
 
-    <el-card v-else-if="step === 1" class="card">
-      <template #header>上传文件</template>
-      <el-alert type="info" :closable="false" class="mb" show-icon title="可选：为 .melsave 存档提取并保存水印，便于后续检测匹配" />
-      <el-form @submit.prevent label-width="0">
+        <el-divider content-position="left">存档文件</el-divider>
+
+        <el-form-item label="水印">
+          <el-checkbox v-model="saveWatermark">保存 .melsave 水印到数据库（便于后续检测）</el-checkbox>
+        </el-form-item>
+
+        <el-upload
+          ref="uploadRef"
+          v-model:file-list="fileList"
+          :with-credentials="true"
+          :multiple="true"
+          :auto-upload="false"
+          :limit="10"
+          name="files"
+          drag
+        >
+          <el-icon class="el-icon--upload"><upload-filled /></el-icon>
+          <div class="el-upload__text">把存档文件拖到这里，或 <em>点击选择</em></div>
+          <template #tip>
+            <div class="el-upload__tip">支持最多 10 个文件，单文件不超过 50MB</div>
+          </template>
+        </el-upload>
+
+        <el-divider content-position="left">封面 / 展示图片（可选）</el-divider>
+
+        <el-upload
+          ref="coverUploadRef"
+          v-model:file-list="coverFileList"
+          :with-credentials="true"
+          :multiple="true"
+          :auto-upload="false"
+          :limit="10"
+          name="files"
+          accept="image/*"
+          drag
+        >
+          <el-icon class="el-icon--upload"><upload-filled /></el-icon>
+          <div class="el-upload__text">把图片拖到这里，或 <em>点击选择</em></div>
+          <template #tip>
+            <div class="el-upload__tip">支持 PNG/JPG 等图片格式，单文件不超过 50MB</div>
+          </template>
+        </el-upload>
+
+        <el-divider />
+
         <el-form-item>
-          <el-checkbox v-model="saveWatermark">保存 .melsave 水印到数据库</el-checkbox>
+          <el-button type="primary" @click="onSubmit" :loading="submitting" size="large">
+            提交作品
+          </el-button>
+          <el-button @click="$router.back()">取消</el-button>
         </el-form-item>
       </el-form>
-      <el-upload
-        ref="uploadRef"
-        v-model:file-list="fileList"
-        :action="`/api/files/upload`"
-        :data="{ resourceId: resourceId, saveWatermark }"
-        :with-credentials="true"
-        :multiple="true"
-        :auto-upload="false"
-        :limit="10"
-        name="files"
-        drag
-        @success="handleSuccess"
-        @error="handleError"
-      >
-        <el-icon class="el-icon--upload"><upload-filled /></el-icon>
-        <div class="el-upload__text">把文件拖到这里，或 <em>点击上传</em></div>
-        <template #tip>
-          <div class="el-upload__tip">支持最多 10 个文件，单文件不超过 50MB</div>
-        </template>
-      </el-upload>
-
-      <el-space class="mt">
-        <el-button type="primary" @click="submitUpload">开始上传</el-button>
-      </el-space>
-
-      <!-- 可选：封面 / 展示图片上传（多张） -->
-      <el-divider class="mt">可选：上传封面 / 展示图片</el-divider>
-      <el-upload
-        ref="coverUploadRef"
-        v-model:file-list="coverFileList"
-        :action="resourceId !== null ? `/api/resources/${resourceId}/images/upload` : ''"
-        :with-credentials="true"
-        :multiple="true"
-        :auto-upload="true"
-        :limit="10"
-        name="files"
-        accept="image/*"
-        drag
-        @success="handleCoverSuccess"
-        @error="handleCoverError"
-      >
-        <el-icon class="el-icon--upload"><upload-filled /></el-icon>
-        <div class="el-upload__text">把图片拖到这里，�?<em>点击上传</em></div>
-        <template #tip>
-          <div class="el-upload__tip">支持常见图片格式（PNG/JPG 等），单文件不超过 50MB</div>
-        </template>
-      </el-upload>
     </el-card>
 
-    <el-result v-else icon="success" title="分享创建完成" sub-title="未登录的用户也能通过链接访问并下载">
+    <el-result v-if="done" icon="success" title="分享创建完成" sub-title="未登录的用户也能通过链接访问并下载">
       <template #extra>
         <el-input v-model="shareUrl" readonly style="max-width:520px; margin:0 auto 12px;" />
         <el-space wrap class="result-actions">
@@ -104,41 +95,24 @@ import { onBeforeRouteLeave } from 'vue-router'
 import type { FormInstance, FormRules, UploadInstance, UploadUserFile } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import { createResource, optimizeContent } from '../api/resources'
+import { http } from '../api/http'
 import { UploadFilled, MagicStick } from '@element-plus/icons-vue'
 
-const step = ref(0)
 const formRef = ref<FormInstance>()
 const uploadRef = ref<UploadInstance>()
 const coverUploadRef = ref<UploadInstance>()
-const loading = ref(false)
+const submitting = ref(false)
 const aiLoading = ref(false)
+const done = ref(false)
 const form = ref({ title: '', description: '', usage: '' })
 const rules: FormRules = { title: [{ required: true, message: '请输入标题', trigger: 'blur' }] }
 
-const resourceId = ref<number | null>(null)
 const slug = ref('')
 const shareUrl = ref('')
 
 const fileList = ref<UploadUserFile[]>([])
 const coverFileList = ref<UploadUserFile[]>([])
-const uploaded = ref(false)
 const saveWatermark = ref<boolean>(false)
-
-async function onCreate() {
-  await formRef.value?.validate()
-  loading.value = true
-  try {
-    const res = await createResource(form.value)
-    resourceId.value = res.id
-    slug.value = res.slug
-    shareUrl.value = res.shareUrl
-    step.value = 1
-  } catch (e: any) {
-    ElMessage.error(e?.response?.data?.error || '创建失败')
-  } finally {
-    loading.value = false
-  }
-}
 
 async function onAIOptimize() {
   if (!form.value.title.trim()) {
@@ -167,31 +141,48 @@ async function onAIOptimize() {
   }
 }
 
-function submitUpload() {
-  if (!fileList.value.length) return ElMessage.warning('请先选择文件')
-  uploaded.value = false
-  uploadRef.value?.submit()
-}
-
-function handleSuccess(_response: any, _file: UploadUserFile, uploadFiles: UploadUserFile[]) {
-  const finished = uploadFiles.every(item => item.status === 'success')
-  if (finished && !uploaded.value) {
-    uploaded.value = true
-    ElMessage.success('文件上传成功')
-    step.value = 2
+async function onSubmit() {
+  await formRef.value?.validate()
+  if (!fileList.value.length) {
+    ElMessage.warning('请至少选择一个存档文件')
+    return
   }
-}
+  submitting.value = true
+  try {
+    const res = await createResource(form.value)
+    const resourceId = res.id
+    slug.value = res.slug
+    shareUrl.value = res.shareUrl
 
-function handleError() {
-  ElMessage.error('文件上传失败')
-}
+    const formData = new FormData()
+    formData.append('resourceId', String(resourceId))
+    formData.append('saveWatermark', String(saveWatermark.value))
+    for (const f of fileList.value) {
+      const raw = (f as any).raw
+      if (raw) formData.append('files', raw)
+    }
+    await http.post('/files/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
 
-function handleCoverSuccess(_response: any, _file: UploadUserFile, _uploadFiles: UploadUserFile[]) {
-  ElMessage.success('图片上传成功')
-}
+    if (coverFileList.value.length) {
+      const coverFormData = new FormData()
+      for (const f of coverFileList.value) {
+        const raw = (f as any).raw
+        if (raw) coverFormData.append('files', raw)
+      }
+      await http.post(`/resources/${resourceId}/images/upload`, coverFormData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+    }
 
-function handleCoverError() {
-  ElMessage.error('图片上传失败')
+    done.value = true
+    ElMessage.success('作品上传成功')
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error || '上传失败')
+  } finally {
+    submitting.value = false
+  }
 }
 
 async function copy(text: string) {
@@ -217,7 +208,6 @@ async function copy(text: string) {
   }
 }
 
-// Abort any in-flight uploads when leaving or unmounting
 function abortAllUploads() {
   if (uploadRef.value) {
     fileList.value.forEach((f) => {
@@ -248,7 +238,6 @@ onBeforeUnmount(() => {
 .mb { margin-bottom: 12px; }
 .mt { margin-top: 10px; }
 
-/* Responsive result actions */
 @media (max-width: 640px) {
   :deep(.result-actions .el-space__item) { flex: 1 1 calc(50% - 8px); }
   :deep(.result-actions .el-button) { width: 100%; }

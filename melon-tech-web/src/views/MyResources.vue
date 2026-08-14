@@ -9,28 +9,16 @@
         </div>
         <div class="header-right">
           <div class="tab-switch-wrapper">
-            <div 
-              class="tab-item" 
-              :class="{ active: activeTab === 'resources' }"
-              @click="activeTab = 'resources'"
-            >
+            <div class="tab-item" :class="{ active: activeTab === 'resources' }" @click="activeTab = 'resources'">
               <el-icon><Folder /></el-icon>
               <span>存档文件</span>
             </div>
-            <div 
-              class="tab-item" 
-              :class="{ active: activeTab === 'tutorials' }"
-              @click="activeTab = 'tutorials'"
-            >
+            <div class="tab-item" :class="{ active: activeTab === 'tutorials' }" @click="activeTab = 'tutorials'">
               <el-icon><Document /></el-icon>
               <span>教程文档</span>
             </div>
           </div>
-          <el-button
-            circle
-            :loading="activeTab === 'resources' ? resourcesLoading : tutorialsLoading"
-            @click="onRefresh"
-          >
+          <el-button circle :loading="activeTab === 'resources' ? resourcesLoading : tutorialsLoading" @click="onRefresh">
             <el-icon><Refresh /></el-icon>
           </el-button>
         </div>
@@ -48,34 +36,18 @@
               </el-button>
             </el-empty>
           </div>
-          
           <div v-else class="works-grid">
-            <!-- 新增卡片 -->
             <div class="work-card add-card" @click="$router.push('/upload')">
-              <div class="add-icon">
-                <el-icon><Plus /></el-icon>
-              </div>
+              <div class="add-icon"><el-icon><Plus /></el-icon></div>
               <span>上传新存档</span>
             </div>
-
-            <div
-              v-for="item in resourceItems"
-              :key="item.id"
-              class="work-card"
-            >
-              <div class="card-content" @click="openResourceAction(item)">
+            <div v-for="item in resourceItems" :key="item.id" class="work-card">
+              <div class="card-content" @click="openResourceDrawer(item)">
                 <div class="card-icon" :class="{ 'has-cover': (item as any).coverUrlPath }">
                   <template v-if="(item as any).coverUrlPath">
-                    <img
-                      class="card-cover-image"
-                      :src="toImageUrl((item as any).coverUrlPath)"
-                      alt="cover"
-                      loading="lazy"
-                    />
+                    <img class="card-cover-image" :src="toImageUrl((item as any).coverUrlPath)" alt="cover" loading="lazy" />
                   </template>
-                  <template v-else>
-                    <el-icon><FolderOpened /></el-icon>
-                  </template>
+                  <template v-else><el-icon><FolderOpened /></el-icon></template>
                 </div>
                 <div class="card-info">
                   <h3 class="work-title" :title="item.title">{{ item.title }}</h3>
@@ -84,32 +56,19 @@
                     <span class="separator">•</span>
                     <span>{{ formatDate(item.created_at) }}</span>
                   </div>
-                  <div class="work-desc" :title="item.description || '暂无简介'">
-                    {{ item.description || '暂无简介' }}
-                  </div>
+                  <div class="work-desc" :title="item.description || '暂无简介'">{{ item.description || '暂无简介' }}</div>
                 </div>
               </div>
-              
               <div class="card-actions">
                 <el-tooltip content="复制链接" placement="top">
-                  <el-button text circle size="small" @click.stop="copy(item.shareUrl)">
-                    <el-icon><Link /></el-icon>
-                  </el-button>
+                  <el-button text circle size="small" @click.stop="copy(item.shareUrl)"><el-icon><Link /></el-icon></el-button>
                 </el-tooltip>
-                <el-dropdown trigger="click" @command="(cmd: string) => handleResourceCommand(cmd, item)">
-                  <el-button text circle size="small" @click.stop>
-                    <el-icon><MoreFilled /></el-icon>
-                  </el-button>
-                  <template #dropdown>
-                    <el-dropdown-menu>
-                      <el-dropdown-item command="preview">预览详情</el-dropdown-item>
-                      <el-dropdown-item command="addFile">添加文件</el-dropdown-item>
-                      <el-dropdown-item command="cover">设置封面</el-dropdown-item>
-                      <el-dropdown-item command="edit">编辑信息</el-dropdown-item>
-                      <el-dropdown-item command="delete" divided style="color: var(--el-color-danger)">删除</el-dropdown-item>
-                    </el-dropdown-menu>
-                  </template>
-                </el-dropdown>
+                <el-tooltip content="预览详情" placement="top">
+                  <el-button text circle size="small" @click.stop="$router.push(`/share/${item.slug}`)"><el-icon><View /></el-icon></el-button>
+                </el-tooltip>
+                <el-tooltip content="删除" placement="top">
+                  <el-button text circle size="small" @click.stop="confirmRemove(item)" style="color: var(--el-color-danger)"><el-icon><Delete /></el-icon></el-button>
+                </el-tooltip>
               </div>
             </div>
           </div>
@@ -128,359 +87,165 @@
               </el-button>
             </el-empty>
           </div>
-          
           <div v-else class="works-grid">
-            <!-- 新增卡片 -->
             <div class="work-card add-card" @click="openTutorialCreate">
-              <div class="add-icon">
-                <el-icon><EditPen /></el-icon>
-              </div>
+              <div class="add-icon"><el-icon><EditPen /></el-icon></div>
               <span>新建教程</span>
             </div>
-
-            <div
-              v-for="t in tutorialItems"
-              :key="t.id"
-              class="work-card"
-            >
-              <div class="card-content" @click="openTutorialAction(t)">
-                <div class="card-icon tutorial-icon">
-                  <el-icon><Reading /></el-icon>
-                </div>
+            <div v-for="t in tutorialItems" :key="t.id" class="work-card">
+              <div class="card-content" @click="openTutorialEdit(t)">
+                <div class="card-icon tutorial-icon"><el-icon><Reading /></el-icon></div>
                 <div class="card-info">
                   <h3 class="work-title" :title="t.title">{{ t.title }}</h3>
-                  <div class="work-meta">
-                    <span>{{ formatDate(t.created_at) }}</span>
-                  </div>
-                  <div class="work-desc" :title="t.description || '暂无简介'">
-                    {{ t.description || '暂无简介' }}
-                  </div>
+                  <div class="work-meta"><span>{{ formatDate(t.created_at) }}</span></div>
+                  <div class="work-desc" :title="t.description || '暂无简介'">{{ t.description || '暂无简介' }}</div>
                 </div>
               </div>
-
               <div class="card-actions">
-                <el-button text circle size="small" @click.stop="$router.push({ path: '/tutorials/library', query: { id: t.id } })">
-                  <el-icon><View /></el-icon>
-                </el-button>
-                <el-dropdown trigger="click" @command="(cmd: string) => handleTutorialCommand(cmd, t)">
-                  <el-button text circle size="small" @click.stop>
-                    <el-icon><MoreFilled /></el-icon>
-                  </el-button>
-                  <template #dropdown>
-                    <el-dropdown-menu>
-                      <el-dropdown-item command="view">查看文档</el-dropdown-item>
-                      <el-dropdown-item command="edit">编辑内容</el-dropdown-item>
-                      <el-dropdown-item command="delete" divided style="color: var(--el-color-danger)">删除</el-dropdown-item>
-                    </el-dropdown-menu>
-                  </template>
-                </el-dropdown>
+                <el-tooltip content="查看文档" placement="top">
+                  <el-button text circle size="small" @click.stop="$router.push({ path: '/tutorials/library', query: { id: t.id } })"><el-icon><View /></el-icon></el-button>
+                </el-tooltip>
+                <el-tooltip content="删除" placement="top">
+                  <el-button text circle size="small" @click.stop="confirmTutorialRemove(t)" style="color: var(--el-color-danger)"><el-icon><Delete /></el-icon></el-button>
+                </el-tooltip>
               </div>
             </div>
           </div>
         </template>
       </template>
 
-      <!-- 资源操作选择弹窗 -->
-      <el-dialog
-        v-model="resourceAction.visible"
-        title="请选择操作"
-        width="900px"
-        align-center
-        class="custom-dialog"
-      >
-        <div class="action-select">
-          <el-button
-            type="primary"
-            plain
-            class="action-btn"
-            @click="handleResourceAction('view')"
-          >
-            <el-icon class="action-icon"><View /></el-icon>
-            查看作品
-          </el-button>
-          <el-button
-            type="success"
-            plain
-            class="action-btn"
-            @click="handleResourceAction('edit')"
-          >
-            <el-icon class="action-icon"><EditPen /></el-icon>
-            编辑信息
-          </el-button>
-          <el-button
-            type="info"
-            plain
-            class="action-btn"
-            @click="handleResourceAction('addFile')"
-          >
-            <el-icon class="action-icon"><Upload /></el-icon>
-            添加文件
-          </el-button>
+      <!-- 资源编辑抽屉 -->
+      <el-drawer v-model="resourceDrawer.visible" size="680px" :title="resourceDrawer.title" direction="rtl" @closed="resetResourceDrawer">
+        <div v-if="resourceDrawer.loading" style="padding: 40px; text-align: center">
+          <el-skeleton animated :rows="6" />
         </div>
-      </el-dialog>
+        <div v-else class="drawer-body">
+          <el-form :model="resourceDrawer" label-position="top" @submit.prevent>
+            <el-form-item label="作品名称">
+              <el-input v-model="resourceDrawer.title" maxlength="80" show-word-limit />
+            </el-form-item>
+            <el-form-item label="简介">
+              <el-input v-model="resourceDrawer.description" type="textarea" :rows="2" maxlength="300" show-word-limit />
+            </el-form-item>
+            <el-form-item label="使用方法">
+              <el-input v-model="resourceDrawer.usage" type="textarea" :rows="4" />
+            </el-form-item>
+            <div class="drawer-ai-bar">
+              <el-button :loading="resourceDrawer.aiLoading" @click="onDrawerAIOptimize" type="success" plain round size="small">
+                <el-icon class="el-icon--left"><MagicStick /></el-icon>
+                AI 优化
+              </el-button>
+            </div>
+          </el-form>
 
-      <!-- 教程操作选择弹窗 -->
-      <el-dialog
-        v-model="tutorialAction.visible"
-        title="请选择操作"
-        width="900px"
-        align-center
-        class="custom-dialog"
-      >
-        <div class="action-select">
-          <el-button
-            type="primary"
-            plain
-            class="action-btn"
-            @click="handleTutorialActionSelect('view')"
-          >
-            <el-icon class="action-icon"><View /></el-icon>
-            查看文档
-          </el-button>
-          <el-button
-            type="success"
-            plain
-            class="action-btn"
-            @click="handleTutorialActionSelect('edit')"
-          >
-            <el-icon class="action-icon"><EditPen /></el-icon>
-            编辑内容
-          </el-button>
-        </div>
-      </el-dialog>
-
-      <!-- 资源信息编辑弹窗 -->
-      <el-dialog v-model="edit.visible" title="编辑信息" width="520px" @closed="resetEdit" align-center class="custom-dialog">
-        <el-form :model="edit" label-position="top" ref="editFormRef">
-          <el-form-item label="简介">
-            <el-input
-              v-model="edit.description"
-              type="textarea"
-              :rows="3"
-              maxlength="300"
-              show-word-limit
-              placeholder="请输入简介"
-            />
-          </el-form-item>
-          <el-form-item label="使用说明">
-            <el-input v-model="edit.usage" type="textarea" :rows="6" placeholder="请输入使用说明" />
-          </el-form-item>
-        </el-form>
-        <template #footer>
-          <el-button @click="edit.visible = false">取消</el-button>
-          <el-button type="primary" :loading="edit.loading" @click="submitEdit">保存</el-button>
-        </template>
-      </el-dialog>
-
-      <!-- 上传文件弹窗 -->
-      <el-dialog
-        v-model="upload.visible"
-        :title="`向 ${upload.title} 添加文件`"
-        width="560px"
-        @closed="resetUpload"
-        align-center
-        class="custom-dialog"
-      >
-        <el-upload
-          ref="uploadRef"
-          v-model:file-list="upload.fileList"
-          :action="'/api/files/upload'"
-          :data="{ resourceId: upload.resourceId }"
-          :with-credentials="true"
-          :auto-upload="false"
-          :limit="10"
-          name="files"
-          drag
-          @success="handleUploadSuccess"
-          @error="handleUploadError"
-        >
-          <el-icon class="el-icon--upload"><upload-filled /></el-icon>
-          <div class="el-upload__text">拖动或 <em>点击选择</em> 文件</div>
-          <template #tip>
-            <div class="el-upload__tip">单个文件最大 50MB，最多一次 10 个</div>
-          </template>
-        </el-upload>
-        <template #footer>
-          <el-button @click="upload.visible = false">取消</el-button>
-          <el-button type="primary" :loading="upload.submitting" @click="submitUpload">
-            开始上传
-          </el-button>
-        </template>
-      </el-dialog>
-
-      <!-- 封面 / 图片管理弹窗 -->
-      <el-dialog
-        v-model="coverManager.visible"
-        :title="`管理封面与图片 - ${coverManager.title}`"
-        width="800px"
-        align-center
-        class="custom-dialog"
-        @closed="resetCoverManager"
-      >
-        <div v-loading="coverManager.loading">
-          <div class="cover-upload-section">
-            <h4 class="cover-section-title">上传图片（支持多张）</h4>
-            <el-upload
-              ref="coverUploadRef"
-              v-model:file-list="coverUploadList"
-              :action="coverManager.resourceId ? `/api/resources/${coverManager.resourceId}/images/upload` : ''"
-              :with-credentials="true"
-              :multiple="true"
-              :auto-upload="true"
-              :limit="10"
-              name="files"
-              accept="image/*"
-              drag
-              @success="handleCoverUploadSuccess"
-              @error="handleCoverUploadError"
-            >
-              <el-icon class="el-icon--upload"><upload-filled /></el-icon>
-              <div class="el-upload__text">拖动�?<em>点击选择</em> 图片文件</div>
-              <template #tip>
-                <div class="el-upload__tip">支持 PNG/JPG 等图片格式，单个文件不超过 50MB</div>
-              </template>
-            </el-upload>
-          </div>
-
-          <div v-if="coverManager.images.length" class="cover-images-list">
-            <h4 class="cover-section-title">已上传图片（点击设为封面）</h4>
-            <div class="cover-images-grid">
-              <div
-                v-for="img in coverManager.images"
-                :key="img.id"
-                class="cover-image-item"
-                :class="{ 'is-cover': img.id === coverManager.coverFileId }"
-                @click="setCoverFromDialog(img.id)"
-              >
-                <img :src="toImageUrl(img.url_path)" :alt="img.original_name" class="cover-image-thumb" />
-                <div class="cover-image-meta">
-                  <span class="cover-image-name">{{ img.original_name }}</span>
-                  <span v-if="img.id === coverManager.coverFileId" class="cover-image-badge">当前封面</span>
-                </div>
-              </div>
+          <el-divider content-position="left">已有文件 ({{ resourceDrawer.files.length }})</el-divider>
+          <div v-if="resourceDrawer.files.length" class="file-list">
+            <div v-for="f in resourceDrawer.files" :key="f.id" class="file-item">
+              <el-icon class="file-icon"><Document /></el-icon>
+              <span class="file-name" :title="f.original_name">{{ f.original_name }}</span>
+              <span class="file-size">{{ formatSize(f.size) }}</span>
+              <el-button text circle size="small" @click="downloadFile(f)" title="下载">
+                <el-icon><Download /></el-icon>
+              </el-button>
+              <el-button text circle size="small" @click="removeFile(f)" title="删除" style="color: var(--el-color-danger)">
+                <el-icon><Delete /></el-icon>
+              </el-button>
             </div>
           </div>
-          <el-empty v-else description="还没有上传图片，可先上传图片再选择封面" :image-size="120" />
+          <el-empty v-else description="暂无文件" :image-size="80" />
+
+          <el-divider content-position="left">添加文件</el-divider>
+          <el-upload ref="drawerUploadRef" v-model:file-list="resourceDrawer.newFiles" :with-credentials="true" :multiple="true" :auto-upload="false" :limit="10" name="files" drag>
+            <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
+            <div class="el-upload__text">拖拽文件到此处，或<em>点击选择</em></div>
+            <template #tip><div class="el-upload__tip">最多 10 个，单个不超过 50MB</div></template>
+          </el-upload>
+          <el-button v-if="resourceDrawer.newFiles.length" type="primary" plain size="small" @click="submitNewFiles" :loading="resourceDrawer.uploading" style="margin-top: 8px">
+            上传 {{ resourceDrawer.newFiles.length }} 个文件
+          </el-button>
+
+          <el-divider content-position="left">封面 / 图片</el-divider>
+          <div v-if="resourceDrawer.images.length" class="cover-grid">
+            <div v-for="img in resourceDrawer.images" :key="img.id" class="cover-item" :class="{ 'is-cover': img.id === resourceDrawer.coverFileId }" @click="setCover(img.id)">
+              <img :src="toImageUrl(img.url_path)" :alt="img.original_name" class="cover-thumb" />
+              <span v-if="img.id === resourceDrawer.coverFileId" class="cover-badge">封面</span>
+            </div>
+          </div>
+          <el-upload ref="drawerCoverRef" v-model:file-list="resourceDrawer.newImages" :with-credentials="true" :multiple="true" :auto-upload="false" :limit="10" name="files" accept="image/*" list-type="picture-card">
+            <el-icon><Plus /></el-icon>
+          </el-upload>
+          <el-button v-if="resourceDrawer.newImages.length" type="primary" plain size="small" @click="submitNewImages" :loading="resourceDrawer.uploadingImages" style="margin-top: 8px">
+            上传 {{ resourceDrawer.newImages.length }} 张图片
+          </el-button>
+          <el-button v-if="resourceDrawer.coverFileId !== null" size="small" @click="clearCover" :loading="resourceDrawer.clearingCover" style="margin-left: 8px">清除封面</el-button>
+        </div>
+
+        <template #footer>
+          <div class="drawer-footer">
+            <el-button @click="resourceDrawer.visible = false">关闭</el-button>
+            <el-button type="primary" :loading="resourceDrawer.saving" @click="saveResourceMeta">保存修改</el-button>
+          </div>
+        </template>
+      </el-drawer>
+
+      <!-- 教程编辑抽屉 -->
+      <el-drawer v-model="tutorialDrawer.visible" size="680px" :title="tutorialDrawer.isCreating ? '新建教程' : '编辑教程'" direction="rtl" @closed="resetTutorialDrawer">
+        <div class="drawer-body">
+          <el-form label-position="top" @submit.prevent>
+            <el-form-item label="标题">
+              <el-input v-model="tutorialDrawer.title" placeholder="例如：甜瓜游乐场模组安装全流程" size="large" />
+            </el-form-item>
+            <el-form-item label="简介（可选）">
+              <el-input v-model="tutorialDrawer.description" placeholder="一句话说明这篇教程主要讲什么" />
+            </el-form-item>
+            <el-form-item label="正文内容 (Markdown)">
+              <el-input v-model="tutorialDrawer.content" type="textarea" :autosize="{ minRows: 12, maxRows: 24 }" placeholder="在这里粘贴或编写完整教程文本（支持 Markdown 格式）" class="content-editor" />
+            </el-form-item>
+          </el-form>
         </div>
         <template #footer>
-          <el-button v-if="coverManager.coverFileId !== null" :loading="coverManager.savingCoverId === 0" @click="handleClearCover">
-            清除封面
-          </el-button>
-          <el-button @click="coverManager.visible = false">关闭</el-button>
+          <div class="drawer-footer">
+            <el-button @click="tutorialDrawer.visible = false">取消</el-button>
+            <el-button type="primary" :loading="tutorialDrawer.loading" @click="submitTutorialEdit">
+              {{ tutorialDrawer.isCreating ? '保存为教程' : '保存修改' }}
+            </el-button>
+          </div>
         </template>
-      </el-dialog>
-
-      <!-- 教程编辑 / 新建弹窗 -->
-      <el-dialog
-        v-model="tutorialEdit.visible"
-        :title="tutorialEdit.isCreating ? '新增教程' : '编辑教程'"
-        width="800px"
-        @closed="resetTutorialEdit"
-        align-center
-        class="custom-dialog"
-      >
-        <el-form label-position="top" @submit.prevent>
-          <el-form-item label="标题">
-            <el-input v-model="tutorialEdit.title" placeholder="例如：甜瓜游乐场模组安装全流程" size="large" />
-          </el-form-item>
-          <el-form-item label="简介（可选）">
-            <el-input
-              v-model="tutorialEdit.description"
-              placeholder="一句话说明这篇教程主要讲什么"
-            />
-          </el-form-item>
-          <el-form-item label="正文内容 (Markdown)">
-            <el-input
-              v-model="tutorialEdit.content"
-              type="textarea"
-              :autosize="{ minRows: 12, maxRows: 24 }"
-              placeholder="在这里粘贴或编写完整教程文本（支持 Markdown 格式）"
-              class="content-editor"
-            />
-          </el-form-item>
-        </el-form>
-        <template #footer>
-          <el-button @click="tutorialEdit.visible = false">取消</el-button>
-          <el-button type="primary" :loading="tutorialEdit.loading" @click="submitTutorialEdit">
-            {{ tutorialEdit.isCreating ? '保存为教程' : '保存修改' }}
-          </el-button>
-        </template>
-      </el-dialog>
+      </el-drawer>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { onMounted, reactive, ref, onBeforeUnmount } from 'vue'
-import { onBeforeRouteLeave, useRouter } from 'vue-router'
-import type { FormInstance, UploadInstance, UploadUserFile } from 'element-plus'
+import type { UploadInstance, UploadUserFile } from 'element-plus'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  listMyResources,
-  updateResourceMeta,
-  deleteResource,
-
-  setResourceCover,
-  listResourceImages,
-  type MyResourceItem,
-  type ResourceFile,
+  listMyResources, updateResourceMeta, deleteResource,
+  setResourceCover, listResourceImages, optimizeContent,
+  type MyResourceItem, type ResourceFile,
 } from '../api/resources'
+import { http } from '../api/http'
 import {
-  createTutorial,
-  deleteTutorial,
-  getTutorial,
-  listMyTutorials,
-  updateTutorial,
+  createTutorial, deleteTutorial, getTutorial, listMyTutorials, updateTutorial,
   type MyTutorialItem,
 } from '../api/tutorials'
-import { 
-  UploadFilled, 
-  Folder, 
-  Document, 
-  Refresh, 
-  Plus, 
-  FolderOpened, 
-  Link, 
-  MoreFilled, 
-  Upload,
-  Reading,
-  EditPen,
-  View
+import {
+  UploadFilled, Folder, Document, Refresh, Plus, FolderOpened, Link,
+  Reading, EditPen, View, MagicStick, Download, Delete,
 } from '@element-plus/icons-vue'
 import WelcomeGuide from '../components/WelcomeGuide.vue'
 import dayjs from 'dayjs'
 
-const router = useRouter()
 const activeTab = ref<'resources' | 'tutorials'>('resources')
 
 const resourceItems = ref<MyResourceItem[]>([])
 const resourcesLoading = ref(false)
-const resourceDeletingId = ref<number | null>(null)
-
 const tutorialItems = ref<MyTutorialItem[]>([])
 const tutorialsLoading = ref(false)
-const tutorialDeletingId = ref<number | null>(null)
 
-const editFormRef = ref<FormInstance>()
-const edit = reactive({
-  visible: false,
-  loading: false,
-  id: 0,
-  description: '',
-  usage: '',
-})
-
-const uploadRef = ref<UploadInstance>()
-const upload = reactive({
-  visible: false,
-  resourceId: 0,
-  title: '',
-  fileList: [] as UploadUserFile[],
-  submitting: false,
-})
-
-const coverUploadRef = ref<UploadInstance>()
-const coverUploadList = ref<UploadUserFile[]>([])
+const drawerUploadRef = ref<UploadInstance>()
+const drawerCoverRef = ref<UploadInstance>()
 
 function toImageUrl(path?: string | null) {
   if (!path) return ''
@@ -489,903 +254,372 @@ function toImageUrl(path?: string | null) {
   return path
 }
 
-const tutorialEdit = reactive({
-  visible: false,
-  loading: false,
-  isCreating: false,
-  id: 0,
-  title: '',
-  description: '',
-  content: '',
-})
-
-const resourceAction = reactive<{
-  visible: boolean
-  item: MyResourceItem | null
-}>({
-  visible: false,
-  item: null,
-})
-
-const tutorialAction = reactive<{
-  visible: boolean
-  item: MyTutorialItem | null
-}>({
-  visible: false,
-  item: null,
-})
-
-const coverManager = reactive<{
-  visible: boolean
-  loading: boolean
-  savingCoverId: number | null
-  resourceId: number
-  slug: string
-  title: string
-  coverFileId: number | null
-  images: ResourceFile[]
-}>({
-  visible: false,
-  loading: false,
-  savingCoverId: null,
-  resourceId: 0,
-  slug: '',
-  title: '',
-  coverFileId: null,
-  images: [],
-})
-
-async function fetchResources() {
-  resourcesLoading.value = true
-  try {
-    resourceItems.value = await listMyResources()
-  } catch (error: any) {
-    ElMessage.error(error?.response?.data?.error || '获取存档数据失败')
-  } finally {
-    resourcesLoading.value = false
-  }
-}
-
-async function fetchTutorials() {
-  tutorialsLoading.value = true
-  try {
-    tutorialItems.value = await listMyTutorials()
-  } catch (error: any) {
-    ElMessage.error(error?.response?.data?.error || '获取教程列表失败')
-  } finally {
-    tutorialsLoading.value = false
-  }
-}
-
-function onRefresh() {
-  if (activeTab.value === 'resources') {
-    fetchResources()
-  } else {
-    fetchTutorials()
-  }
-}
-
-onMounted(() => {
-  fetchResources()
-  fetchTutorials()
-})
-
-function formatDate(dateStr: string) {
-  if (!dateStr) return ''
-  return dayjs(dateStr).format('YYYY-MM-DD')
+function formatDate(d: string) { return d ? dayjs(d).format('YYYY-MM-DD') : '' }
+function formatSize(bytes: number) {
+  if (!bytes) return '0 B'
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB'
+  return (bytes / 1048576).toFixed(1) + ' MB'
 }
 
 async function copy(text: string) {
   if (!text) return
-  try {
-    if (typeof navigator !== 'undefined' && navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(text)
-    } else {
-      const textarea = document.createElement('textarea')
-      textarea.value = text
-      textarea.style.position = 'fixed'
-      textarea.style.left = '-9999px'
-      document.body.appendChild(textarea)
-      textarea.focus()
-      textarea.select()
-      document.execCommand('copy')
-      document.body.removeChild(textarea)
-    }
+  try { await navigator.clipboard.writeText(text); ElMessage.success('链接已复制') }
+  catch {
+    const ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'position:fixed;left:-9999px'
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta)
     ElMessage.success('链接已复制')
-  } catch {
-    ElMessage.error('复制失败')
   }
 }
 
-function handleResourceCommand(command: string, item: MyResourceItem) {
-  switch (command) {
-    case 'preview':
-      router.push(`/share/${item.slug}`)
-      break
-    case 'addFile':
-      openUpload(item)
-      break
-    case 'edit':
-      openEdit(item)
-      break
-    case 'cover':
-      openCoverManager(item)
-      break
-    case 'delete':
-      confirmRemove(item)
-      break
-  }
-}
+// ---- Resource drawer ----
+const resourceDrawer = reactive({
+  visible: false, loading: false, saving: false,
+  id: 0, title: '', description: '', usage: '',
+  files: [] as ResourceFile[], images: [] as ResourceFile[],
+  coverFileId: null as number | null,
+  newFiles: [] as UploadUserFile[], newImages: [] as UploadUserFile[],
+  uploading: false, uploadingImages: false,
+  aiLoading: false, clearingCover: false,
+})
 
-
-async function loadCoverImages() {
-  if (!coverManager.resourceId) return
-  coverManager.loading = true
+async function openResourceDrawer(item: MyResourceItem) {
+  resourceDrawer.visible = true
+  resourceDrawer.loading = true
+  resourceDrawer.id = item.id
+  resourceDrawer.title = item.title
+  resourceDrawer.description = item.description || ''
+  resourceDrawer.usage = item.usage || ''
+  resourceDrawer.files = [...item.files]
+  resourceDrawer.newFiles = []
+  resourceDrawer.newImages = []
+  resourceDrawer.coverFileId = (item as any).coverFileId ?? null
   try {
-    const res = await listResourceImages(coverManager.resourceId)
-    coverManager.images = res.items || []
+    const res = await listResourceImages(item.id)
+    resourceDrawer.images = res.items || []
     if (typeof res.coverFileId === 'number' || res.coverFileId === null) {
-      coverManager.coverFileId = res.coverFileId ?? null
+      resourceDrawer.coverFileId = res.coverFileId ?? null
     }
-  } catch (error: any) {
-    ElMessage.error(error?.response?.data?.error || '加载图片列表失败')
-  } finally {
-    coverManager.loading = false
-  }
+  } catch { ElMessage.error('加载图片列表失败') }
+  finally { resourceDrawer.loading = false }
 }
 
-async function openCoverManager(item: MyResourceItem) {
-  coverManager.visible = true
-  coverManager.resourceId = item.id
-  coverManager.slug = item.slug
-  coverManager.title = item.title
-  coverManager.coverFileId = (item as any).coverFileId ?? null
-  await loadCoverImages()
+function resetResourceDrawer() {
+  resourceDrawer.id = 0
+  resourceDrawer.title = ''
+  resourceDrawer.description = ''
+  resourceDrawer.usage = ''
+  resourceDrawer.files = []
+  resourceDrawer.images = []
+  resourceDrawer.coverFileId = null
+  resourceDrawer.newFiles = []
+  resourceDrawer.newImages = []
+  resourceDrawer.saving = false
+  resourceDrawer.uploading = false
+  resourceDrawer.uploadingImages = false
 }
 
-function resetCoverManager() {
-  coverUploadList.value = []
-  coverManager.visible = false
-  coverManager.loading = false
-  coverManager.savingCoverId = null
-  coverManager.resourceId = 0
-  coverManager.slug = ''
-  coverManager.title = ''
-  coverManager.coverFileId = null
-  coverManager.images = []
-}
-
-function handleCoverUploadSuccess(_response: any, _file: UploadUserFile, _uploadFiles: UploadUserFile[]) {
-  // 上传图片成功后刷新图片列表
-  loadCoverImages()
-  ElMessage.success('图片上传成功')
-}
-
-function handleCoverUploadError() {
-  ElMessage.error('图片上传失败')
-}
-
-async function setCoverFromDialog(fileId: number) {
-  if (!coverManager.resourceId) return
-  coverManager.savingCoverId = fileId
+async function saveResourceMeta() {
+  resourceDrawer.saving = true
   try {
-    const res = await setResourceCover(coverManager.resourceId, fileId)
-    coverManager.coverFileId = res.coverFileId ?? null
-    const idx = resourceItems.value.findIndex(r => r.id === coverManager.resourceId)
-    if (idx !== -1) {
-      const current = resourceItems.value[idx] as any
-      const target = coverManager.images.find(img => img.id === fileId) as any
-      resourceItems.value[idx] = {
-        ...current,
-        coverFileId: res.coverFileId,
-        coverUrlPath: target?.url_path || current.coverUrlPath,
-      }
-    }
-    ElMessage.success('封面已更新')
-  } catch (error: any) {
-    ElMessage.error(error?.response?.data?.error || '设置封面失败')
-  } finally {
-    coverManager.savingCoverId = null
-  }
-}
-
-async function handleClearCover() {
-  if (!coverManager.resourceId) return
-  coverManager.savingCoverId = 0
-  try {
-    const res = await setResourceCover(coverManager.resourceId, null)
-    coverManager.coverFileId = res.coverFileId ?? null
-    const idx = resourceItems.value.findIndex(r => r.id === coverManager.resourceId)
-    if (idx !== -1) {
-      const current = resourceItems.value[idx] as any
-      resourceItems.value[idx] = {
-        ...current,
-        coverFileId: null,
-        coverUrlPath: null,
-      }
-    }
-    ElMessage.success('封面已清除')
-  } catch (error: any) {
-    ElMessage.error(error?.response?.data?.error || '清除封面失败')
-  } finally {
-    coverManager.savingCoverId = null
-  }
-}
-
-function openResourceAction(item: MyResourceItem) {
-  resourceAction.visible = true
-  resourceAction.item = item
-}
-
-function handleResourceAction(action: 'view' | 'edit' | 'addFile') {
-  const item = resourceAction.item
-  if (!item) return
-  resourceAction.visible = false
-  switch (action) {
-    case 'view':
-      router.push(`/share/${item.slug}`)
-      break
-    case 'edit':
-      openEdit(item)
-      break
-    case 'addFile':
-      openUpload(item)
-      break
-  }
-}
-
-function handleTutorialCommand(command: string, item: MyTutorialItem) {
-  switch (command) {
-    case 'view':
-      router.push({ path: '/tutorials/library', query: { id: item.id } })
-      break
-    case 'edit':
-      openTutorialEdit(item)
-      break
-    case 'delete':
-      confirmTutorialRemove(item)
-      break
-  }
-}
-
-function openTutorialAction(item: MyTutorialItem) {
-  tutorialAction.visible = true
-  tutorialAction.item = item
-}
-
-function handleTutorialActionSelect(action: 'view' | 'edit') {
-  const item = tutorialAction.item
-  if (!item) return
-  tutorialAction.visible = false
-  switch (action) {
-    case 'view':
-      router.push({ path: '/tutorials/library', query: { id: item.id } })
-      break
-    case 'edit':
-      openTutorialEdit(item)
-      break
-  }
-}
-
-function openEdit(item: MyResourceItem) {
-  edit.visible = true
-  edit.id = item.id
-  edit.description = item.description || ''
-  edit.usage = item.usage || ''
-}
-
-function resetEdit() {
-  editFormRef.value?.clearValidate?.()
-  edit.id = 0
-  edit.description = ''
-  edit.usage = ''
-  edit.loading = false
-}
-
-async function submitEdit() {
-  edit.loading = true
-  try {
-    const updated = await updateResourceMeta(edit.id, {
-      description: edit.description,
-      usage: edit.usage,
+    const updated = await updateResourceMeta(resourceDrawer.id, {
+      description: resourceDrawer.description,
+      usage: resourceDrawer.usage,
     })
-    const index = resourceItems.value.findIndex(r => r.id === edit.id)
-    if (index !== -1) {
-      resourceItems.value[index] = { ...resourceItems.value[index], ...updated }
+    const idx = resourceItems.value.findIndex(r => r.id === resourceDrawer.id)
+    if (idx !== -1) {
+      resourceItems.value[idx] = { ...resourceItems.value[idx], ...updated, title: resourceDrawer.title }
     }
     ElMessage.success('保存成功')
-    edit.visible = false
-  } catch (error: any) {
-    ElMessage.error(error?.response?.data?.error || '保存失败')
-  } finally {
-    edit.loading = false
-  }
+    resourceDrawer.visible = false
+  } catch (e: any) { ElMessage.error(e?.response?.data?.error || '保存失败') }
+  finally { resourceDrawer.saving = false }
 }
 
-async function removeResource(item: MyResourceItem) {
-  resourceDeletingId.value = item.id
+async function onDrawerAIOptimize() {
+  if (!resourceDrawer.title.trim()) { ElMessage.warning('请先输入标题'); return }
+  resourceDrawer.aiLoading = true
   try {
-    await deleteResource(item.id)
-    resourceItems.value = resourceItems.value.filter(r => r.id !== item.id)
+    const result = await optimizeContent({
+      title: resourceDrawer.title,
+      description: resourceDrawer.description,
+      usage: resourceDrawer.usage,
+    })
+    resourceDrawer.title = result.title
+    resourceDrawer.description = result.description
+    resourceDrawer.usage = result.usage
+    ElMessage.success('已优化内容')
+  } catch (e: any) { ElMessage.error(e?.response?.data?.error || 'AI 优化失败') }
+  finally { resourceDrawer.aiLoading = false }
+}
+
+async function submitNewFiles() {
+  if (!resourceDrawer.newFiles.length) return
+  resourceDrawer.uploading = true
+  try {
+    const fd = new FormData()
+    fd.append('resourceId', String(resourceDrawer.id))
+    for (const f of resourceDrawer.newFiles) { const raw = (f as any).raw; if (raw) fd.append('files', raw) }
+    await http.post('/files/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+    ElMessage.success('文件上传成功')
+    resourceDrawer.newFiles = []
+    await fetchResources()
+    const item = resourceItems.value.find(r => r.id === resourceDrawer.id)
+    if (item) resourceDrawer.files = [...item.files]
+  } catch (e: any) { ElMessage.error(e?.response?.data?.error || '上传失败') }
+  finally { resourceDrawer.uploading = false }
+}
+
+async function submitNewImages() {
+  if (!resourceDrawer.newImages.length) return
+  resourceDrawer.uploadingImages = true
+  try {
+    const fd = new FormData()
+    for (const f of resourceDrawer.newImages) { const raw = (f as any).raw; if (raw) fd.append('files', raw) }
+    await http.post(`/resources/${resourceDrawer.id}/images/upload`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+    ElMessage.success('图片上传成功')
+    resourceDrawer.newImages = []
+    const res = await listResourceImages(resourceDrawer.id)
+    resourceDrawer.images = res.items || []
+  } catch (e: any) { ElMessage.error(e?.response?.data?.error || '上传失败') }
+  finally { resourceDrawer.uploadingImages = false }
+}
+
+async function setCover(fileId: number) {
+  try {
+    const res = await setResourceCover(resourceDrawer.id, fileId)
+    resourceDrawer.coverFileId = res.coverFileId ?? null
+    const idx = resourceItems.value.findIndex(r => r.id === resourceDrawer.id)
+    if (idx !== -1) {
+      const cur = resourceItems.value[idx] as any
+      const target = resourceDrawer.images.find(img => img.id === fileId) as any
+      resourceItems.value[idx] = { ...cur, coverFileId: res.coverFileId, coverUrlPath: target?.url_path || cur.coverUrlPath }
+    }
+    ElMessage.success('封面已更新')
+  } catch (e: any) { ElMessage.error(e?.response?.data?.error || '设置封面失败') }
+}
+
+async function clearCover() {
+  resourceDrawer.clearingCover = true
+  try {
+    await setResourceCover(resourceDrawer.id, null)
+    resourceDrawer.coverFileId = null
+    const idx = resourceItems.value.findIndex(r => r.id === resourceDrawer.id)
+    if (idx !== -1) {
+      const cur = resourceItems.value[idx] as any
+      resourceItems.value[idx] = { ...cur, coverFileId: null, coverUrlPath: null }
+    }
+    ElMessage.success('封面已清除')
+  } catch (e: any) { ElMessage.error(e?.response?.data?.error || '清除封面失败') }
+  finally { resourceDrawer.clearingCover = false }
+}
+
+function downloadFile(f: ResourceFile) {
+  window.open(`/api/files/${f.id}/download`, '_blank')
+}
+
+async function removeFile(f: ResourceFile) {
+  try {
+    await ElMessageBox.confirm(`确定删除文件「${f.original_name}」吗？`, '提示', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' })
+  } catch { return }
+  try {
+    await http.delete(`/files/${f.id}`)
+    resourceDrawer.files = resourceDrawer.files.filter(x => x.id !== f.id)
     ElMessage.success('已删除')
-  } catch (error: any) {
-    ElMessage.error(error?.response?.data?.error || '删除失败')
-  } finally {
-    resourceDeletingId.value = null
-  }
+    await fetchResources()
+  } catch (e: any) { ElMessage.error(e?.response?.data?.error || '删除失败') }
 }
 
 async function confirmRemove(item: MyResourceItem) {
   try {
-    await ElMessageBox.confirm('确定删除这个存档吗？', '提示', {
-      type: 'warning',
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
-    })
-  } catch {
-    return
-  }
-  await removeResource(item)
+    await ElMessageBox.confirm('确定删除这个存档吗？', '提示', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' })
+  } catch { return }
+  try {
+    await deleteResource(item.id)
+    resourceItems.value = resourceItems.value.filter(r => r.id !== item.id)
+    ElMessage.success('已删除')
+  } catch (e: any) { ElMessage.error(e?.response?.data?.error || '删除失败') }
 }
 
-function openUpload(item: MyResourceItem) {
-  upload.visible = true
-  upload.resourceId = item.id
-  upload.title = item.title
-  upload.fileList = []
-}
-
-function resetUpload() {
-  upload.fileList = []
-  upload.resourceId = 0
-  upload.title = ''
-  upload.submitting = false
-}
-
-function submitUpload() {
-  if (!upload.fileList.length) {
-    ElMessage.warning('请先选择文件')
-    return
-  }
-  upload.submitting = true
-  uploadRef.value?.submit()
-}
-
-function handleUploadSuccess(_response: any, _file: UploadUserFile, uploadFiles: UploadUserFile[]) {
-  const finished = uploadFiles.every(item => item.status === 'success')
-  if (finished) {
-    upload.submitting = false
-    upload.visible = false
-    ElMessage.success('上传成功')
-    fetchResources()
-  }
-}
-
-function handleUploadError() {
-  upload.submitting = false
-  ElMessage.error('上传失败')
-}
+// ---- Tutorial drawer ----
+const tutorialDrawer = reactive({
+  visible: false, loading: false, isCreating: false,
+  id: 0, title: '', description: '', content: '',
+})
 
 function openTutorialCreate() {
-  tutorialEdit.visible = true
-  tutorialEdit.isCreating = true
-  tutorialEdit.id = 0
-  tutorialEdit.title = ''
-  tutorialEdit.description = ''
-  tutorialEdit.content = ''
+  tutorialDrawer.visible = true
+  tutorialDrawer.isCreating = true
+  tutorialDrawer.id = 0
+  tutorialDrawer.title = ''
+  tutorialDrawer.description = ''
+  tutorialDrawer.content = ''
 }
 
 async function openTutorialEdit(item: MyTutorialItem) {
-  tutorialEdit.visible = true
-  tutorialEdit.isCreating = false
-  tutorialEdit.loading = true
-  tutorialEdit.id = item.id
-  tutorialEdit.title = item.title
-  tutorialEdit.description = item.description || ''
+  tutorialDrawer.visible = true
+  tutorialDrawer.isCreating = false
+  tutorialDrawer.loading = true
+  tutorialDrawer.id = item.id
+  tutorialDrawer.title = item.title
+  tutorialDrawer.description = item.description || ''
   try {
     const detail = await getTutorial(item.id)
-    tutorialEdit.content = detail.content || ''
-  } catch (error: any) {
-    ElMessage.error(error?.response?.data?.error || '加载教程内容失败')
-    tutorialEdit.visible = false
-  } finally {
-    tutorialEdit.loading = false
-  }
+    tutorialDrawer.content = detail.content || ''
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error || '加载教程内容失败')
+    tutorialDrawer.visible = false
+  } finally { tutorialDrawer.loading = false }
 }
 
-function resetTutorialEdit() {
-  tutorialEdit.id = 0
-  tutorialEdit.title = ''
-  tutorialEdit.description = ''
-  tutorialEdit.content = ''
-  tutorialEdit.loading = false
-  tutorialEdit.isCreating = false
+function resetTutorialDrawer() {
+  tutorialDrawer.id = 0
+  tutorialDrawer.title = ''
+  tutorialDrawer.description = ''
+  tutorialDrawer.content = ''
+  tutorialDrawer.loading = false
+  tutorialDrawer.isCreating = false
 }
 
 async function submitTutorialEdit() {
-  const title = (tutorialEdit.title || '').trim()
-  const content = (tutorialEdit.content || '').trim()
-  if (!title || !content) {
-    ElMessage.warning('标题和正文内容不能为空')
-    return
-  }
-  tutorialEdit.loading = true
+  const title = (tutorialDrawer.title || '').trim()
+  const content = (tutorialDrawer.content || '').trim()
+  if (!title || !content) { ElMessage.warning('标题和正文内容不能为空'); return }
+  tutorialDrawer.loading = true
   try {
-    if (tutorialEdit.isCreating) {
-      await createTutorial({
-        title,
-        description: (tutorialEdit.description || '').trim(),
-        content,
-      })
+    if (tutorialDrawer.isCreating) {
+      await createTutorial({ title, description: (tutorialDrawer.description || '').trim(), content })
       ElMessage.success('教程已保存')
-      tutorialEdit.visible = false
+      tutorialDrawer.visible = false
       await fetchTutorials()
     } else {
-      const detail = await updateTutorial(tutorialEdit.id, {
-        title,
-        description: (tutorialEdit.description || '').trim(),
-        content,
-      })
-      const index = tutorialItems.value.findIndex(t => t.id === detail.id)
-      if (index !== -1) {
-        const target = tutorialItems.value[index]
-        if (target) {
-          target.title = detail.title
-          target.description = detail.description
-          target.updated_at = detail.updated_at
-        }
+      const detail = await updateTutorial(tutorialDrawer.id, { title, description: (tutorialDrawer.description || '').trim(), content })
+      const idx = tutorialItems.value.findIndex(t => t.id === detail.id)
+      if (idx !== -1) {
+        const t = tutorialItems.value[idx]
+        if (t) { t.title = detail.title; t.description = detail.description; t.updated_at = detail.updated_at }
       }
       ElMessage.success('修改已保存')
-      tutorialEdit.visible = false
+      tutorialDrawer.visible = false
     }
-  } catch (error: any) {
-    ElMessage.error(error?.response?.data?.error || '保存教程失败')
-  } finally {
-    tutorialEdit.loading = false
-  }
-}
-
-async function removeTutorial(item: MyTutorialItem) {
-  tutorialDeletingId.value = item.id
-  try {
-    await deleteTutorial(item.id)
-    tutorialItems.value = tutorialItems.value.filter(t => t.id !== item.id)
-    ElMessage.success('已删除')
-  } catch (error: any) {
-    ElMessage.error(error?.response?.data?.error || '删除失败')
-  } finally {
-    tutorialDeletingId.value = null
-  }
+  } catch (e: any) { ElMessage.error(e?.response?.data?.error || '保存教程失败') }
+  finally { tutorialDrawer.loading = false }
 }
 
 async function confirmTutorialRemove(item: MyTutorialItem) {
   try {
-    await ElMessageBox.confirm('确定删除这个教程吗？', '提示', {
-      type: 'warning',
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
-    })
-  } catch {
-    return
-  }
-  await removeTutorial(item)
+    await ElMessageBox.confirm('确定删除这个教程吗？', '提示', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' })
+  } catch { return }
+  try {
+    await deleteTutorial(item.id)
+    tutorialItems.value = tutorialItems.value.filter(t => t.id !== item.id)
+    ElMessage.success('已删除')
+  } catch (e: any) { ElMessage.error(e?.response?.data?.error || '删除失败') }
 }
 
-// 确保路由切换或组件卸载时中止后台上传
+// ---- Fetch ----
+async function fetchResources() {
+  resourcesLoading.value = true
+  try { resourceItems.value = await listMyResources() }
+  catch (e: any) { ElMessage.error(e?.response?.data?.error || '获取存档数据失败') }
+  finally { resourcesLoading.value = false }
+}
+
+async function fetchTutorials() {
+  tutorialsLoading.value = true
+  try { tutorialItems.value = await listMyTutorials() }
+  catch (e: any) { ElMessage.error(e?.response?.data?.error || '获取教程列表失败') }
+  finally { tutorialsLoading.value = false }
+}
+
+function onRefresh() {
+  if (activeTab.value === 'resources') fetchResources()
+  else fetchTutorials()
+}
+
+onMounted(() => { fetchResources(); fetchTutorials() })
+
 function abortAllUploads() {
-  if (uploadRef.value) {
-    ;(upload.fileList || []).forEach((f) => {
-      if ((f as any).status === 'uploading') {
-        uploadRef.value!.abort(f as any)
-      }
-    })
+  if (drawerUploadRef.value) {
+    resourceDrawer.newFiles.forEach((f) => { if ((f as any).status === 'uploading') drawerUploadRef.value!.abort(f as any) })
   }
-  if (coverUploadRef.value) {
-    (coverUploadList.value || []).forEach((f) => {
-      if ((f as any).status === 'uploading') {
-        coverUploadRef.value!.abort(f as any)
-      }
-    })
+  if (drawerCoverRef.value) {
+    resourceDrawer.newImages.forEach((f) => { if ((f as any).status === 'uploading') drawerCoverRef.value!.abort(f as any) })
   }
 }
-
-onBeforeRouteLeave(() => {
-  abortAllUploads()
-})
-
-onBeforeUnmount(() => {
-  abortAllUploads()
-})
+onBeforeUnmount(() => abortAllUploads())
 </script>
 
 <style scoped>
-.page-bg {
-  background: #f5f7fa;
-  min-height: 100vh;
-  padding-bottom: 40px;
-}
+.page-bg { background: #f5f7fa; min-height: 100vh; padding-bottom: 40px; }
+.container { max-width: 1200px; margin: 0 auto; padding: 24px; }
 
-.container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 24px;
-}
+.header-section { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 32px; }
+.header-left h1 { font-size: 28px; font-weight: 700; color: #1a1a1a; margin: 0 0 8px 0; }
+.subtitle { color: #909399; font-size: 14px; margin: 0; }
+.header-right { display: flex; align-items: center; gap: 16px; }
 
-.header-section {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  margin-bottom: 32px;
-}
+.tab-switch-wrapper { background: white; padding: 4px; border-radius: 12px; display: flex; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+.tab-item { padding: 8px 20px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 8px; color: #606266; font-weight: 500; transition: all 0.3s ease; }
+.tab-item.active { background: var(--el-color-primary-light-9); color: var(--el-color-primary); }
+.tab-item:hover:not(.active) { background: #f5f7fa; }
 
-.header-left h1 {
-  font-size: 28px;
-  font-weight: 700;
-  color: #1a1a1a;
-  margin: 0 0 8px 0;
-}
+.works-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 24px; }
+.work-card { background: white; border-radius: 16px; padding: 20px; transition: all 0.3s ease; border: 1px solid transparent; position: relative; display: flex; flex-direction: column; min-height: 200px; }
+.work-card:hover { transform: translateY(-4px); box-shadow: 0 12px 24px rgba(0,0,0,0.06); border-color: var(--el-color-primary-light-8); }
 
-.subtitle {
-  color: #909399;
-  font-size: 14px;
-  margin: 0;
-}
+.add-card { border: 2px dashed #e4e7ed; background: transparent; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; color: #909399; }
+.add-card:hover { border-color: var(--el-color-primary); color: var(--el-color-primary); background: var(--el-color-primary-light-9); transform: translateY(-4px); }
+.add-icon { width: 48px; height: 48px; border-radius: 50%; background: #f0f2f5; display: flex; align-items: center; justify-content: center; font-size: 24px; transition: all 0.3s ease; }
+.add-card:hover .add-icon { background: white; color: var(--el-color-primary); }
 
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
+.card-content { flex: 1; cursor: pointer; display: flex; flex-direction: column; }
+.card-icon { width: 48px; height: 48px; border-radius: 12px; background: var(--el-color-primary-light-9); color: var(--el-color-primary); display: flex; align-items: center; justify-content: center; font-size: 24px; margin-bottom: 16px; }
+.card-icon.has-cover { background: #0f172a; overflow: hidden; padding: 0; }
+.card-cover-image { width: 100%; height: 100%; object-fit: cover; display: block; }
+.card-icon.tutorial-icon { background: var(--el-color-warning-light-9); color: var(--el-color-warning); }
 
-.tab-switch-wrapper {
-  background: white;
-  padding: 4px;
-  border-radius: 12px;
-  display: flex;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-}
+.card-info { flex: 1; overflow: hidden; }
+.work-title { margin: 0 0 8px 0; font-size: 16px; font-weight: 600; color: #303133; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.work-meta { font-size: 12px; color: #909399; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+.work-desc { font-size: 13px; color: #606266; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 
-.tab-item {
-  padding: 8px 20px;
-  border-radius: 8px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #606266;
-  font-weight: 500;
-  transition: all 0.3s ease;
-}
+.card-actions { margin-top: 16px; padding-top: 16px; border-top: 1px solid #f0f2f5; display: flex; justify-content: flex-end; gap: 8px; opacity: 0; transition: opacity 0.3s ease; }
+.work-card:hover .card-actions { opacity: 1; }
 
-.tab-item.active {
-  background: var(--el-color-primary-light-9);
-  color: var(--el-color-primary);
-}
+.empty-state { padding: 60px 0; text-align: center; }
 
-.tab-item:hover:not(.active) {
-  background: #f5f7fa;
-}
+/* Drawer body */
+.drawer-body { padding: 0 4px; }
+.drawer-ai-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.drawer-footer { display: flex; justify-content: flex-end; gap: 12px; }
 
-.works-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 24px;
-}
+.file-list { display: flex; flex-direction: column; gap: 8px; }
+.file-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; background: var(--el-fill-color-light); }
+.file-icon { color: var(--el-text-color-secondary); flex-shrink: 0; }
+.file-name { flex: 1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-size { font-size: 12px; color: var(--el-text-color-placeholder); flex-shrink: 0; }
 
-.work-card {
-  background: white;
-  border-radius: 16px;
-  padding: 20px;
-  transition: all 0.3s ease;
-  border: 1px solid transparent;
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  height: auto; /* Changed from 200px to auto for better flexibility */
-  min-height: 200px;
-}
-
-.work-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 12px 24px rgba(0,0,0,0.06);
-  border-color: var(--el-color-primary-light-8);
-}
-
-.add-card {
-  border: 2px dashed #e4e7ed;
-  background: transparent;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  color: #909399;
-}
-
-.add-card:hover {
-  border-color: var(--el-color-primary);
-  color: var(--el-color-primary);
-  background: var(--el-color-primary-light-9);
-  transform: translateY(-4px);
-}
-
-.add-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background: #f0f2f5;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  transition: all 0.3s ease;
-}
-
-.add-card:hover .add-icon {
-  background: white;
-  color: var(--el-color-primary);
-}
-
-.card-content {
-  flex: 1;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-}
-
-.card-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  background: var(--el-color-primary-light-9);
-  color: var(--el-color-primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  margin-bottom: 16px;
-}
-
-.card-icon.has-cover {
-  background: #0f172a;
-  overflow: hidden;
-  padding: 0;
-}
-
-.card-cover-image {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.card-icon.tutorial-icon {
-  background: var(--el-color-warning-light-9);
-  color: var(--el-color-warning);
-}
-
-.card-info {
-  flex: 1;
-  overflow: hidden;
-}
-
-.work-title {
-  margin: 0 0 8px 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: #303133;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.work-meta {
-  font-size: 12px;
-  color: #909399;
-  margin-bottom: 12px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.work-desc {
-  font-size: 13px;
-  color: #606266;
-  line-height: 1.5;
-  display: -webkit-box;
-  display: -moz-box;
-  display: box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  -webkit-box-orient: vertical;
-  -moz-box-orient: vertical;
-  box-orient: vertical;
-  overflow: hidden;
-}
-
-.card-actions {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid #f0f2f5;
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.work-card:hover .card-actions {
-  opacity: 1;
-}
-
-.empty-state {
-  padding: 60px 0;
-  text-align: center;
-}
-
-.action-select {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.action-btn {
-  justify-content: flex-start;
-  width: 100%;
-}
-
-.action-icon {
-  margin-right: 8px;
-}
-
-.cover-upload-section {
-  margin-top: 16px;
-  margin-bottom: 16px;
-}
-
-.cover-section-title {
-  margin: 0 0 12px 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: #303133;
-}
-
-.cover-images-list {
-  margin-top: 16px;
-}
-
-.cover-images-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 12px;
-}
-
-.cover-image-item {
-  border-radius: 10px;
-  overflow: hidden;
-  border: 1px solid #e5e7eb;
-  cursor: pointer;
-  background: #f9fafb;
-  transition: all 0.2s ease;
-}
-
-.cover-image-item:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.08);
-}
-
-.cover-image-item.is-cover {
-  border-color: var(--el-color-primary);
-  box-shadow: 0 0 0 1px var(--el-color-primary-light-8);
-}
-
-.cover-image-thumb {
-  width: 100%;
-  height: 90px;
-  object-fit: cover;
-  display: block;
-}
-
-.cover-image-meta {
-  padding: 6px 8px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 4px;
-}
-
-.cover-image-name {
-  font-size: 12px;
-  color: #4b5563;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.cover-image-badge {
-  font-size: 11px;
-  color: #16a34a;
-  background-color: #dcfce7;
-  border-radius: 999px;
-  padding: 0 6px;
-}
+.cover-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; margin-bottom: 12px; }
+.cover-item { position: relative; border-radius: 8px; overflow: hidden; border: 2px solid transparent; cursor: pointer; transition: all 0.2s; aspect-ratio: 1; }
+.cover-item:hover { transform: scale(1.02); }
+.cover-item.is-cover { border-color: var(--el-color-primary); }
+.cover-thumb { width: 100%; height: 100%; object-fit: cover; }
+.cover-badge { position: absolute; bottom: 4px; left: 4px; font-size: 10px; background: var(--el-color-primary); color: white; padding: 1px 6px; border-radius: 999px; }
 
 @media (max-width: 768px) {
-  .container {
-    padding: 16px;
-  }
-
-  .header-section {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 16px;
-    margin-bottom: 24px;
-  }
-  
-  .header-right {
-    width: 100%;
-    justify-content: space-between;
-    flex-wrap: wrap; /* Allow wrapping */
-    gap: 12px;
-  }
-
-  .tab-item {
-    padding: 8px 12px;
-    font-size: 14px;
-  }
-  
-  .works-grid {
-    grid-template-columns: 1fr; /* Single column on mobile */
-    gap: 16px;
-  }
-
-  .work-card {
-    padding: 16px;
-    min-height: 0;
-  }
-
-  .card-content {
-    flex-direction: row; /* Horizontal layout on mobile */
-    align-items: center;
-    gap: 16px;
-  }
-
-  .card-icon {
-    width: 80px;
-    height: 80px;
-    margin-bottom: 0;
-    flex-shrink: 0;
-  }
-
-  .work-title {
-    font-size: 15px;
-    margin-bottom: 4px;
-  }
-
-  .work-meta {
-    margin-bottom: 4px;
-  }
-
-  .card-actions {
-    opacity: 1;
-    margin-top: 12px;
-    padding-top: 12px;
-  }
-
-  .add-card {
-    flex-direction: row;
-    height: 60px;
-    min-height: 0;
-    padding: 0 16px;
-    justify-content: flex-start;
-    gap: 12px;
-  }
-
-  .add-icon {
-    width: 32px;
-    height: 32px;
-    font-size: 16px;
-  }
+  .container { padding: 16px; }
+  .header-section { flex-direction: column; align-items: flex-start; gap: 16px; margin-bottom: 24px; }
+  .header-right { width: 100%; justify-content: space-between; gap: 12px; }
+  .tab-item { padding: 8px 12px; font-size: 14px; }
+  .works-grid { grid-template-columns: 1fr; gap: 16px; }
+  .work-card { padding: 16px; min-height: 0; }
+  .card-content { flex-direction: row; align-items: center; gap: 16px; }
+  .card-icon { width: 80px; height: 80px; margin-bottom: 0; flex-shrink: 0; }
+  .work-title { font-size: 15px; margin-bottom: 4px; }
+  .work-meta { margin-bottom: 4px; }
+  .card-actions { opacity: 1; margin-top: 12px; padding-top: 12px; }
+  .add-card { flex-direction: row; height: 60px; min-height: 0; padding: 0 16px; justify-content: flex-start; gap: 12px; }
+  .add-icon { width: 32px; height: 32px; font-size: 16px; }
 }
 </style>

@@ -39,8 +39,8 @@
             </div>
             
             <div class="info-section">
-              <h2 class="username">{{ profile.name }}</h2>
-              <p class="user-id">ID: {{ profile.username }}</p>
+              <h2 class="username">{{ profile.username }}</h2>
+              <p class="user-id">ID: {{ profile.id }}</p>
             </div>
           </div>
 
@@ -87,7 +87,6 @@ import { Refresh, Camera } from '@element-plus/icons-vue'
 type Profile = {
   id: number
   username: string
-  name: string
   avatarUrl: string
   signature: string
 }
@@ -104,7 +103,7 @@ const profile = ref<Profile | null>(null)
 const signature = ref('')
 
 const avatarFallback = computed(() => {
-  const n = profile.value?.name || ''
+  const n = profile.value?.username || ''
   return n ? n.slice(0, 1) : '?'
 })
 

@@ -92,15 +92,14 @@ def run_migrations(conn: Optional[sqlite3.Connection] = None) -> None:
                   id INTEGER PRIMARY KEY AUTOINCREMENT,
                   username TEXT NOT NULL UNIQUE,
                   password_hash TEXT NOT NULL,
-                  name TEXT NOT NULL,
                   avatar_url TEXT NOT NULL DEFAULT '',
                   signature TEXT NOT NULL DEFAULT '',
                   created_at TEXT NOT NULL DEFAULT (datetime('now')),
                   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
                 );
 
-                INSERT INTO users_new (id, username, password_hash, name, created_at, updated_at)
-                SELECT id, email, password_hash, name, created_at, updated_at FROM users;
+                INSERT INTO users_new (id, username, password_hash, created_at, updated_at)
+                SELECT id, email, password_hash, created_at, updated_at FROM users;
 
                 DROP TABLE users;
                 ALTER TABLE users_new RENAME TO users;
@@ -115,7 +114,6 @@ def run_migrations(conn: Optional[sqlite3.Connection] = None) -> None:
               id INTEGER PRIMARY KEY AUTOINCREMENT,
               username TEXT NOT NULL UNIQUE,
               password_hash TEXT NOT NULL,
-              name TEXT NOT NULL,
               avatar_url TEXT NOT NULL DEFAULT '',
               signature TEXT NOT NULL DEFAULT '',
               created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -296,6 +294,32 @@ def run_migrations(conn: Optional[sqlite3.Connection] = None) -> None:
                 conn.execute("ALTER TABLE users ADD COLUMN signature TEXT NOT NULL DEFAULT ''")
         except Exception:
             pass
+
+        # Migration: drop `name` column from users (merge into username)
+        try:
+            cols = [r["name"] for r in conn.execute("PRAGMA table_info(users)").fetchall()]
+            if "name" in cols:
+                print("Executing DB migration: drop users.name column")
+                cur.executescript(
+                    """
+                    CREATE TABLE IF NOT EXISTS users_new (
+                      id INTEGER PRIMARY KEY AUTOINCREMENT,
+                      username TEXT NOT NULL UNIQUE,
+                      password_hash TEXT NOT NULL,
+                      avatar_url TEXT NOT NULL DEFAULT '',
+                      signature TEXT NOT NULL DEFAULT '',
+                      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+                    );
+                    INSERT INTO users_new (id, username, password_hash, avatar_url, signature, created_at, updated_at)
+                    SELECT id, username, password_hash, avatar_url, signature, created_at, updated_at FROM users;
+                    DROP TABLE users;
+                    ALTER TABLE users_new RENAME TO users;
+                    """
+                )
+                print("DB migration completed: users.name dropped")
+        except Exception as e:
+            print(f"DB migration (drop name) skipped: {e}")
 
         cur.executescript(
             """

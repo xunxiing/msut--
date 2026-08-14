@@ -44,7 +44,7 @@ def list_notifications(
         SELECT n.id, n.type, n.content, n.created_at, n.resource_id, n.comment_id, n.actor_id,
                r.slug AS resource_slug, r.title AS resource_title,
                rc.content AS comment_content,
-               u.name AS actor_name, u.username AS actor_username
+               u.username AS actor_username
         FROM notifications n
         LEFT JOIN resources r ON r.id = n.resource_id
         LEFT JOIN resource_comments rc ON rc.id = n.comment_id
@@ -75,7 +75,7 @@ def list_unread(request: Request):
         SELECT n.id, n.type, n.content, n.created_at, n.resource_id, n.comment_id, n.actor_id,
                r.slug AS resource_slug, r.title AS resource_title,
                rc.content AS comment_content,
-               u.name AS actor_name, u.username AS actor_username
+               u.username AS actor_username
         FROM notifications n
         LEFT JOIN resources r ON r.id = n.resource_id
         LEFT JOIN resource_comments rc ON rc.id = n.comment_id

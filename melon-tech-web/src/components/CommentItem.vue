@@ -10,7 +10,7 @@
           {{ initials }}
         </el-avatar>
         <div class="author-info">
-          <div class="author-name">{{ item.user.name || item.user.username || '用户' }}</div>
+          <div class="author-name">{{ item.user.username || '用户' }}</div>
           <div class="comment-meta">{{ formatTime(item.created_at) }}</div>
         </div>
       </div>
@@ -101,11 +101,11 @@ const isOwner = computed(() => {
 })
 
 const initials = computed(() => {
-  const name = props.item.user.name || props.item.user.username || 'U'
+  const name = props.item.user.username || 'U'
   return name.slice(0, 1).toUpperCase()
 })
 
-const replyTo = computed(() => props.item.user.name || props.item.user.username)
+const replyTo = computed(() => props.item.user.username || '用户')
 
 function formatTime(value: string) {
   return value ? value.replace('T', ' ').replace('Z', '') : ''

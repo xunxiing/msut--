@@ -7,7 +7,7 @@
         :src="auth.user.avatarUrl || undefined"
         class="current-avatar"
       >
-        {{ auth.user.name?.[0]?.toUpperCase() || '?' }}
+        {{ auth.user.username?.[0]?.toUpperCase() || '?' }}
       </el-avatar>
     </div>
     

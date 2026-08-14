@@ -40,7 +40,7 @@ const route = useRoute()
 const formRef = ref<FormInstance>()
 const form = reactive({ username: '', password: '', remember: true })
 const rules: FormRules = {
-  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }, { min: 3, max: 32, message: '用户名长度为 3-32 位', trigger: 'blur' }],
+  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }, { min: 6, message: '至少 6 位', trigger: 'blur' }]
 }
 

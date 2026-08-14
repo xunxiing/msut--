@@ -76,7 +76,7 @@ async function handleOpen() {
 }
 
 function formatActor(actor: NotificationItem['actor']) {
-  return actor.name || actor.username || '用户'
+  return actor.username || '用户'
 }
 
 function formatTitle(item: NotificationItem) {

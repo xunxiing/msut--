@@ -905,7 +905,7 @@ def get_resource(slug: str):
     cur = conn.cursor()
     r = cur.execute(
         """
-        SELECT r.*, u.name AS author_name, u.username AS author_username, u.avatar_url AS author_avatar
+        SELECT r.*, u.username AS author_username, u.avatar_url AS author_avatar
         FROM resources r
         LEFT JOIN users u ON u.id = r.created_by
         WHERE r.slug = ?
@@ -976,7 +976,6 @@ def list_resources(
           r.description,
           r.created_at,
           r.cover_file_id,
-          u.name AS author_name,
           u.username AS author_username,
           u.avatar_url AS author_avatar,
           cf.url_path AS cover_url_path

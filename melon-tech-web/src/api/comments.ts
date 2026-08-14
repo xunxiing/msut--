@@ -2,7 +2,6 @@ import { http } from './http'
 
 export type CommentUser = {
   id: number
-  name: string
   username: string
   avatarUrl?: string
 }

@@ -64,7 +64,6 @@ def build_notification_payload(row: Dict) -> Dict:
         },
         "actor": {
             "id": int(row["actor_id"]),
-            "name": row.get("actor_name") or "",
             "username": row.get("actor_username") or "",
         },
     }

@@ -4,7 +4,6 @@ import { http } from '../api/http'
 type User = {
   id: number
   username: string
-  name: string
   avatarUrl?: string
   signature?: string
 } | null
@@ -24,7 +23,7 @@ export const useAuth = defineStore('auth', {
         this.user = null
       }
     },
-    async register(payload: { username: string; password: string; name: string }) {
+    async register(payload: { username: string; password: string }) {
       this.loading = true
       this.error = null
       try {

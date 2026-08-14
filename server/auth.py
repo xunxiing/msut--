@@ -45,18 +45,11 @@ def _verify_password(password: str, hashed: str) -> bool:
         return False
 
 
-def _issue_token(uid: int, username: str, name: str, ttl_seconds: int) -> str:
-    payload: JWTPayload = {
-        "uid": uid,
-        "username": username,
-        "name": name,
-        "exp": int(time.time()) + ttl_seconds,
-    }
+def _issue_token(uid: int, username: str, ttl_seconds: int) -> str:
     token = jwt.encode(
         {
             "uid": uid,
             "username": username,
-            "name": name,
             "exp": int(time.time()) + ttl_seconds,
         },
         JWT_SECRET,
@@ -85,7 +78,7 @@ def _parse_token(token: Optional[str]) -> Optional[JWTPayload]:
         return None
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])  # type: ignore
-        if not (payload.get("uid") and payload.get("username") and payload.get("name")):
+        if not (payload.get("uid") and payload.get("username")):
             return None
         return payload  # type: ignore
     except Exception:
@@ -98,14 +91,13 @@ def get_current_user(request: Request) -> Optional[JWTPayload]:
 
 
 class RegisterBody(BaseModel):
-    username: str = Field(min_length=3, max_length=32)
+    username: str = Field(min_length=1, max_length=32)
     password: str = Field(min_length=6, max_length=72)
-    name: str = Field(min_length=1, max_length=32)
     remember: Optional[bool] = False
 
 
 class LoginBody(BaseModel):
-    username: str = Field(min_length=3, max_length=32)
+    username: str = Field(min_length=1, max_length=32)
     password: str = Field(min_length=6, max_length=72)
     remember: Optional[bool] = False
 
@@ -126,8 +118,8 @@ def register(body: RegisterBody, request: Request, response: Response):
         return JSONResponse(status_code=409, content={"error": "用户名已注册"})
     hash_ = _hash_password(body.password)
     cur.execute(
-        "INSERT INTO users (username, password_hash, name) VALUES (?, ?, ?)",
-        (body.username, hash_, body.name),
+        "INSERT INTO users (username, password_hash) VALUES (?, ?)",
+        (body.username, hash_),
     )
     conn.commit()
     last_id = cur.lastrowid
@@ -136,7 +128,7 @@ def register(body: RegisterBody, request: Request, response: Response):
     uid = int(last_id)
     remember = bool(body.remember)
     token_ttl = ACCESS_TOKEN_TTL_SECONDS if remember else ACCESS_TOKEN_TTL_SHORT_SECONDS
-    token = _issue_token(uid, body.username, body.name, token_ttl)
+    token = _issue_token(uid, body.username, token_ttl)
     response.set_cookie("token", token, **cookie_kwargs(max_age_seconds=token_ttl))
     if remember:
         refresh_token = _create_refresh_token(conn, uid)
@@ -158,7 +150,7 @@ def register(body: RegisterBody, request: Request, response: Response):
                 pass
         ck = cookie_kwargs(max_age_seconds=0)
         response.set_cookie("refresh_token", value="", **ck)
-    return {"user": {"id": uid, "username": body.username, "name": body.name}}
+    return {"user": {"id": uid, "username": body.username}}
 
 
 @router.post("/api/auth/login")
@@ -174,7 +166,7 @@ def login(body: LoginBody, request: Request, response: Response):
         return JSONResponse(status_code=401, content={"error": "用户名或密码错误"})
     remember = bool(body.remember)
     token_ttl = ACCESS_TOKEN_TTL_SECONDS if remember else ACCESS_TOKEN_TTL_SHORT_SECONDS
-    token = _issue_token(int(row["id"]), row["username"], row["name"], token_ttl)
+    token = _issue_token(int(row["id"]), row["username"], token_ttl)
     response.set_cookie("token", token, **cookie_kwargs(max_age_seconds=token_ttl))
     if remember:
         refresh_token = _create_refresh_token(conn, int(row["id"]))
@@ -200,7 +192,6 @@ def login(body: LoginBody, request: Request, response: Response):
         "user": {
             "id": int(row["id"]),
             "username": row["username"],
-            "name": row["name"],
             "avatarUrl": row["avatar_url"] or "",
             "signature": row["signature"] or "",
         }
@@ -243,7 +234,7 @@ def me(request: Request):
     # Fetch latest details from DB
     conn = get_connection()
     row = conn.execute(
-        "SELECT id, username, name, avatar_url, signature FROM users WHERE id = ?",
+        "SELECT id, username, avatar_url, signature FROM users WHERE id = ?",
         (int(uid),),
     ).fetchone()
     
@@ -254,7 +245,6 @@ def me(request: Request):
         "user": {
             "id": int(row["id"]),
             "username": row["username"],
-            "name": row["name"],
             "avatarUrl": row["avatar_url"] or "",
             "signature": row["signature"] or "",
         }
@@ -288,7 +278,7 @@ def refresh(request: Request, response: Response):
         return JSONResponse(status_code=401, content={"error": "登录已过期"})
 
     user = cur.execute(
-        "SELECT id, username, name, avatar_url, signature FROM users WHERE id = ?",
+        "SELECT id, username, avatar_url, signature FROM users WHERE id = ?",
         (int(row["user_id"]),),
     ).fetchone()
     if not user:
@@ -314,7 +304,7 @@ def refresh(request: Request, response: Response):
     conn.commit()
 
     token = _issue_token(
-        int(user["id"]), user["username"], user["name"], ACCESS_TOKEN_TTL_SECONDS
+        int(user["id"]), user["username"], ACCESS_TOKEN_TTL_SECONDS
     )
     response.set_cookie(
         "token", token, **cookie_kwargs(max_age_seconds=ACCESS_TOKEN_TTL_SECONDS)
@@ -328,7 +318,6 @@ def refresh(request: Request, response: Response):
         "user": {
             "id": int(user["id"]),
             "username": user["username"],
-            "name": user["name"],
             "avatarUrl": user["avatar_url"] or "",
             "signature": user["signature"] or "",
         }
@@ -346,7 +335,7 @@ def get_profile(request: Request):
     conn = get_connection()
     cur = conn.cursor()
     row = cur.execute(
-        "SELECT id, username, name, avatar_url, signature FROM users WHERE id = ?",
+        "SELECT id, username, avatar_url, signature FROM users WHERE id = ?",
         (int(uid),),
     ).fetchone()
     if not row:
@@ -355,7 +344,6 @@ def get_profile(request: Request):
         "user": {
             "id": int(row["id"]),
             "username": row["username"],
-            "name": row["name"],
             "avatarUrl": row["avatar_url"] or "",
             "signature": row["signature"] or "",
         }
@@ -394,7 +382,7 @@ def patch_profile(request: Request, body: ProfilePatchBody = Body(default=Profil
 
     cur = conn.cursor()
     row = cur.execute(
-        "SELECT id, username, name, avatar_url, signature FROM users WHERE id = ?",
+        "SELECT id, username, avatar_url, signature FROM users WHERE id = ?",
         (int(uid),),
     ).fetchone()
     if not row:
@@ -403,7 +391,6 @@ def patch_profile(request: Request, body: ProfilePatchBody = Body(default=Profil
         "user": {
             "id": int(row["id"]),
             "username": row["username"],
-            "name": row["name"],
             "avatarUrl": row["avatar_url"] or "",
             "signature": row["signature"] or "",
         }

@@ -18,9 +18,9 @@
           <div class="header-meta">
             <span class="meta-item">
               <el-avatar :size="24" :src="data.author_avatar || undefined" class="meta-avatar">
-                {{ (data.author_name || 'U').charAt(0).toUpperCase() }}
+                {{ (data.author_username || 'U').charAt(0).toUpperCase() }}
               </el-avatar>
-              {{ data.author_name || '未知作者' }}
+              {{ data.author_username || '未知作者' }}
             </span>
             <span class="meta-item">
               <el-icon><Calendar /></el-icon>

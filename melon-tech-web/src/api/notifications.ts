@@ -16,7 +16,6 @@ export type NotificationItem = {
   }
   actor: {
     id: number
-    name: string
     username: string
   }
 }

@@ -8,9 +8,6 @@
           <el-form-item label="用户名" prop="username">
             <el-input v-model="form.username" autocomplete="username" />
           </el-form-item>
-          <el-form-item label="昵称" prop="name">
-            <el-input v-model="form.name" autocomplete="nickname" />
-          </el-form-item>
           <el-form-item label="密码" prop="password">
             <el-input v-model="form.password" type="password" show-password autocomplete="new-password" />
           </el-form-item>
@@ -37,10 +34,9 @@ import { useRouter } from 'vue-router'
 const auth = useAuth()
 const router = useRouter()
 const formRef = ref<FormInstance>()
-const form = reactive({ username: '', name: '', password: '' })
+const form = reactive({ username: '', password: '' })
 const rules: FormRules = {
-  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }, { min: 3, max: 32, message: '用户名长度为 3-32 位', trigger: 'blur' }],
-  name: [{ required: true, message: '请输入昵称', trigger: 'blur' }, { min: 1, max: 32, message: '1-32 个字符', trigger: 'blur' }],
+  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }, { min: 6, message: '至少 6 位', trigger: 'blur' }]
 }
 

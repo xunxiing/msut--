@@ -23,7 +23,7 @@
           <el-icon><Upload /></el-icon>
           <span>上传文件</span>
         </el-button>
-        <el-button class="refresh-btn" :loading="loadingAny" @click="refreshAll">刷新列表</el-button>
+        <el-button class="refresh-btn" @click="refreshAll">刷新列表</el-button>
       </div>
     </div>
 
@@ -40,7 +40,7 @@
         </div>
       </div>
 
-      <div class="stream-list" v-loading="loadingAny">
+      <div class="stream-list">
         <div v-if="combinedPaged.length > 0" class="resource-grid">
           <div
             v-for="it in combinedPaged"
@@ -72,8 +72,8 @@
                       <h3 class="resource-title" :title="getTitle(it)">{{ getTitle(it) }}</h3>
                       <div class="author-info-mini">
                         <template v-if="it.source === 'internal'">
-                          <el-avatar :size="15" class="author-avatar">{{ (it.internal as any).author_name?.[0]?.toUpperCase() || 'U' }}</el-avatar>
-                          <span class="author-name">{{ (it.internal as any).author_name || 'Unknown' }}</span>
+                          <el-avatar :size="15" class="author-avatar">{{ (it.internal as any).author_username?.[0]?.toUpperCase() || 'U' }}</el-avatar>
+                          <span class="author-name">{{ (it.internal as any).author_username || 'Unknown' }}</span>
                         </template>
                         <template v-else>
                           <span class="source-tag">外站</span>
@@ -111,7 +111,7 @@
           </div>
         </div>
 
-        <el-empty v-else description="暂无资源" :image-size="200" />
+        <el-empty v-if="!loadingAny && combinedTotal === 0" description="暂无资源" :image-size="200" />
 
         <div class="pagination-wrapper" v-if="combinedTotal > 0">
           <el-pagination

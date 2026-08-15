@@ -33,7 +33,10 @@
           </div>
         </div>
       </div>
-      <el-button type="primary" size="small" @click="$router.push('/upload')" v-if="auth.user">
+      <el-button type="primary" size="small" @click="applySearch">
+        <el-icon><Search /></el-icon>
+      </el-button>
+      <el-button type="success" size="small" @click="$router.push('/upload')" v-if="auth.user">
         <el-icon><Upload /></el-icon>
       </el-button>
     </div>
@@ -138,9 +141,10 @@ async function fetchSuggestions(q: string) {
     }))
     const ext = await listExternalResources({ page: 1, pageSize: 5, search: q })
     for (const f of ext.files) {
+      const fid = getExternalFileId(f)
       suggestions.value.push({
         title: f.name,
-        name: f.name,
+        name: fid,
         cover: f.preview_url,
         isExternal: true,
       })
@@ -202,15 +206,13 @@ type CombinedItem =
   | { source: 'external'; key: string; ts: number; external: ExternalFileInfo }
 
 const externalFiltered = computed(() => {
-  const q = query.value.trim().toLowerCase()
   const sorted = [...externalAll.value].sort((a, b) => {
     const da = parseDate(a.date || '')
     const db = parseDate(b.date || '')
     if (da !== db) return db - da
     return String(a.name || '').localeCompare(String(b.name || ''), 'zh-Hans-CN')
   })
-  if (!q) return sorted
-  return sorted.filter(f => String(f.name || '').toLowerCase().includes(q))
+  return sorted
 })
 
 const combinedAll = computed<CombinedItem[]>(() => {

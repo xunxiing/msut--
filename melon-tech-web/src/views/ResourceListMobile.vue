@@ -16,28 +16,32 @@
           <template #prefix>
             <el-icon :size="18"><Search /></el-icon>
           </template>
+          <template #append>
+            <el-button @click="applySearch">
+              <el-icon><Search /></el-icon>
+            </el-button>
+          </template>
         </el-input>
-        <div v-if="showSuggest && suggestions.length" class="m-suggest">
-          <div
-            v-for="s in suggestions"
-            :key="s.slug || s.name"
-            class="m-suggest-item"
-            @mousedown.prevent="pickSuggestion(s)"
-          >
-            <img v-if="s.cover" :src="s.cover" class="m-suggest-cover" />
-            <div class="m-suggest-info">
-              <div class="m-suggest-title">{{ s.title }}</div>
-              <div v-if="s.tags?.length" class="m-suggest-tags">
-                <span v-for="t in s.tags" :key="t" class="m-suggest-tag">{{ t }}</span>
+        <transition name="suggest-fade">
+          <div v-if="showSuggest && suggestions.length" class="m-suggest">
+            <div
+              v-for="s in suggestions"
+              :key="s.slug || s.name"
+              class="m-suggest-item"
+              @mousedown.prevent="pickSuggestion(s)"
+            >
+              <img v-if="s.cover" :src="s.cover" class="m-suggest-cover" />
+              <div class="m-suggest-info">
+                <div class="m-suggest-title">{{ s.title }}</div>
+                <div v-if="s.tags?.length" class="m-suggest-tags">
+                  <span v-for="t in s.tags" :key="t" class="m-suggest-tag">{{ t }}</span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </transition>
       </div>
-      <el-button type="primary" size="small" @click="applySearch">
-        <el-icon><Search /></el-icon>
-      </el-button>
-      <el-button type="success" size="small" @click="$router.push('/upload')" v-if="auth.user">
+      <el-button type="success" size="large" @click="$router.push('/upload')" v-if="auth.user" class="m-upload-btn">
         <el-icon><Upload /></el-icon>
       </el-button>
     </div>
@@ -45,7 +49,10 @@
     <!-- 统计 -->
     <div class="m-stats">
       <span>{{ combinedTotal }} 个模组</span>
-      <el-button text size="small" @click="refreshAll">刷新</el-button>
+      <el-button text size="small" @click="refreshAll" :loading="loadingAny">
+        <el-icon><Refresh /></el-icon>
+        刷新
+      </el-button>
     </div>
 
     <!-- 列表 -->
@@ -120,7 +127,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Search, Upload, Document, ArrowRight } from '@element-plus/icons-vue'
+import { Search, Upload, Document, ArrowRight, Refresh } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import { listResources, type ResourceItem } from '../api/resources'
 import { getResourceLikes, type LikeInfo } from '../api/likes'
@@ -356,23 +363,26 @@ onMounted(() => { queryDraft.value = query.value; refreshAll() })
   right: 0;
   z-index: 100;
   background: #fff;
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0,0,0,.12);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0,0,0,.15);
   max-height: 320px;
   overflow-y: auto;
-  margin-top: 2px;
+  margin-top: 4px;
+  border: 1px solid #e5e7eb;
 }
 
 .m-suggest-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 10px 14px;
   cursor: pointer;
   border-bottom: 1px solid #f0f0f0;
+  transition: background .15s ease;
 }
 .m-suggest-item:last-child { border-bottom: none }
 .m-suggest-item:active { background: #f5f5f5 }
+.m-suggest-item:hover { background: #f8faff }
 
 .m-suggest-cover {
   width: 36px;
@@ -402,21 +412,45 @@ onMounted(() => { queryDraft.value = query.value; refreshAll() })
 .m-search-bar {
   display: flex;
   gap: 8px;
+  align-items: stretch;
   margin-bottom: 12px;
 }
 .m-search-bar :deep(.el-input__wrapper) {
   border-radius: 10px;
   padding: 4px 12px;
-  transition: box-shadow .2s, border-color .2s;
+  transition: box-shadow .25s ease, border-color .25s ease;
 }
 .m-search-bar :deep(.el-input__wrapper.is-focus),
 .m-search-wrap.focused :deep(.el-input__wrapper) {
-  box-shadow: 0 0 0 2px rgba(99,102,241,.25);
+  box-shadow: 0 0 0 2px rgba(99,102,241,.3);
   border-color: #6366f1;
 }
 .m-search-bar :deep(.el-input__inner) {
   font-size: 16px;
   height: 40px;
+}
+.m-search-bar :deep(.el-input-group__append) {
+  border-radius: 0 10px 10px 0;
+  padding: 0;
+  overflow: hidden;
+}
+.m-search-bar :deep(.el-input-group__append .el-button) {
+  height: 48px;
+  border: none;
+}
+.m-upload-btn {
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.suggest-fade-enter-active,
+.suggest-fade-leave-active {
+  transition: opacity .2s ease, transform .2s ease;
+}
+.suggest-fade-enter-from,
+.suggest-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
 }
 
 .m-stats {
@@ -426,6 +460,7 @@ onMounted(() => { queryDraft.value = query.value; refreshAll() })
   margin-bottom: 12px;
   font-size: 13px;
   color: var(--el-text-color-secondary);
+  padding: 0 2px;
 }
 
 .m-list {

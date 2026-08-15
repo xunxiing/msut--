@@ -16,7 +16,7 @@
         <template v-for="msg in messages" :key="msg.id || msg.created_at">
           <div class="message-row" :class="getRowClass(msg)">
             <div class="avatar-col">
-              <el-avatar v-if="msg.role === 'user'" :icon="UserFilled" class="user-avatar" :size="40" />
+              <el-avatar v-if="msg.role === 'user'" :icon="UserFilled" class="user-avatar" :size="36" />
               <div v-else class="ai-avatar">
                 <el-icon><Service /></el-icon>
               </div>
@@ -25,28 +25,31 @@
             <div class="content-wrapper">
               <div class="role-label">{{ msg.role === 'user' ? '你' : 'AI 助手' }}</div>
 
-              <div v-if="msg.role === 'tool'" class="tool-card">
-                <div class="tool-card-header">
-                  <el-icon class="tool-card-icon"><Tools /></el-icon>
-                  <span class="tool-card-title">工具调用 · {{ msg.toolName || getToolName(msg) }}</span>
-                  <el-tag size="small" type="success" effect="light" round>完成</el-tag>
-                </div>
-                <div v-if="getToolFile(msg)" class="tool-card-body">
-                  <div class="tool-file-info">
-                    <el-icon class="file-icon"><Document /></el-icon>
-                    <span class="file-name">{{ getToolFile(msg)?.filename || '生成文件.melsave' }}</span>
+              <div v-if="msg.role === 'tool'" class="timeline-trace">
+                <div class="trace-node">
+                  <div class="trace-icon-col">
+                    <div class="trace-icon trace-icon-tool">
+                      <el-icon><Tools /></el-icon>
+                    </div>
+                    <div class="trace-line"></div>
                   </div>
-                  <DownloadButton
-                    :href="getToolFile(msg)?.url || ''"
-                    :download-name="getToolFile(msg)?.filename || ''"
-                    as="link"
-                    type="primary"
-                  >
-                    下载文件
-                  </DownloadButton>
-                </div>
-                <div v-if="getDisplayContent(msg)" class="tool-card-desc">
-                  {{ getDisplayContent(msg) }}
+                  <div class="trace-content-col">
+                    <div class="trace-label">工具调用 · {{ msg.toolName || getToolName(msg) }}</div>
+                    <div v-if="getToolFile(msg)" class="trace-file-row">
+                      <el-icon class="trace-file-icon"><Document /></el-icon>
+                      <span class="trace-file-name">{{ getToolFile(msg)?.filename || '生成文件.melsave' }}</span>
+                      <DownloadButton
+                        :href="getToolFile(msg)?.url || ''"
+                        :download-name="getToolFile(msg)?.filename || ''"
+                        as="link"
+                        type="primary"
+                        size="small"
+                      >
+                        下载
+                      </DownloadButton>
+                    </div>
+                    <div v-if="getDisplayContent(msg)" class="trace-desc">{{ getDisplayContent(msg) }}</div>
+                  </div>
                 </div>
               </div>
 
@@ -54,21 +57,25 @@
 
               <div
                 v-if="msg.role === 'assistant' && hasThinking(msg)"
-                class="thinking-process"
-                :class="{ expanded: isThinkingExpanded(msg) }"
+                class="timeline-trace"
               >
-                <div class="thinking-header" @click="toggleThinking(msg)">
-                  <div class="thinking-title">
-                    <el-icon class="thinking-icon"><Cpu /></el-icon>
-                    <span>思考过程</span>
+                <div class="trace-node">
+                  <div class="trace-icon-col">
+                    <div class="trace-icon trace-icon-think" @click="toggleThinking(msg)">
+                      <el-icon><Cpu /></el-icon>
+                    </div>
+                    <div class="trace-line" :class="{ collapsed: !isThinkingExpanded(msg) }"></div>
                   </div>
-                  <el-icon class="thinking-arrow" :class="{ rotated: isThinkingExpanded(msg) }">
-                    <ArrowDown />
-                  </el-icon>
-                </div>
-                <div v-show="isThinkingExpanded(msg)" class="thinking-body">
-                  <div class="thinking-content">
-                    <pre class="thinking-text">{{ getThinkingText(msg) }}</pre>
+                  <div class="trace-content-col">
+                    <div class="trace-header" @click="toggleThinking(msg)">
+                      <span class="trace-label clickable">思考过程</span>
+                      <el-icon class="trace-arrow" :class="{ rotated: isThinkingExpanded(msg) }">
+                        <ArrowDown />
+                      </el-icon>
+                    </div>
+                    <div v-show="isThinkingExpanded(msg)" class="trace-body">
+                      <pre class="trace-text">{{ getThinkingText(msg) }}</pre>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -84,9 +91,17 @@
           </div>
           <div class="content-wrapper">
             <div class="role-label">AI 助手</div>
-            <div class="bubble thinking-bubble">
-              <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-              <span class="thinking-label">思考中...</span>
+            <div class="timeline-trace">
+              <div class="trace-node">
+                <div class="trace-icon-col">
+                  <div class="trace-icon trace-icon-loading">
+                    <span class="pulse-dot"></span>
+                  </div>
+                </div>
+                <div class="trace-content-col">
+                  <div class="trace-label trace-label-muted">思考中...</div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -264,7 +279,6 @@ function handleMessagesClick(event: MouseEvent) {
   if (!anchor) return
   const href = anchor.getAttribute('href') || ''
   if (!isDownloadUrl(href)) return
-
   event.preventDefault()
   triggerFileDownload(href, '')
 }
@@ -299,7 +313,7 @@ watch(() => props.thinking, scrollToBottom)
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: #f8f9fb;
+  background: #ffffff;
   height: 100%;
   overflow: hidden;
   position: relative;
@@ -314,7 +328,7 @@ watch(() => props.thinking, scrollToBottom)
 }
 
 .messages-area::-webkit-scrollbar {
-  width: 6px;
+  width: 5px;
 }
 .messages-area::-webkit-scrollbar-thumb {
   background: #d1d5db;
@@ -382,7 +396,7 @@ watch(() => props.thinking, scrollToBottom)
 .example-chip:hover {
   border-color: #6366f1;
   color: #6366f1;
-  background: #eef2ff;
+  background: #f5f3ff;
 }
 
 .message-list {
@@ -390,7 +404,7 @@ watch(() => props.thinking, scrollToBottom)
   flex-direction: column;
   gap: 28px;
   padding-bottom: 20px;
-  max-width: 860px;
+  max-width: 820px;
   margin: 0 auto;
   width: 100%;
 }
@@ -418,40 +432,36 @@ watch(() => props.thinking, scrollToBottom)
 }
 
 .ai-avatar {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
-  font-size: 20px;
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+  font-size: 18px;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.15);
 }
 
 .content-wrapper {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
-  max-width: 75%;
-}
-
-.user-row .content-wrapper {
-  max-width: 75%;
+  max-width: 78%;
 }
 
 .role-label {
   font-size: 12px;
   color: #9ca3af;
   font-weight: 500;
-  padding: 0 4px;
+  padding: 0 2px;
 }
 
 .bubble {
-  padding: 14px 18px;
-  border-radius: 16px;
+  padding: 12px 16px;
+  border-radius: 14px;
   font-size: 15px;
   line-height: 1.7;
   word-break: break-word;
@@ -461,29 +471,24 @@ watch(() => props.thinking, scrollToBottom)
   background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
   color: white;
   border-bottom-right-radius: 4px;
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.2);
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.15);
 }
 
 .ai-row .bubble {
-  background: #ffffff;
+  background: #f9fafb;
   color: #1f2937;
   border-bottom-left-radius: 4px;
   border: 1px solid #e5e7eb;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
-.bubble :deep(p) {
-  margin: 0 0 0.8em;
-}
-.bubble :deep(p:last-child) {
-  margin-bottom: 0;
-}
+.bubble :deep(p) { margin: 0 0 0.8em; }
+.bubble :deep(p:last-child) { margin-bottom: 0; }
 .bubble :deep(pre) {
   background: #f3f4f6;
-  padding: 14px;
-  border-radius: 10px;
+  padding: 12px;
+  border-radius: 8px;
   overflow-x: auto;
-  margin: 10px 0;
+  margin: 8px 0;
   font-size: 14px;
 }
 .bubble :deep(code) {
@@ -493,14 +498,11 @@ watch(() => props.thinking, scrollToBottom)
   border-radius: 4px;
   font-size: 14px;
 }
-.bubble :deep(h1),
-.bubble :deep(h2),
-.bubble :deep(h3) {
+.bubble :deep(h1), .bubble :deep(h2), .bubble :deep(h3) {
   margin: 0.6em 0 0.4em;
   font-weight: 600;
 }
-.bubble :deep(ul),
-.bubble :deep(ol) {
+.bubble :deep(ul), .bubble :deep(ol) {
   padding-left: 1.5em;
   margin: 0.4em 0;
 }
@@ -510,195 +512,189 @@ watch(() => props.thinking, scrollToBottom)
   margin: 0.4em 0;
   color: #6b7280;
 }
-
 .user-row .bubble :deep(code) {
   background: rgba(255,255,255,0.2);
 }
 
-.tool-card {
-  background: #ffffff;
-  border: 1px solid #d1fae5;
-  border-left: 4px solid #10b981;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.08);
+/* Timeline trace — minimalist vertical flow */
+.timeline-trace {
+  display: flex;
+  flex-direction: column;
 }
 
-.tool-card-header {
+.trace-node {
+  display: flex;
+  gap: 14px;
+}
+
+.trace-icon-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.trace-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
-  background: #f0fdf4;
-  border-bottom: 1px solid #d1fae5;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
 }
 
-.tool-card-icon {
-  font-size: 18px;
+.trace-icon-tool {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
   color: #10b981;
 }
 
-.tool-card-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #065f46;
-  flex: 1;
+.trace-icon-think {
+  background: #f5f3ff;
+  border: 1px solid #ddd6fe;
+  color: #8b5cf6;
+  cursor: pointer;
+  transition: all 0.2s;
 }
 
-.tool-card-body {
+.trace-icon-think:hover {
+  background: #ede9fe;
+}
+
+.trace-icon-loading {
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+}
+
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #9ca3af;
+  animation: pulse 1.4s infinite ease-in-out both;
+}
+
+@keyframes pulse {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
+}
+
+.trace-line {
+  width: 1px;
+  flex: 1;
+  min-height: 12px;
+  background: #e5e7eb;
+  margin-top: 4px;
+  margin-bottom: 4px;
+}
+
+.trace-line.collapsed {
+  min-height: 0;
+  height: 0;
+}
+
+.trace-content-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding-bottom: 4px;
+  padding-top: 4px;
+}
+
+.trace-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px 16px;
-  background: #ffffff;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
 }
 
-.tool-file-info {
+.trace-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+  line-height: 1.4;
+}
+
+.trace-label.clickable {
+  cursor: pointer;
+}
+
+.trace-label-muted {
+  color: #9ca3af;
+  font-weight: 400;
+  font-style: italic;
+}
+
+.trace-arrow {
+  font-size: 12px;
+  color: #9ca3af;
+  transition: transform 0.3s ease;
+}
+
+.trace-arrow.rotated {
+  transform: rotate(180deg);
+}
+
+.trace-file-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-width: 0;
+  flex-wrap: wrap;
 }
 
-.file-icon {
-  font-size: 20px;
+.trace-file-icon {
+  font-size: 16px;
   color: #6366f1;
   flex-shrink: 0;
 }
 
-.file-name {
+.trace-file-name {
   font-size: 14px;
   color: #1f2937;
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 220px;
 }
 
-.tool-card-desc {
-  padding: 10px 16px;
-  font-size: 13px;
+.trace-desc {
+  font-size: 14px;
   color: #6b7280;
-  border-top: 1px solid #f3f4f6;
   line-height: 1.5;
 }
 
-.thinking-process {
-  border-radius: 10px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  overflow: hidden;
-  transition: all 0.3s ease;
-  border-left: 3px solid #cbd5e1;
-}
-
-.thinking-process.expanded {
-  border-left-color: #6366f1;
-  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.08);
-}
-
-.thinking-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 14px;
-  cursor: pointer;
-  background: #f1f5f9;
-  user-select: none;
-  transition: background-color 0.2s;
-}
-
-.thinking-header:hover {
-  background: #e2e8f0;
-}
-
-.thinking-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 500;
-  color: #64748b;
-}
-
-.thinking-icon {
-  font-size: 16px;
-}
-
-.thinking-process.expanded .thinking-title,
-.thinking-process.expanded .thinking-icon {
-  color: #6366f1;
-}
-
-.thinking-arrow {
-  font-size: 12px;
-  color: #94a3b8;
-  transition: transform 0.3s ease;
-}
-
-.thinking-arrow.rotated {
-  transform: rotate(180deg);
-}
-
-.thinking-body {
-  border-top: 1px solid #e2e8f0;
-  background: #ffffff;
-}
-
-.thinking-content {
-  padding: 14px 16px;
+.trace-body {
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 1px solid #f3f4f6;
+  padding: 12px 14px;
   max-height: 320px;
   overflow-y: auto;
 }
 
-.thinking-content::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+.trace-body::-webkit-scrollbar {
+  width: 5px;
 }
-.thinking-content::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+.trace-body::-webkit-scrollbar-thumb {
+  background: #d1d5db;
   border-radius: 3px;
 }
-.thinking-content::-webkit-scrollbar-track {
+.trace-body::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.thinking-text {
+.trace-text {
   margin: 0;
   white-space: pre-wrap;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 13px;
-  line-height: 1.7;
-  color: #475569;
-}
-
-.thinking-bubble {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #6b7280;
-  background: #f3f4f6;
-  border: 1px solid #e5e7eb;
-}
-
-.thinking-label {
-  font-size: 14px;
-  font-style: italic;
-}
-
-.dot {
-  width: 6px;
-  height: 6px;
-  background: #9ca3af;
-  border-radius: 50%;
-  animation: bounce 1.4s infinite ease-in-out both;
-}
-.dot:nth-child(1) { animation-delay: -0.32s; }
-.dot:nth-child(2) { animation-delay: -0.16s; }
-@keyframes bounce {
-  0%, 80%, 100% { transform: scale(0); }
-  40% { transform: scale(1); }
+  line-height: 1.6;
+  color: #4b5563;
 }
 
 .input-area {
@@ -734,9 +730,9 @@ watch(() => props.thinking, scrollToBottom)
 }
 
 .mode-toggle-button.active .mode-toggle-pill {
-  background: #eef2ff;
-  border-color: #6366f1;
-  color: #4f46e5;
+  background: #f5f3ff;
+  border-color: #8b5cf6;
+  color: #6d28d9;
 }
 
 .mode-toggle-dot {
@@ -748,7 +744,7 @@ watch(() => props.thinking, scrollToBottom)
 }
 
 .mode-toggle-button.active .mode-toggle-dot {
-  background: #6366f1;
+  background: #8b5cf6;
 }
 
 .mode-toggle-text {
@@ -768,9 +764,9 @@ watch(() => props.thinking, scrollToBottom)
 }
 
 .input-box:focus-within {
-  border-color: #6366f1;
+  border-color: #8b5cf6;
   background: #ffffff;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
 }
 
 .input-box :deep(.el-textarea__inner) {
@@ -801,17 +797,17 @@ watch(() => props.thinking, scrollToBottom)
     gap: 20px;
   }
   .content-wrapper {
-    max-width: 82%;
+    max-width: 84%;
   }
   .ai-avatar, .user-avatar {
     width: 32px;
     height: 32px;
     font-size: 16px;
   }
-  .tool-card-body {
+  .trace-file-row {
     flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
+    align-items: flex-start;
+    gap: 4px;
   }
   .welcome-icon {
     width: 56px;

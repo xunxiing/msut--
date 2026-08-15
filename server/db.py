@@ -333,7 +333,18 @@ def run_migrations(conn: Optional[sqlite3.Connection] = None) -> None:
             CREATE INDEX IF NOT EXISTS idx_tutorials_slug ON tutorials(slug);
 
             CREATE INDEX IF NOT EXISTS idx_tutorial_embeddings_tutorial ON tutorial_embeddings(tutorial_id);
-            
+
+            CREATE TABLE IF NOT EXISTS agent_sessions (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              user_id INTEGER NOT NULL,
+              title TEXT NOT NULL DEFAULT '',
+              last_status TEXT NOT NULL DEFAULT 'idle',
+              last_error TEXT,
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+              FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+
             CREATE TRIGGER IF NOT EXISTS trg_agent_sessions_updated_at
             AFTER UPDATE ON agent_sessions
             FOR EACH ROW BEGIN

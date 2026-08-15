@@ -102,6 +102,10 @@
                           </el-icon>
                           <span class="like-count">{{ likesMap[it.internal.id]?.likes || 0 }}</span>
                         </div>
+                        <span class="download-count" v-if="(it.internal as any).download_count">
+                          <el-icon><Download /></el-icon>
+                          {{ (it.internal as any).download_count }}
+                        </span>
                       </template>
                       <template v-else>
                         <span class="ext-size">{{ it.external.size || '-' }}</span>
@@ -135,7 +139,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Search, Upload, Document, Star, StarFilled } from '@element-plus/icons-vue'
+import { Search, Upload, Document, Star, StarFilled, Download } from '@element-plus/icons-vue'
 import { listResources, type ResourceItem } from '../api/resources'
 import { getResourceLikes, likeResource, unlikeResource, type LikeInfo } from '../api/likes'
 import { useAuth } from '../stores/auth'
@@ -739,6 +743,15 @@ onMounted(() => {
 .like-count {
   font-size: 13px;
   font-weight: 600;
+}
+
+.download-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  margin-left: 8px;
 }
 
 .pagination-wrapper {

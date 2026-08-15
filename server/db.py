@@ -395,6 +395,8 @@ def run_migrations(conn: Optional[sqlite3.Connection] = None) -> None:
             cols = [r["name"] for r in conn.execute("PRAGMA table_info(resources)").fetchall()]
             if "tags" not in cols:
                 conn.execute("ALTER TABLE resources ADD COLUMN tags TEXT NOT NULL DEFAULT ''")
+            if "download_count" not in cols:
+                conn.execute("ALTER TABLE resources ADD COLUMN download_count INTEGER NOT NULL DEFAULT 0")
         except Exception:
             pass
 

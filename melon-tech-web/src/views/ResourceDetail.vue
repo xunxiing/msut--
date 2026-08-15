@@ -23,11 +23,18 @@
               <el-avatar :size="24" :src="data.author_avatar || undefined" class="meta-avatar">
                 {{ (data.author_username || 'U').charAt(0).toUpperCase() }}
               </el-avatar>
-              {{ data.author_username || '未知作者' }}
+              <router-link v-if="data.author_username" :to="`/creator/${data.author_username}`" class="author-link">
+                {{ data.author_username }}
+              </router-link>
+              <template v-else>未知作者</template>
             </span>
             <span class="meta-item">
               <el-icon><Calendar /></el-icon>
               {{ data.created_at }}
+            </span>
+            <span class="meta-item" v-if="(data as any).download_count">
+              <el-icon><Download /></el-icon>
+              {{ (data as any).download_count }} 次下载
             </span>
           </div>
         </div>
@@ -378,6 +385,15 @@ onMounted(fetch)
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.author-link {
+  color: #6366f1;
+  text-decoration: none;
+  font-weight: 500;
+}
+.author-link:hover {
+  text-decoration: underline;
 }
 
 .meta-avatar {

@@ -6,14 +6,15 @@
         <el-input
           v-model="queryDraft"
           placeholder="搜索模组..."
+          size="large"
           clearable
           @clear="handleClearSearch"
           @keyup.enter="applySearch"
-          @focus="showSuggest = true"
+          @focus="onFocus"
           @blur="onBlurHide"
         >
           <template #prefix>
-            <el-icon><Search /></el-icon>
+            <el-icon :size="18"><Search /></el-icon>
           </template>
         </el-input>
         <div v-if="showSuggest && suggestions.length" class="m-suggest">
@@ -79,6 +80,10 @@
               <span class="m-card-dot" v-if="likesMap[it.internal.id]?.likes">·</span>
               <span class="m-card-likes" v-if="likesMap[it.internal.id]?.likes">
                 ⭐ {{ likesMap[it.internal.id]?.likes }}
+              </span>
+              <span class="m-card-dot" v-if="(it.internal as any).download_count">·</span>
+              <span class="m-card-downloads" v-if="(it.internal as any).download_count">
+                ⬇ {{ (it.internal as any).download_count }}
               </span>
             </template>
             <template v-else>
@@ -166,8 +171,15 @@ function pickSuggestion(s: any) {
   }
 }
 
+function onFocus() {
+  showSuggest.value = true
+  const wrap = document.querySelector('.m-search-wrap')
+  if (wrap) wrap.classList.add('focused')
+}
 function onBlurHide() {
   setTimeout(() => { showSuggest.value = false }, 200)
+  const wrap = document.querySelector('.m-search-wrap')
+  if (wrap) wrap.classList.remove('focused')
 }
 const combinedPage = ref(1)
 const combinedPageSize = 15
@@ -394,6 +406,17 @@ onMounted(() => { queryDraft.value = query.value; refreshAll() })
 }
 .m-search-bar :deep(.el-input__wrapper) {
   border-radius: 10px;
+  padding: 4px 12px;
+  transition: box-shadow .2s, border-color .2s;
+}
+.m-search-bar :deep(.el-input__wrapper.is-focus),
+.m-search-wrap.focused :deep(.el-input__wrapper) {
+  box-shadow: 0 0 0 2px rgba(99,102,241,.25);
+  border-color: #6366f1;
+}
+.m-search-bar :deep(.el-input__inner) {
+  font-size: 16px;
+  height: 40px;
 }
 
 .m-stats {
@@ -466,7 +489,7 @@ onMounted(() => { queryDraft.value = query.value; refreshAll() })
   font-size: 12px;
   color: var(--el-text-color-secondary);
 }
-.m-card-author, .m-card-date, .m-card-size, .m-card-likes {
+.m-card-author, .m-card-date, .m-card-size, .m-card-likes, .m-card-downloads {
   white-space: nowrap;
 }
 .m-card-ext {

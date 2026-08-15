@@ -992,6 +992,7 @@ def list_resources(
           r.created_at,
           r.cover_file_id,
           r.tags,
+          r.download_count,
           u.username AS author_username,
           u.avatar_url AS author_avatar,
           cf.url_path AS cover_url_path
@@ -1016,6 +1017,46 @@ def list_resources(
         d["tags"] = tags_from_json(d.pop("tags", None))
         items_out.append(d)
     return {"items": items_out, "page": page, "pageSize": page_size, "total": total}
+
+
+@router.get("/api/creators/{username}/stats")
+def get_creator_stats(username: str):
+    conn = get_connection()
+    cur = conn.cursor()
+    user = cur.execute("SELECT id, username, avatar_url, signature FROM users WHERE username = ?", (username,)).fetchone()
+    if not user:
+        return JSONResponse(status_code=404, content={"error": "用户不存在"})
+    row = cur.execute(
+        """
+        SELECT
+          COUNT(r.id) AS resource_count,
+          COALESCE(SUM(r.download_count), 0) AS total_downloads
+        FROM resources r
+        WHERE r.created_by = ?
+        """,
+        (user["id"],),
+    ).fetchone()
+    resources = cur.execute(
+        """
+        SELECT r.id, r.slug, r.title, r.download_count, r.created_at
+        FROM resources r
+        WHERE r.created_by = ?
+        ORDER BY r.download_count DESC
+        LIMIT 10
+        """,
+        (user["id"],),
+    ).fetchall()
+    return {
+        "user": {
+            "id": user["id"],
+            "username": user["username"],
+            "avatar_url": user["avatar_url"] or "",
+            "signature": user["signature"] or "",
+        },
+        "resource_count": row["resource_count"],
+        "total_downloads": row["total_downloads"],
+        "top_resources": [dict(r) for r in resources],
+    }
 
 
 @router.post("/api/resources/optimize")
@@ -1210,10 +1251,17 @@ def download_file(fid: int):
     conn = get_connection()
     cur = conn.cursor()
     row = cur.execute(
-        "SELECT original_name, stored_name FROM resource_files WHERE id = ?", (fid,)
+        "SELECT original_name, stored_name, resource_id FROM resource_files WHERE id = ?", (fid,)
     ).fetchone()
     if not row:
         return JSONResponse(status_code=404, content={"error": "文件不存在"})
+    # Increment download count on the parent resource
+    try:
+        if row["resource_id"]:
+            cur.execute("UPDATE resources SET download_count = download_count + 1 WHERE id = ?", (row["resource_id"],))
+            conn.commit()
+    except Exception:
+        pass
     stored = row["stored_name"]
     filename = row["original_name"]
     # If stored_name looks like an R2 key (contains /), generate presigned URL

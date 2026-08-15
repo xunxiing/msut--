@@ -19,6 +19,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/dsl', name: 'dsl-tool', component: () => import('../views/DSLTool.vue') },
   { path: '/watermark', name: 'watermark', component: () => import('../views/Watermark.vue') },
   { path: '/share/:slug', name: 'resource-detail', component: () => import('../views/ResourceDetail.vue') },
+  { path: '/creator/:username', name: 'creator-stats', component: () => import('../views/CreatorStats.vue') },
   { path: '/tutorials/ai', name: 'tutorials-ai', component: () => import('../views/TutorialAI.vue') },
 ]
 

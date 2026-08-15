@@ -100,3 +100,15 @@ export async function listResourceImages(id: number) {
   const { data } = await http.get(`/resources/${id}/images`)
   return data as ResourceImagesResponse
 }
+
+export type CreatorStats = {
+  user: { id: number; username: string; avatar_url: string; signature: string }
+  resource_count: number
+  total_downloads: number
+  top_resources: { id: number; slug: string; title: string; download_count: number; created_at: string }[]
+}
+
+export async function getCreatorStats(username: string) {
+  const { data } = await http.get(`/creators/${username}/stats`)
+  return data as CreatorStats
+}

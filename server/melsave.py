@@ -143,7 +143,7 @@ def generate_melsave_bytes(dsl_code: str) -> MelsaveResult:
     if not src:
         raise RuntimeError("找不到生成器目录")
 
-    base_tmp = Path(tempfile.mkdtemp(prefix="melsave_", dir=str(Path(__file__).resolve().parent)))
+    base_tmp = Path(tempfile.mkdtemp(prefix="melsave_"))
     try:
         _copy_tree(src.base_dir, base_tmp)
         (base_tmp / "input.py").write_text(dsl_code, encoding="utf-8")

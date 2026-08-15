@@ -2,17 +2,37 @@
   <div class="m-res-container">
     <!-- 搜索栏 -->
     <div class="m-search-bar">
-      <el-input
-        v-model="queryDraft"
-        placeholder="搜索模组..."
-        clearable
-        @clear="handleClearSearch"
-        @keyup.enter="applySearch"
-      >
-        <template #prefix>
-          <el-icon><Search /></el-icon>
-        </template>
-      </el-input>
+      <div class="m-search-wrap">
+        <el-input
+          v-model="queryDraft"
+          placeholder="搜索模组..."
+          clearable
+          @clear="handleClearSearch"
+          @keyup.enter="applySearch"
+          @focus="showSuggest = true"
+          @blur="onBlurHide"
+        >
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
+        <div v-if="showSuggest && suggestions.length" class="m-suggest">
+          <div
+            v-for="s in suggestions"
+            :key="s.slug || s.name"
+            class="m-suggest-item"
+            @mousedown.prevent="pickSuggestion(s)"
+          >
+            <img v-if="s.cover" :src="s.cover" class="m-suggest-cover" />
+            <div class="m-suggest-info">
+              <div class="m-suggest-title">{{ s.title }}</div>
+              <div v-if="s.tags?.length" class="m-suggest-tags">
+                <span v-for="t in s.tags" :key="t" class="m-suggest-tag">{{ t }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
       <el-button type="primary" size="small" @click="$router.push('/upload')" v-if="auth.user">
         <el-icon><Upload /></el-icon>
       </el-button>
@@ -101,6 +121,50 @@ import { listExternalResources, externalPreviewUrl, type ExternalFileInfo } from
 
 const queryDraft = ref('')
 const query = ref('')
+const showSuggest = ref(false)
+const suggestions = ref<any[]>([])
+let suggestTimer: ReturnType<typeof setTimeout> | null = null
+
+async function fetchSuggestions(q: string) {
+  if (!q.trim()) { suggestions.value = []; return }
+  try {
+    const data: any = await listResources({ q, page: 1, pageSize: 8 })
+    suggestions.value = (data.items || []).map((it: any) => ({
+      title: it.title,
+      slug: it.slug,
+      cover: it.coverUrlPath,
+      tags: it.tags,
+      isExternal: false,
+    }))
+    const ext = await listExternalResources({ page: 1, pageSize: 5, search: q })
+    for (const f of ext.files) {
+      suggestions.value.push({
+        title: f.name,
+        name: f.name,
+        cover: f.preview_url,
+        isExternal: true,
+      })
+    }
+  } catch { suggestions.value = [] }
+}
+
+function onDraftInput() {
+  if (suggestTimer) clearTimeout(suggestTimer)
+  suggestTimer = setTimeout(() => fetchSuggestions(queryDraft.value), 300)
+}
+
+function pickSuggestion(s: any) {
+  showSuggest.value = false
+  if (s.isExternal) {
+    router.push({ name: 'external-resource', query: { file: s.name } })
+  } else {
+    router.push(`/share/${s.slug}`)
+  }
+}
+
+function onBlurHide() {
+  setTimeout(() => { showSuggest.value = false }, 200)
+}
 const combinedPage = ref(1)
 const combinedPageSize = 15
 
@@ -256,6 +320,7 @@ async function refreshLikesForVisible() {
 
 watch(combinedPaged, () => refreshLikesForVisible())
 watch([query], () => { combinedPage.value = 1 })
+watch(queryDraft, () => onDraftInput())
 onMounted(() => { queryDraft.value = query.value; refreshAll() })
 </script>
 
@@ -263,6 +328,61 @@ onMounted(() => { queryDraft.value = query.value; refreshAll() })
 .m-res-container {
   padding: 12px;
   max-width: 100%;
+}
+
+.m-search-wrap {
+  position: relative;
+  flex: 1;
+}
+
+.m-suggest {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.12);
+  max-height: 320px;
+  overflow-y: auto;
+  margin-top: 2px;
+}
+
+.m-suggest-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid #f0f0f0;
+}
+.m-suggest-item:last-child { border-bottom: none }
+.m-suggest-item:active { background: #f5f5f5 }
+
+.m-suggest-cover {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.m-suggest-info { flex: 1; min-width: 0; }
+.m-suggest-title {
+  font-size: 14px;
+  color: #1e293b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.m-suggest-tags { display: flex; gap: 4px; margin-top: 2px; flex-wrap: wrap; }
+.m-suggest-tag {
+  font-size: 11px;
+  color: #6366f1;
+  background: #eef2ff;
+  padding: 1px 6px;
+  border-radius: 4px;
 }
 
 .m-search-bar {

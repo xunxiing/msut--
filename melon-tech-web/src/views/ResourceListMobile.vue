@@ -16,15 +16,7 @@
           <template #prefix>
             <el-icon :size="18"><Search /></el-icon>
           </template>
-          <template #append>
-            <el-button @click="applySearch">
-              <el-icon><Search /></el-icon>
-            </el-button>
-          </template>
         </el-input>
-        <el-button type="success" size="large" @click="$router.push('/upload')" v-if="auth.user" class="m-upload-btn">
-          <el-icon><Upload /></el-icon>
-        </el-button>
         <transition name="suggest-fade">
           <div v-if="showSuggest && suggestions.length" class="m-suggest">
             <div
@@ -44,6 +36,12 @@
           </div>
         </transition>
       </div>
+      <el-button type="primary" size="large" @click="applySearch" class="m-search-btn">
+        <el-icon><Search /></el-icon>
+      </el-button>
+      <el-button type="success" size="large" @click="$router.push('/upload')" v-if="auth.user" class="m-upload-btn">
+        <el-icon><Upload /></el-icon>
+      </el-button>
     </div>
 
     <!-- 统计 -->
@@ -410,36 +408,28 @@ onMounted(() => { queryDraft.value = query.value; refreshAll() })
 }
 
 .m-search-bar {
-  margin-bottom: 12px;
-}
-.m-search-wrap {
   display: flex;
   gap: 8px;
   align-items: stretch;
-  position: relative;
+  margin-bottom: 12px;
 }
-.m-search-wrap :deep(.el-input__wrapper) {
+.m-search-bar :deep(.el-input__wrapper) {
   border-radius: 10px;
   padding: 4px 12px;
   transition: box-shadow .25s ease, border-color .25s ease;
 }
-.m-search-wrap :deep(.el-input__wrapper.is-focus),
+.m-search-bar :deep(.el-input__wrapper.is-focus),
 .m-search-wrap.focused :deep(.el-input__wrapper) {
   box-shadow: 0 0 0 2px rgba(99,102,241,.3);
   border-color: #6366f1;
 }
-.m-search-wrap :deep(.el-input__inner) {
+.m-search-bar :deep(.el-input__inner) {
   font-size: 16px;
   height: 40px;
 }
-.m-search-wrap :deep(.el-input-group__append) {
-  border-radius: 0 10px 10px 0;
-  padding: 0;
-  overflow: hidden;
-}
-.m-search-wrap :deep(.el-input-group__append .el-button) {
-  height: 48px;
-  border: none;
+.m-search-btn {
+  border-radius: 10px;
+  flex-shrink: 0;
 }
 .m-upload-btn {
   border-radius: 10px;

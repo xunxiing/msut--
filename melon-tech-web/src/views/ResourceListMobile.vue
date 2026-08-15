@@ -22,28 +22,28 @@
             </el-button>
           </template>
         </el-input>
-      </div>
-      <el-button type="success" size="large" @click="$router.push('/upload')" v-if="auth.user" class="m-upload-btn">
-        <el-icon><Upload /></el-icon>
-      </el-button>
-      <transition name="suggest-fade">
-        <div v-if="showSuggest && suggestions.length" class="m-suggest">
-          <div
-            v-for="s in suggestions"
-            :key="s.slug || s.name"
-            class="m-suggest-item"
-            @mousedown.prevent="pickSuggestion(s)"
-          >
-            <img v-if="s.cover" :src="s.cover" class="m-suggest-cover" />
-            <div class="m-suggest-info">
-              <div class="m-suggest-title">{{ s.title }}</div>
-              <div v-if="s.tags?.length" class="m-suggest-tags">
-                <span v-for="t in s.tags" :key="t" class="m-suggest-tag">{{ t }}</span>
+        <el-button type="success" size="large" @click="$router.push('/upload')" v-if="auth.user" class="m-upload-btn">
+          <el-icon><Upload /></el-icon>
+        </el-button>
+        <transition name="suggest-fade">
+          <div v-if="showSuggest && suggestions.length" class="m-suggest">
+            <div
+              v-for="s in suggestions"
+              :key="s.slug || s.name"
+              class="m-suggest-item"
+              @mousedown.prevent="pickSuggestion(s)"
+            >
+              <img v-if="s.cover" :src="s.cover" class="m-suggest-cover" />
+              <div class="m-suggest-info">
+                <div class="m-suggest-title">{{ s.title }}</div>
+                <div v-if="s.tags?.length" class="m-suggest-tags">
+                  <span v-for="t in s.tags" :key="t" class="m-suggest-tag">{{ t }}</span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </transition>
+        </transition>
+      </div>
     </div>
 
     <!-- 统计 -->
@@ -410,32 +410,34 @@ onMounted(() => { queryDraft.value = query.value; refreshAll() })
 }
 
 .m-search-bar {
+  margin-bottom: 12px;
+}
+.m-search-wrap {
   display: flex;
   gap: 8px;
   align-items: stretch;
-  margin-bottom: 12px;
   position: relative;
 }
-.m-search-bar :deep(.el-input__wrapper) {
+.m-search-wrap :deep(.el-input__wrapper) {
   border-radius: 10px;
   padding: 4px 12px;
   transition: box-shadow .25s ease, border-color .25s ease;
 }
-.m-search-bar :deep(.el-input__wrapper.is-focus),
+.m-search-wrap :deep(.el-input__wrapper.is-focus),
 .m-search-wrap.focused :deep(.el-input__wrapper) {
   box-shadow: 0 0 0 2px rgba(99,102,241,.3);
   border-color: #6366f1;
 }
-.m-search-bar :deep(.el-input__inner) {
+.m-search-wrap :deep(.el-input__inner) {
   font-size: 16px;
   height: 40px;
 }
-.m-search-bar :deep(.el-input-group__append) {
+.m-search-wrap :deep(.el-input-group__append) {
   border-radius: 0 10px 10px 0;
   padding: 0;
   overflow: hidden;
 }
-.m-search-bar :deep(.el-input-group__append .el-button) {
+.m-search-wrap :deep(.el-input-group__append .el-button) {
   height: 48px;
   border: none;
 }

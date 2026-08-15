@@ -131,6 +131,8 @@ class SPAStaticFiles(StaticFiles):
 
 
 frontend_dist = BASE_DIR / "melon-tech-web" / "dist"
+if not frontend_dist.exists():
+    frontend_dist = BASE_DIR / "web" / "dist"
 if frontend_dist.exists():
     app.mount(
         "/",

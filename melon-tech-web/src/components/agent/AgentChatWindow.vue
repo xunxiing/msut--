@@ -14,16 +14,57 @@
 
       <div v-else class="message-list">
         <template v-for="msg in messages" :key="msg.id || msg.created_at">
-          <div class="message-row" :class="getRowClass(msg)">
+          <div v-if="msg.role === 'user'" class="message-row user-row">
             <div class="avatar-col">
-              <el-avatar v-if="msg.role === 'user'" :icon="UserFilled" class="user-avatar" :size="36" />
-              <div v-else class="ai-avatar">
+              <el-avatar :icon="UserFilled" class="user-avatar" :size="36" />
+            </div>
+            <div class="content-wrapper user-content">
+              <div class="role-label">你</div>
+              <div class="bubble user-bubble" v-html="renderMarkdown(getDisplayContent(msg))"></div>
+            </div>
+          </div>
+
+          <div v-else class="message-row ai-row">
+            <div class="avatar-col">
+              <div class="ai-avatar">
                 <el-icon><Service /></el-icon>
               </div>
             </div>
-
             <div class="content-wrapper">
-              <div class="role-label">{{ msg.role === 'user' ? '你' : 'AI 助手' }}</div>
+              <div class="role-label">AI 助手</div>
+
+              <div class="timeline-trace">
+                <div class="trace-node">
+                  <div class="trace-icon-col">
+                    <div class="trace-icon trace-icon-msg">
+                      <el-icon><ChatDotRound /></el-icon>
+                    </div>
+                    <div v-if="hasThinking(msg)" class="trace-line"></div>
+                  </div>
+                  <div class="trace-content-col">
+                    <div v-if="getDisplayContent(msg)" class="trace-msg" v-html="renderMarkdown(getDisplayContent(msg))"></div>
+
+                    <div v-if="hasThinking(msg)" class="trace-sub-node">
+                      <div class="trace-icon-col">
+                        <div class="trace-icon trace-icon-think" @click="toggleThinking(msg)">
+                          <el-icon><Cpu /></el-icon>
+                        </div>
+                      </div>
+                      <div class="trace-content-col">
+                        <div class="trace-header" @click="toggleThinking(msg)">
+                          <span class="trace-label clickable">思考过程</span>
+                          <el-icon class="trace-arrow" :class="{ rotated: isThinkingExpanded(msg) }">
+                            <ArrowDown />
+                          </el-icon>
+                        </div>
+                        <div v-show="isThinkingExpanded(msg)" class="trace-body">
+                          <pre class="trace-text">{{ getThinkingText(msg) }}</pre>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
               <div v-if="msg.role === 'tool'" class="timeline-trace">
                 <div class="trace-node">
@@ -31,7 +72,6 @@
                     <div class="trace-icon trace-icon-tool">
                       <el-icon><Tools /></el-icon>
                     </div>
-                    <div class="trace-line"></div>
                   </div>
                   <div class="trace-content-col">
                     <div class="trace-label">工具调用 · {{ msg.toolName || getToolName(msg) }}</div>
@@ -49,33 +89,6 @@
                       </DownloadButton>
                     </div>
                     <div v-if="getDisplayContent(msg)" class="trace-desc">{{ getDisplayContent(msg) }}</div>
-                  </div>
-                </div>
-              </div>
-
-              <div v-else class="bubble" v-html="renderMarkdown(getDisplayContent(msg))"></div>
-
-              <div
-                v-if="msg.role === 'assistant' && hasThinking(msg)"
-                class="timeline-trace"
-              >
-                <div class="trace-node">
-                  <div class="trace-icon-col">
-                    <div class="trace-icon trace-icon-think" @click="toggleThinking(msg)">
-                      <el-icon><Cpu /></el-icon>
-                    </div>
-                    <div class="trace-line" :class="{ collapsed: !isThinkingExpanded(msg) }"></div>
-                  </div>
-                  <div class="trace-content-col">
-                    <div class="trace-header" @click="toggleThinking(msg)">
-                      <span class="trace-label clickable">思考过程</span>
-                      <el-icon class="trace-arrow" :class="{ rotated: isThinkingExpanded(msg) }">
-                        <ArrowDown />
-                      </el-icon>
-                    </div>
-                    <div v-show="isThinkingExpanded(msg)" class="trace-body">
-                      <pre class="trace-text">{{ getThinkingText(msg) }}</pre>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -151,7 +164,7 @@
 
 <script setup lang="ts">
 import { ref, nextTick, watch } from 'vue'
-import { UserFilled, Service, Position, Cpu, ArrowDown, Tools, Document } from '@element-plus/icons-vue'
+import { UserFilled, Service, Position, Cpu, ArrowDown, Tools, Document, ChatDotRound } from '@element-plus/icons-vue'
 import { marked } from 'marked'
 import type { AgentMessage } from '../../api/agent'
 import DownloadButton from '../DownloadButton.vue'
@@ -181,11 +194,6 @@ const examples = [
 function useExample(text: string) {
   inputValue.value = text
   handleSend()
-}
-
-function getRowClass(msg: AgentMessage) {
-  if (msg.role === 'user') return 'user-row'
-  return 'ai-row'
 }
 
 function getPayload(msg: AgentMessage): any | undefined {
@@ -351,7 +359,7 @@ watch(() => props.thinking, scrollToBottom)
 .welcome-icon {
   width: 72px;
   height: 72px;
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  background: #3b82f6;
   border-radius: 20px;
   display: flex;
   align-items: center;
@@ -359,7 +367,7 @@ watch(() => props.thinking, scrollToBottom)
   margin-bottom: 24px;
   color: white;
   font-size: 36px;
-  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.25);
+  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.2);
 }
 
 .welcome-state h2 {
@@ -394,9 +402,9 @@ watch(() => props.thinking, scrollToBottom)
 }
 
 .example-chip:hover {
-  border-color: #6366f1;
-  color: #6366f1;
-  background: #f5f3ff;
+  border-color: #3b82f6;
+  color: #3b82f6;
+  background: #eff6ff;
 }
 
 .message-list {
@@ -419,7 +427,7 @@ watch(() => props.thinking, scrollToBottom)
   flex-direction: row-reverse;
 }
 
-.user-row .content-wrapper {
+.user-content {
   align-items: flex-end;
 }
 
@@ -428,20 +436,20 @@ watch(() => props.thinking, scrollToBottom)
 }
 
 .user-avatar {
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  background: #3b82f6;
 }
 
 .ai-avatar {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  background: #3b82f6;
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
   font-size: 18px;
-  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.15);
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
 }
 
 .content-wrapper {
@@ -459,61 +467,25 @@ watch(() => props.thinking, scrollToBottom)
   padding: 0 2px;
 }
 
-.bubble {
+.user-bubble {
   padding: 12px 16px;
   border-radius: 14px;
+  border-bottom-right-radius: 4px;
+  background: #3b82f6;
+  color: white;
   font-size: 15px;
   line-height: 1.7;
   word-break: break-word;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
 }
 
-.user-row .bubble {
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-  color: white;
-  border-bottom-right-radius: 4px;
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.15);
-}
-
-.ai-row .bubble {
-  background: #f9fafb;
-  color: #1f2937;
-  border-bottom-left-radius: 4px;
-  border: 1px solid #e5e7eb;
-}
-
-.bubble :deep(p) { margin: 0 0 0.8em; }
-.bubble :deep(p:last-child) { margin-bottom: 0; }
-.bubble :deep(pre) {
-  background: #f3f4f6;
-  padding: 12px;
-  border-radius: 8px;
-  overflow-x: auto;
-  margin: 8px 0;
-  font-size: 14px;
-}
-.bubble :deep(code) {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  background: rgba(0,0,0,0.06);
+.user-bubble :deep(p) { margin: 0 0 0.8em; }
+.user-bubble :deep(p:last-child) { margin-bottom: 0; }
+.user-bubble :deep(code) {
+  background: rgba(255,255,255,0.2);
   padding: 2px 5px;
   border-radius: 4px;
   font-size: 14px;
-}
-.bubble :deep(h1), .bubble :deep(h2), .bubble :deep(h3) {
-  margin: 0.6em 0 0.4em;
-  font-weight: 600;
-}
-.bubble :deep(ul), .bubble :deep(ol) {
-  padding-left: 1.5em;
-  margin: 0.4em 0;
-}
-.bubble :deep(blockquote) {
-  border-left: 3px solid #d1d5db;
-  padding-left: 12px;
-  margin: 0.4em 0;
-  color: #6b7280;
-}
-.user-row .bubble :deep(code) {
-  background: rgba(255,255,255,0.2);
 }
 
 /* Timeline trace — minimalist vertical flow */
@@ -545,6 +517,12 @@ watch(() => props.thinking, scrollToBottom)
   flex-shrink: 0;
 }
 
+.trace-icon-msg {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #3b82f6;
+}
+
 .trace-icon-tool {
   background: #f0fdf4;
   border: 1px solid #bbf7d0;
@@ -552,15 +530,15 @@ watch(() => props.thinking, scrollToBottom)
 }
 
 .trace-icon-think {
-  background: #f5f3ff;
-  border: 1px solid #ddd6fe;
-  color: #8b5cf6;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  color: #6b7280;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .trace-icon-think:hover {
-  background: #ede9fe;
+  background: #f3f4f6;
 }
 
 .trace-icon-loading {
@@ -584,15 +562,9 @@ watch(() => props.thinking, scrollToBottom)
 .trace-line {
   width: 1px;
   flex: 1;
-  min-height: 12px;
+  min-height: 8px;
   background: #e5e7eb;
   margin-top: 4px;
-  margin-bottom: 4px;
-}
-
-.trace-line.collapsed {
-  min-height: 0;
-  height: 0;
 }
 
 .trace-content-col {
@@ -602,6 +574,51 @@ watch(() => props.thinking, scrollToBottom)
   min-width: 0;
   padding-bottom: 4px;
   padding-top: 4px;
+}
+
+.trace-msg {
+  font-size: 15px;
+  line-height: 1.7;
+  color: #1f2937;
+  word-break: break-word;
+}
+
+.trace-msg :deep(p) { margin: 0 0 0.8em; }
+.trace-msg :deep(p:last-child) { margin-bottom: 0; }
+.trace-msg :deep(pre) {
+  background: #f3f4f6;
+  padding: 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 8px 0;
+  font-size: 14px;
+}
+.trace-msg :deep(code) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  background: rgba(0,0,0,0.06);
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-size: 14px;
+}
+.trace-msg :deep(h1), .trace-msg :deep(h2), .trace-msg :deep(h3) {
+  margin: 0.6em 0 0.4em;
+  font-weight: 600;
+}
+.trace-msg :deep(ul), .trace-msg :deep(ol) {
+  padding-left: 1.5em;
+  margin: 0.4em 0;
+}
+.trace-msg :deep(blockquote) {
+  border-left: 3px solid #d1d5db;
+  padding-left: 12px;
+  margin: 0.4em 0;
+  color: #6b7280;
+}
+
+.trace-sub-node {
+  display: flex;
+  gap: 14px;
+  margin-top: 4px;
 }
 
 .trace-header {
@@ -648,7 +665,7 @@ watch(() => props.thinking, scrollToBottom)
 
 .trace-file-icon {
   font-size: 16px;
-  color: #6366f1;
+  color: #3b82f6;
   flex-shrink: 0;
 }
 
@@ -730,9 +747,9 @@ watch(() => props.thinking, scrollToBottom)
 }
 
 .mode-toggle-button.active .mode-toggle-pill {
-  background: #f5f3ff;
-  border-color: #8b5cf6;
-  color: #6d28d9;
+  background: #eff6ff;
+  border-color: #3b82f6;
+  color: #2563eb;
 }
 
 .mode-toggle-dot {
@@ -744,7 +761,7 @@ watch(() => props.thinking, scrollToBottom)
 }
 
 .mode-toggle-button.active .mode-toggle-dot {
-  background: #8b5cf6;
+  background: #3b82f6;
 }
 
 .mode-toggle-text {
@@ -764,9 +781,9 @@ watch(() => props.thinking, scrollToBottom)
 }
 
 .input-box:focus-within {
-  border-color: #8b5cf6;
+  border-color: #3b82f6;
   background: #ffffff;
-  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
 .input-box :deep(.el-textarea__inner) {
@@ -778,7 +795,7 @@ watch(() => props.thinking, scrollToBottom)
 
 .send-btn {
   flex-shrink: 0;
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  background: #3b82f6;
   border: none;
 }
 

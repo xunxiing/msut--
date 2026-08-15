@@ -22,28 +22,28 @@
             </el-button>
           </template>
         </el-input>
-        <transition name="suggest-fade">
-          <div v-if="showSuggest && suggestions.length" class="m-suggest">
-            <div
-              v-for="s in suggestions"
-              :key="s.slug || s.name"
-              class="m-suggest-item"
-              @mousedown.prevent="pickSuggestion(s)"
-            >
-              <img v-if="s.cover" :src="s.cover" class="m-suggest-cover" />
-              <div class="m-suggest-info">
-                <div class="m-suggest-title">{{ s.title }}</div>
-                <div v-if="s.tags?.length" class="m-suggest-tags">
-                  <span v-for="t in s.tags" :key="t" class="m-suggest-tag">{{ t }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </transition>
       </div>
       <el-button type="success" size="large" @click="$router.push('/upload')" v-if="auth.user" class="m-upload-btn">
         <el-icon><Upload /></el-icon>
       </el-button>
+      <transition name="suggest-fade">
+        <div v-if="showSuggest && suggestions.length" class="m-suggest">
+          <div
+            v-for="s in suggestions"
+            :key="s.slug || s.name"
+            class="m-suggest-item"
+            @mousedown.prevent="pickSuggestion(s)"
+          >
+            <img v-if="s.cover" :src="s.cover" class="m-suggest-cover" />
+            <div class="m-suggest-info">
+              <div class="m-suggest-title">{{ s.title }}</div>
+              <div v-if="s.tags?.length" class="m-suggest-tags">
+                <span v-for="t in s.tags" :key="t" class="m-suggest-tag">{{ t }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </transition>
     </div>
 
     <!-- 统计 -->
@@ -414,6 +414,7 @@ onMounted(() => { queryDraft.value = query.value; refreshAll() })
   gap: 8px;
   align-items: stretch;
   margin-bottom: 12px;
+  position: relative;
 }
 .m-search-bar :deep(.el-input__wrapper) {
   border-radius: 10px;

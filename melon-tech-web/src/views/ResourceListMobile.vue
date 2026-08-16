@@ -17,24 +17,6 @@
             <el-icon :size="18"><Search /></el-icon>
           </template>
         </el-input>
-        <transition name="suggest-fade">
-          <div v-if="showSuggest && suggestions.length" class="m-suggest">
-            <div
-              v-for="s in suggestions"
-              :key="s.slug || s.name"
-              class="m-suggest-item"
-              @mousedown.prevent="pickSuggestion(s)"
-            >
-              <img v-if="s.cover" :src="s.cover" class="m-suggest-cover" />
-              <div class="m-suggest-info">
-                <div class="m-suggest-title">{{ s.title }}</div>
-                <div v-if="s.tags?.length" class="m-suggest-tags">
-                  <span v-for="t in s.tags" :key="t" class="m-suggest-tag">{{ t }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </transition>
       </div>
       <el-button type="primary" size="large" @click="applySearch" class="m-search-btn">
         <el-icon><Search /></el-icon>
@@ -42,6 +24,24 @@
       <el-button type="success" size="large" @click="$router.push('/upload')" v-if="auth.user" class="m-upload-btn">
         <el-icon><Upload /></el-icon>
       </el-button>
+      <transition name="suggest-fade">
+        <div v-if="showSuggest && suggestions.length" class="m-suggest">
+          <div
+            v-for="s in suggestions"
+            :key="s.slug || s.name"
+            class="m-suggest-item"
+            @mousedown.prevent="pickSuggestion(s)"
+          >
+            <img v-if="s.cover" :src="s.cover" class="m-suggest-cover" />
+            <div class="m-suggest-info">
+              <div class="m-suggest-title">{{ s.title }}</div>
+              <div v-if="s.tags?.length" class="m-suggest-tags">
+                <span v-for="t in s.tags" :key="t" class="m-suggest-tag">{{ t }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </transition>
     </div>
 
     <!-- 统计 -->
@@ -349,6 +349,14 @@ onMounted(() => { queryDraft.value = query.value; refreshAll() })
   max-width: 100%;
 }
 
+.m-search-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
 .m-search-wrap {
   position: relative;
   flex: 1;
@@ -356,7 +364,7 @@ onMounted(() => { queryDraft.value = query.value; refreshAll() })
 
 .m-suggest {
   position: absolute;
-  top: 100%;
+  top: calc(100% + 4px);
   left: 0;
   right: 0;
   z-index: 100;
@@ -407,12 +415,6 @@ onMounted(() => { queryDraft.value = query.value; refreshAll() })
   border-radius: 4px;
 }
 
-.m-search-bar {
-  display: flex;
-  gap: 8px;
-  align-items: stretch;
-  margin-bottom: 12px;
-}
 .m-search-bar :deep(.el-input__wrapper) {
   border-radius: 10px;
   padding: 4px 12px;

@@ -125,9 +125,16 @@ class SPAStaticFiles(StaticFiles):
 
     async def get_response(self, path: str, scope):
         try:
-            return await super().get_response(path, scope)
+            response = await super().get_response(path, scope)
         except (StarletteHTTPException, Exception):
-            return await super().get_response("index.html", scope)
+            response = await super().get_response("index.html", scope)
+        # Vite hashed assets are immutable -> long cache; index.html and everything else -> no-cache
+        # Note: Starlette's get_path() normpaths the path, so separators are OS-native on Windows.
+        if path.replace("\\", "/").startswith("assets/"):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        else:
+            response.headers["Cache-Control"] = "no-cache"
+        return response
 
 
 frontend_dist = BASE_DIR / "melon-tech-web" / "dist"

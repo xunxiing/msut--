@@ -4,6 +4,21 @@ import vue from '@vitejs/plugin-vue'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [vue()],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id: string) {
+          if (id.includes('node_modules')) {
+            if (id.includes('@element-plus/icons-vue')) return 'icons'
+            if (id.includes('element-plus')) return 'element-plus'
+            if (id.includes('marked') || id.includes('driver.js')) return 'editor'
+            if (id.includes('axios')) return 'http'
+            return 'vendor'
+          }
+        },
+      },
+    },
+  },
   server: {
     host: '0.0.0.0',
     allowedHosts: ['web.msut.top'],

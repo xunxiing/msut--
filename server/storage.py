@@ -50,7 +50,11 @@ def build_public_url(key: str) -> str:
 
 def upload_bytes(key: str, data: bytes, content_type: str = "") -> str:
     client = _get_client()
-    extra = {"ContentType": content_type} if content_type else {}
+    extra = {
+        "CacheControl": "public, max-age=31536000, immutable",
+    }
+    if content_type:
+        extra["ContentType"] = content_type
     client.put_object(Bucket=R2_BUCKET, Key=key, Body=data, **extra)
     url = build_public_url(key)
     logger.info("R2 upload_bytes: key=%s url=%s size=%s", key, url, len(data))
@@ -59,7 +63,11 @@ def upload_bytes(key: str, data: bytes, content_type: str = "") -> str:
 
 def upload_file(key: str, file_path: Path, content_type: str = "") -> str:
     client = _get_client()
-    extra = {"ContentType": content_type} if content_type else {}
+    extra = {
+        "CacheControl": "public, max-age=31536000, immutable",
+    }
+    if content_type:
+        extra["ContentType"] = content_type
     client.upload_file(str(file_path), R2_BUCKET, key, ExtraArgs=extra)
     url = build_public_url(key)
     logger.info("R2 upload_file: key=%s url=%s path=%s", key, url, file_path)

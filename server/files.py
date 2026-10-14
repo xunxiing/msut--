@@ -968,7 +968,7 @@ def list_resources(
 ):
     q = (q or "").strip()
     page = max(1, int(page or 1))
-    page_size = min(50, max(1, int(pageSize or 12)))
+    page_size = min(200, max(1, int(pageSize or 12)))
     offset = (page - 1) * page_size
     conn = get_connection()
     cur = conn.cursor()

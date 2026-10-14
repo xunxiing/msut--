@@ -199,7 +199,7 @@ async function saveResource() {
         const fd = new FormData()
         fd.append('resourceId', String(resourceSheet.id))
         for (const f of newFiles) { const raw = (f as any).raw; if (raw) fd.append('files', raw) }
-        await http.post('/files/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+        await http.post('/files/upload', fd)
       }
     }
     if (resourceSheet.hasNewImages && editorRef.value) {
@@ -207,7 +207,7 @@ async function saveResource() {
       if (newImages.length) {
         const fd = new FormData()
         for (const f of newImages) { const raw = (f as any).raw; if (raw) fd.append('files', raw) }
-        await http.post(`/resources/${resourceSheet.id}/images/upload`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+        await http.post(`/resources/${resourceSheet.id}/images/upload`, fd)
       }
     }
     ElMessage.success('保存成功')

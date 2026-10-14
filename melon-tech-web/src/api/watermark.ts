@@ -3,9 +3,7 @@ import { http } from './http'
 export async function checkWatermark(file: File) {
   const fd = new FormData()
   fd.append('file', file)
-  const resp = await http.post('/watermark/check', fd, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  })
+  const resp = await http.post('/watermark/check', fd)
   return resp.data as {
     watermark: number
     length: number

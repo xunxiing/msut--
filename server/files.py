@@ -185,6 +185,11 @@ async def _save_upload_to_r2(
                 f.write(chunk)
                 size += len(chunk)
                 if size > MAX_FILE_SIZE:
+                    logger.warning(
+                        "upload aborted: file=%s size>=%s exceeds MAX_FILE_SIZE",
+                        file.filename,
+                        size,
+                    )
                     try:
                         f.flush()
                     except Exception:
@@ -197,6 +202,11 @@ async def _save_upload_to_r2(
                     return None
                 try:
                     if await request.is_disconnected():
+                        logger.warning(
+                            "upload aborted: client disconnected while streaming file=%s at size=%s",
+                            file.filename,
+                            size,
+                        )
                         try:
                             f.flush()
                         except Exception:
@@ -211,16 +221,42 @@ async def _save_upload_to_r2(
                     pass
         try:
             if await request.is_disconnected():
+                logger.warning(
+                    "upload aborted: client disconnected before R2 push file=%s size=%s",
+                    file.filename,
+                    size,
+                )
                 temp_path.unlink(missing_ok=True)
                 return None
         except Exception:
             pass
-        # Upload to R2
+        # Upload to R2 (retry once — cross-border pushes can fail transiently)
         content_type = file.content_type or ""
-        r2.upload_file(r2_key, temp_path, content_type)
+        last_exc: Optional[Exception] = None
+        for attempt in range(2):
+            try:
+                r2.upload_file(r2_key, temp_path, content_type)
+                last_exc = None
+                break
+            except Exception as ex:
+                last_exc = ex
+                logger.warning(
+                    "R2 upload attempt %s failed: file=%s size=%s error=%s",
+                    attempt + 1,
+                    file.filename,
+                    size,
+                    ex,
+                )
+        if last_exc is not None:
+            logger.error(
+                "R2 upload finally failed: file=%s size=%s", file.filename, size
+            )
+            temp_path.unlink(missing_ok=True)
+            return None
         url_path = r2.build_public_url(r2_key)
         return (r2_key, url_path, size, temp_path)
-    except Exception:
+    except Exception as ex:
+        logger.exception("save_upload_to_r2 failed: file=%s error=%s", file.filename, ex)
         try:
             temp_path.unlink(missing_ok=True)
         except Exception:
@@ -375,8 +411,15 @@ async def upload_to_resource(
                 )
 
         conn.commit()
-    except Exception:
+    except Exception as up_ex:
         # Roll back DB and delete any R2 objects uploaded during this request
+        logger.exception(
+            "upload_to_resource failed: resourceId=%s files_count=%s saved_count=%s error=%s",
+            resourceId,
+            len(files or []),
+            len(saved),
+            up_ex,
+        )
         try:
             conn.rollback()
         except Exception:
@@ -479,7 +522,14 @@ async def upload_resource_images(
                 )
 
         conn.commit()
-    except Exception:
+    except Exception as img_up_ex:
+        logger.exception(
+            "upload_resource_images failed: rid=%s files_count=%s saved_count=%s error=%s",
+            rid,
+            len(files or []),
+            len(saved),
+            img_up_ex,
+        )
         try:
             conn.rollback()
         except Exception:

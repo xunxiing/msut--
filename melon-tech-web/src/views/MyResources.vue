@@ -361,7 +361,7 @@ async function submitNewFiles() {
     const fd = new FormData()
     fd.append('resourceId', String(resourceDrawer.id))
     for (const f of resourceDrawer.newFiles) { const raw = (f as any).raw; if (raw) fd.append('files', raw) }
-    await http.post('/files/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+    await http.post('/files/upload', fd)
     ElMessage.success('文件上传成功')
     resourceDrawer.newFiles = []
     await fetchResources()
@@ -377,7 +377,7 @@ async function submitNewImages() {
   try {
     const fd = new FormData()
     for (const f of resourceDrawer.newImages) { const raw = (f as any).raw; if (raw) fd.append('files', raw) }
-    await http.post(`/resources/${resourceDrawer.id}/images/upload`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+    await http.post(`/resources/${resourceDrawer.id}/images/upload`, fd)
     ElMessage.success('图片上传成功')
     resourceDrawer.newImages = []
     const res = await listResourceImages(resourceDrawer.id)

@@ -151,6 +151,8 @@ const saveWatermark = ref(false)
 
 const slug = ref('')
 const shareUrl = ref('')
+// 已创建但文件上传失败的作品 ID；重试时直接复用，避免重复建作品
+const createdResourceId = ref(0)
 
 const coverPreview = computed(() => {
   const first = coverFileList.value[0]
@@ -194,10 +196,13 @@ async function onSubmit() {
   }
   submitting.value = true
   try {
-    const res = await createResource(form.value)
-    const resourceId = res.id
-    slug.value = res.slug
-    shareUrl.value = res.shareUrl
+    if (!createdResourceId.value) {
+      const res = await createResource(form.value)
+      createdResourceId.value = res.id
+      slug.value = res.slug
+      shareUrl.value = res.shareUrl
+    }
+    const resourceId = createdResourceId.value
 
     const fd = new FormData()
     fd.append('resourceId', String(resourceId))
@@ -206,7 +211,7 @@ async function onSubmit() {
       const raw = (f as any).raw
       if (raw) fd.append('files', raw)
     }
-    await http.post('/files/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+    await http.post('/files/upload', fd)
 
     if (coverFileList.value.length) {
       const cfd = new FormData()
@@ -214,16 +219,26 @@ async function onSubmit() {
         const raw = (f as any).raw
         if (raw) cfd.append('files', raw)
       }
-      await http.post(`/resources/${resourceId}/images/upload`, cfd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      await http.post(`/resources/${resourceId}/images/upload`, cfd)
     }
 
     if (aiTags.value.length) {
       await classifyResource(resourceId).catch(() => {})
     }
 
+    createdResourceId.value = 0
     successVisible.value = true
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.error || '上传失败，请重试')
+    const status = e?.response?.status
+    if (createdResourceId.value) {
+      const reason =
+        status === 524 ? '网络超时，文件可能过大'
+        : status === 413 ? '文件超过了大小限制'
+        : e?.response?.data?.error || '文件上传失败'
+      ElMessage.error(`作品信息已保存，但${reason}。再次点击"发布作品"会继续上传文件，不会重复创建作品`)
+    } else {
+      ElMessage.error(e?.response?.data?.error || '上传失败，请重试')
+    }
   } finally {
     submitting.value = false
   }
@@ -260,6 +275,7 @@ function reset() {
   saveWatermark.value = false
   slug.value = ''
   shareUrl.value = ''
+  createdResourceId.value = 0
 }
 
 function abortAllUploads() {

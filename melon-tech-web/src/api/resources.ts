@@ -70,9 +70,7 @@ export async function uploadFiles(resourceId: number, files: File[]) {
   const fd = new FormData()
   fd.append("resourceId", String(resourceId))
   files.forEach(f => fd.append("files", f))
-  const { data } = await http.post("/files/upload", fd, {
-    headers: { "Content-Type": "multipart/form-data" }
-  })
+  const { data } = await http.post("/files/upload", fd)
   return data
 }
 

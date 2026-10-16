@@ -74,6 +74,83 @@ export async function uploadFiles(resourceId: number, files: File[]) {
   return data
 }
 
+// Files above this size are uploaded through the chunked/resumable API
+export const RESUMABLE_THRESHOLD = 4 * 1024 * 1024
+
+export interface ResumableUploadOpts {
+  saveWatermark?: boolean
+  onProgress?: (pct: number) => void
+  signal?: AbortSignal
+}
+
+export async function uploadFileResumable(
+  resourceId: number,
+  file: File,
+  opts: ResumableUploadOpts = {},
+) {
+  const resumeKey = `${file.name}:${file.size}:${file.lastModified}`
+  const { data: init } = await http.post("/uploads/init", {
+    resourceId,
+    filename: file.name,
+    mime: file.type || "application/octet-stream",
+    size: file.size,
+    saveWatermark: !!opts.saveWatermark,
+    resumeKey,
+  })
+  const { uploadId, chunkSize, chunkCount } = init
+  const received: number[] = init.received || []
+  const done = new Set<number>(received)
+  const chunkBytes = (i: number) => Math.min(chunkSize, file.size - i * chunkSize)
+  let doneBytes = 0
+  for (const i of done) doneBytes += chunkBytes(i)
+  opts.onProgress?.(Math.min(99, Math.round((doneBytes / file.size) * 100)))
+  for (let i = 0; i < chunkCount; i++) {
+    if (opts.signal?.aborted) throw new Error("aborted")
+    if (done.has(i)) continue
+    const blob = file.slice(i * chunkSize, i * chunkSize + chunkBytes(i))
+    let attempt = 0
+    for (;;) {
+      try {
+        await http.post(`/uploads/${uploadId}/chunk?index=${i}`, blob, {
+          headers: { "Content-Type": "application/octet-stream" },
+          onUploadProgress: (ev) => {
+            const pct = Math.min(99, Math.round(((doneBytes + (ev.loaded || 0)) / file.size) * 100))
+            opts.onProgress?.(pct)
+          },
+        })
+        break
+      } catch (e) {
+        attempt++
+        if (attempt >= 3) throw e
+        await new Promise(r => setTimeout(r, 1000 * attempt))
+      }
+    }
+    doneBytes += chunkBytes(i)
+    done.add(i)
+    opts.onProgress?.(Math.min(99, Math.round((doneBytes / file.size) * 100)))
+  }
+  const { data } = await http.post(`/uploads/${uploadId}/complete`)
+  opts.onProgress?.(100)
+  return data as {
+    ok: boolean
+    files: { id: number; originalName: string; size: number; mime: string | null; urlPath: string }[]
+  }
+}
+
+// Upload a mixed batch: small files in one legacy request, large files via
+// the chunked/resumable API with per-file progress.
+export async function uploadFilesMixed(
+  resourceId: number,
+  files: File[],
+  opts: ResumableUploadOpts = {},
+) {
+  const small: File[] = []
+  const large: File[] = []
+  for (const f of files) (f.size > RESUMABLE_THRESHOLD ? large : small).push(f)
+  if (small.length) await uploadFiles(resourceId, small)
+  for (const f of large) await uploadFileResumable(resourceId, f, opts)
+}
+
 export async function listMyResources() {
   const { data } = await http.get("/my/resources")
   return data.items as MyResourceItem[]

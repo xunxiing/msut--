@@ -223,7 +223,7 @@ import type { UploadInstance, UploadUserFile } from 'element-plus'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   listMyResources, updateResourceMeta, deleteResource,
-  setResourceCover, listResourceImages, optimizeContent,
+  setResourceCover, listResourceImages, optimizeContent, uploadFilesMixed,
   type MyResourceItem, type ResourceFile,
 } from '../api/resources'
 import { http } from '../api/http'
@@ -358,10 +358,9 @@ async function submitNewFiles() {
   if (!resourceDrawer.newFiles.length) return
   resourceDrawer.uploading = true
   try {
-    const fd = new FormData()
-    fd.append('resourceId', String(resourceDrawer.id))
-    for (const f of resourceDrawer.newFiles) { const raw = (f as any).raw; if (raw) fd.append('files', raw) }
-    await http.post('/files/upload', fd)
+    const raws: File[] = []
+    for (const f of resourceDrawer.newFiles) { const raw = (f as any).raw; if (raw) raws.push(raw) }
+    if (raws.length) await uploadFilesMixed(resourceDrawer.id, raws)
     ElMessage.success('文件上传成功')
     resourceDrawer.newFiles = []
     await fetchResources()

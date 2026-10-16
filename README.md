@@ -198,6 +198,12 @@ Agent LLM 相关（用于智能对话 + 代码生成）：
   - 可选表单字段：`saveWatermark`（布尔），用于对 `.melsave` / `.zip` 进行水印提取并入库
 - `GET /api/files/:id/download` - 下载文件，`Content-Disposition` 采用 UTF-8 百分号编码文件名
 
+分块上传 / 断点续传（大文件推荐，详见 `API文档.md`）：
+
+- `POST /api/uploads/init` - 初始化上传会话（支持 `resumeKey` 续传，返回已收到的分块索引）
+- `POST /api/uploads/{uploadId}/chunk?index=N` - 上传单个 4MB 分块（原始二进制体，幂等）
+- `POST /api/uploads/{uploadId}/complete` - 拼装、推 R2、入库，响应结构同 `/api/files/upload`
+
 资源图片 / 封面管理（新增，保持兼容，不影响旧接口）：
 
 - `POST /api/resources/:id/images/upload` - 为指定资源上传一批图片文件（仅资源作者，最多 10 个，单文件 50MB，自动写入 `resource_files`）。

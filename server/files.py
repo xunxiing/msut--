@@ -1,5 +1,7 @@
 import os
 import re
+import json
+import shutil
 import tempfile
 import logging
 from pathlib import Path
@@ -106,6 +108,96 @@ def _require_owner(
     if int(r["created_by"] or 0) != uid:
         return uid, "无法操作其他用户的资源"
     return uid, None
+
+
+def _insert_resource_file(
+    cur,
+    resourceId: int,
+    original_name: str,
+    mime: Optional[str],
+    r2_key: str,
+    url_path: str,
+    file_size: int,
+    temp_path: Path,
+    do_wm: bool,
+) -> Tuple[int, bool]:
+    """INSERT a resource_files row and run watermark extraction.
+
+    Returns (file_id, is_image). Never raises for watermark failures —
+    only for the INSERT itself.
+    """
+    info = cur.execute(
+        """
+        INSERT INTO resource_files (resource_id, original_name, stored_name, mime, size, url_path)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (resourceId, original_name, r2_key, mime, file_size, url_path),
+    )
+    file_id = int(info.lastrowid)
+    is_image = _is_image_file(mime, original_name)
+    try:
+        suffix = Path(original_name or r2_key).suffix.lower()
+        if do_wm and suffix in {".melsave", ".zip"}:
+            logger.info(
+                "wm: extracting fileId=%s name=%s suffix=%s",
+                file_id,
+                original_name or r2_key,
+                suffix,
+            )
+            raw_seq, embedded = extract_sequence_from_melsave(str(temp_path))
+            seq_canon = canonicalize([str(x) for x in raw_seq])
+            wm_u64 = int(fnv1a64(seq_canon))
+            wm_i64 = _u64_to_i64(wm_u64)
+            emb_i64 = (
+                _u64_to_i64(int(embedded)) if embedded is not None else None
+            )
+            cur.execute(
+                """
+                INSERT OR REPLACE INTO file_watermarks (file_id, watermark_u64, seq_len, embedded_watermark)
+                VALUES (?, ?, ?, ?)
+                """,
+                (file_id, wm_i64, int(len(seq_canon)), emb_i64),
+            )
+            logger.info(
+                "wm: saved fileId=%s watermark_u64=%s watermark_i64=%s length=%s embedded=%s embedded_i64=%s",
+                file_id,
+                wm_u64,
+                wm_i64,
+                int(len(seq_canon)),
+                embedded if embedded is not None else None,
+                emb_i64,
+            )
+        else:
+            logger.info(
+                "wm: skipped (saveWatermark=%s suffix=%s) fileId=%s",
+                do_wm,
+                suffix,
+                file_id,
+            )
+    except Exception as ex:
+        # Do not fail the whole upload if watermark extraction fails
+        try:
+            logger.exception(
+                "wm: extract failed fileId=%s error=%s", file_id, ex
+            )
+        except Exception:
+            pass
+    return file_id, is_image
+
+
+def _auto_set_cover_if_needed(cur, resourceId: int, first_image_id: int) -> None:
+    """Set the cover to the first uploaded image if the resource has no cover."""
+    current_cover = cur.execute(
+        "SELECT cover_file_id FROM resources WHERE id = ?", (resourceId,)
+    ).fetchone()
+    if current_cover and current_cover["cover_file_id"] is None:
+        cur.execute(
+            "UPDATE resources SET cover_file_id = ? WHERE id = ?",
+            (first_image_id, resourceId),
+        )
+        logger.info(
+            "Auto-set cover for resource %s to file %s", resourceId, first_image_id
+        )
 
 
 @router.post("/api/resources")
@@ -318,73 +410,19 @@ async def upload_to_resource(
             r2_key, url_path, file_size, temp_path = result
             created_r2_keys.append(r2_key)
             created_temp_paths.append(temp_path)
-            info = cur.execute(
-                """
-                INSERT INTO resource_files (resource_id, original_name, stored_name, mime, size, url_path)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    resourceId,
-                    uf.filename or r2_key,
-                    r2_key,
-                    uf.content_type or None,
-                    file_size,
-                    url_path,
-                ),
+            file_id, is_image = _insert_resource_file(
+                cur,
+                resourceId,
+                uf.filename or r2_key,
+                uf.content_type or None,
+                r2_key,
+                url_path,
+                file_size,
+                temp_path,
+                do_wm,
             )
-            file_id = int(info.lastrowid)
-            # Check if this is the first uploaded image and if no cover is set yet
-            if _is_image_file(uf.content_type, uf.filename):
-                if first_uploaded_image_id is None:
-                    first_uploaded_image_id = file_id
-            # Attempt watermark extraction for .melsave/.zip when requested
-            try:
-                suffix = Path(uf.filename or "").suffix.lower()
-                if do_wm and suffix in {".melsave", ".zip"}:
-                    logger.info(
-                        "wm: extracting fileId=%s name=%s suffix=%s",
-                        file_id,
-                        uf.filename or r2_key,
-                        suffix,
-                    )
-                    raw_seq, embedded = extract_sequence_from_melsave(str(temp_path))
-                    seq_canon = canonicalize([str(x) for x in raw_seq])
-                    wm_u64 = int(fnv1a64(seq_canon))
-                    wm_i64 = _u64_to_i64(wm_u64)
-                    emb_i64 = (
-                        _u64_to_i64(int(embedded)) if embedded is not None else None
-                    )
-                    cur.execute(
-                        """
-                        INSERT OR REPLACE INTO file_watermarks (file_id, watermark_u64, seq_len, embedded_watermark)
-                        VALUES (?, ?, ?, ?)
-                        """,
-                        (file_id, wm_i64, int(len(seq_canon)), emb_i64),
-                    )
-                    logger.info(
-                        "wm: saved fileId=%s watermark_u64=%s watermark_i64=%s length=%s embedded=%s embedded_i64=%s",
-                        file_id,
-                        wm_u64,
-                        wm_i64,
-                        int(len(seq_canon)),
-                        embedded if embedded is not None else None,
-                        emb_i64,
-                    )
-                else:
-                    logger.info(
-                        "wm: skipped (saveWatermark=%s suffix=%s) fileId=%s",
-                        do_wm,
-                        suffix,
-                        file_id,
-                    )
-            except Exception as ex:
-                # Do not fail the whole upload if watermark extraction fails
-                try:
-                    logger.exception(
-                        "wm: extract failed fileId=%s error=%s", file_id, ex
-                    )
-                except Exception:
-                    pass
+            if is_image and first_uploaded_image_id is None:
+                first_uploaded_image_id = file_id
             saved.append(
                 {
                     "id": file_id,
@@ -547,6 +585,345 @@ async def upload_resource_images(
             except Exception:
                 pass
     return {"ok": True, "files": saved}
+
+
+# ===================== Chunked / resumable uploads =====================
+# Upload sessions live on local disk: manifest.json + <index>.part files.
+# Sessions expire after 24h; a client can resume by re-initializing with the
+# same resumeKey — already-received chunks are skipped.
+SESSIONS_DIR = TEMP_DIR / "upload_sessions"
+MAX_SESSION_AGE_MS = 24 * 3600 * 1000
+MAX_ACTIVE_SESSIONS_PER_USER = 5
+CHUNK_SIZE = 4 * 1024 * 1024  # 4MB per chunk request
+
+
+def _session_dir(upload_id: str) -> Path:
+    return SESSIONS_DIR / upload_id
+
+
+def _read_manifest(sess_dir: Path) -> Optional[dict]:
+    try:
+        return json.loads((sess_dir / "manifest.json").read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def _write_manifest(sess_dir: Path, manifest: dict) -> None:
+    tmp = sess_dir / "manifest.json.tmp"
+    tmp.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(sess_dir / "manifest.json")
+
+
+def _sweep_expired_sessions(now: Optional[int] = None) -> None:
+    """Delete expired/invalid session dirs. Returns active manifests by user."""
+    now = now if now is not None else now_ms()
+    try:
+        entries = list(SESSIONS_DIR.iterdir())
+    except Exception:
+        return
+    for d in entries:
+        if not d.is_dir():
+            continue
+        m = _read_manifest(d)
+        expired = (
+            m is None
+            or m.get("completed")
+            or int(m.get("created_at") or 0) < now - MAX_SESSION_AGE_MS
+        )
+        if expired:
+            shutil.rmtree(d, ignore_errors=True)
+
+
+def _load_user_session(upload_id: str, uid: int) -> Tuple[dict, Path]:
+    """Load a session owned by uid.
+
+    Returns (manifest, dir). Raises ValueError with a user-facing message
+    when the session is missing / expired / owned by someone else.
+    """
+    if not upload_id or len(upload_id) > 64 or not re.fullmatch(r"[A-Za-z0-9_-]+", upload_id):
+        raise ValueError("无效的上传会话")
+    sess_dir = _session_dir(upload_id)
+    m = _read_manifest(sess_dir)
+    if m is None:
+        raise ValueError("上传会话不存在或已过期")
+    if int(m.get("user_id") or 0) != uid:
+        raise ValueError("无法操作其他用户的上传会话")
+    return m, sess_dir
+
+
+@router.post("/api/uploads/init")
+async def uploads_init(request: Request):
+    uid = _require_user_id(request)
+    if uid is None:
+        return JSONResponse(status_code=401, content={"error": "未登录"})
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "请求格式错误"})
+    try:
+        resource_id = int(body.get("resourceId") or 0)
+        size = int(body.get("size") or 0)
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "参数错误"})
+    filename = str(body.get("filename") or "").strip()[:255]
+    mime = str(body.get("mime") or "") or None
+    save_watermark = parse_bool(body.get("saveWatermark"), False)
+    resume_key = str(body.get("resumeKey") or "")[:200]
+
+    ouid, err = _require_owner(request, resource_id)
+    if err is not None:
+        if ouid is None:
+            return JSONResponse(status_code=401, content={"error": err})
+        return JSONResponse(status_code=403, content={"error": err})
+    if not filename:
+        return JSONResponse(status_code=400, content={"error": "文件名不能为空"})
+    if size <= 0 or size > MAX_FILE_SIZE:
+        return JSONResponse(
+            status_code=400, content={"error": "文件大小超出限制（最大 50MB）"}
+        )
+
+    _sweep_expired_sessions()
+
+    # Resume: reuse an in-flight session for the same file of this user
+    if resume_key:
+        try:
+            for d in SESSIONS_DIR.iterdir():
+                if not d.is_dir():
+                    continue
+                m = _read_manifest(d)
+                if not m or m.get("completed"):
+                    continue
+                if (
+                    int(m.get("user_id") or 0) == uid
+                    and m.get("resume_key") == resume_key
+                    and int(m.get("resource_id") or 0) == resource_id
+                    and int(m.get("size") or -1) == size
+                    and m.get("filename") == filename
+                ):
+                    return {
+                        "uploadId": m["upload_id"],
+                        "chunkSize": int(m["chunk_size"]),
+                        "chunkCount": int(m["chunk_count"]),
+                        "received": sorted(int(i) for i in m.get("received") or []),
+                    }
+        except Exception:
+            pass
+
+    # Cap active sessions per user to bound disk usage
+    active = 0
+    try:
+        for d in SESSIONS_DIR.iterdir():
+            if not d.is_dir():
+                continue
+            m = _read_manifest(d)
+            if m and not m.get("completed") and int(m.get("user_id") or 0) == uid:
+                active += 1
+    except Exception:
+        active = 0
+    if active >= MAX_ACTIVE_SESSIONS_PER_USER:
+        return JSONResponse(
+            status_code=400, content={"error": "同时进行的上传会话过多，请稍后再试"}
+        )
+
+    upload_id = nanoid()
+    chunk_count = max(1, (size + CHUNK_SIZE - 1) // CHUNK_SIZE)
+    sess_dir = _session_dir(upload_id)
+    sess_dir.mkdir(parents=True, exist_ok=True)
+    manifest = {
+        "upload_id": upload_id,
+        "user_id": uid,
+        "resource_id": resource_id,
+        "filename": filename,
+        "mime": mime,
+        "size": size,
+        "chunk_size": CHUNK_SIZE,
+        "chunk_count": chunk_count,
+        "received": [],
+        "save_watermark": bool(save_watermark),
+        "resume_key": resume_key,
+        "created_at": now_ms(),
+        "completed": False,
+    }
+    _write_manifest(sess_dir, manifest)
+    logger.info(
+        "uploads_init: uploadId=%s uid=%s resourceId=%s file=%s size=%s chunks=%s wm=%s resume=%s",
+        upload_id, uid, resource_id, filename, size, chunk_count, save_watermark, bool(resume_key),
+    )
+    return {
+        "uploadId": upload_id,
+        "chunkSize": CHUNK_SIZE,
+        "chunkCount": chunk_count,
+        "received": [],
+    }
+
+
+@router.post("/api/uploads/{upload_id}/chunk")
+async def uploads_chunk(request: Request, upload_id: str, index: int = Query(0)):
+    uid = _require_user_id(request)
+    if uid is None:
+        return JSONResponse(status_code=401, content={"error": "未登录"})
+    try:
+        m, sess_dir = _load_user_session(upload_id, uid)
+    except ValueError as ve:
+        msg = str(ve)
+        status = 404 if "不存在" in msg else 403
+        return JSONResponse(status_code=status, content={"error": msg})
+    try:
+        index = int(index)
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "分块序号无效"})
+    chunk_count = int(m["chunk_count"])
+    chunk_size = int(m["chunk_size"])
+    size = int(m["size"])
+    if index < 0 or index >= chunk_count:
+        return JSONResponse(status_code=400, content={"error": "分块序号超出范围"})
+    if m.get("completed"):
+        return JSONResponse(status_code=400, content={"error": "上传会话已完成"})
+    expected = min(chunk_size, size - index * chunk_size)
+    try:
+        declared = int(request.headers.get("content-length") or 0)
+    except Exception:
+        declared = 0
+    if declared and declared != expected:
+        return JSONResponse(
+            status_code=400,
+            content={"error": f"分块大小不正确（应为 {expected} 字节）"},
+        )
+    try:
+        body = await request.body()
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "分块读取失败"})
+    if len(body) != expected:
+        return JSONResponse(
+            status_code=400,
+            content={"error": f"分块大小不正确（收到 {len(body)}，应为 {expected}）"},
+        )
+    part_path = sess_dir / f"{index}.part"
+    tmp_part = sess_dir / f"{index}.part.tmp"
+    tmp_part.write_bytes(body)
+    tmp_part.replace(part_path)
+    received = set(int(i) for i in m.get("received") or [])
+    received.add(index)
+    m["received"] = sorted(received)
+    _write_manifest(sess_dir, m)
+    return {"received": m["received"]}
+
+
+@router.post("/api/uploads/{upload_id}/complete")
+async def uploads_complete(request: Request, upload_id: str):
+    uid = _require_user_id(request)
+    if uid is None:
+        return JSONResponse(status_code=401, content={"error": "未登录"})
+    try:
+        m, sess_dir = _load_user_session(upload_id, uid)
+    except ValueError as ve:
+        msg = str(ve)
+        status = 404 if "不存在" in msg else 403
+        return JSONResponse(status_code=status, content={"error": msg})
+    if m.get("completed"):
+        return JSONResponse(status_code=400, content={"error": "上传会话已完成"})
+    resource_id = int(m["resource_id"])
+    filename = str(m.get("filename") or "")
+    mime = m.get("mime") or None
+    size = int(m["size"])
+    chunk_size = int(m["chunk_size"])
+    chunk_count = int(m["chunk_count"])
+    received = set(int(i) for i in m.get("received") or [])
+    do_wm = bool(m.get("save_watermark"))
+    if len(received) < chunk_count:
+        missing = [i for i in range(chunk_count) if i not in received]
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": f"还有 {len(missing)} 个分块未上传（缺少：{missing[:8]}...）"
+                if len(missing) > 8
+                else f"还有 {len(missing)} 个分块未上传（缺少：{missing}）"
+            },
+        )
+
+    ext = Path(filename).suffix
+    stored_name = f"{now_ms()}-{nanoid()}{ext}"
+    r2_key = f"uploads/{stored_name}"
+    assembled = TEMP_DIR / stored_name
+    conn = get_connection()
+    cur = conn.cursor()
+    pushed_r2_key: Optional[str] = None
+    try:
+        # Assemble chunks in order
+        total = 0
+        with assembled.open("wb") as out:
+            for i in range(chunk_count):
+                part = sess_dir / f"{i}.part"
+                data = part.read_bytes()
+                out.write(data)
+                total += len(data)
+        if total != size:
+            raise RuntimeError(f"assembled size mismatch: {total} != {size}")
+
+        # Push to R2 (retry once — cross-border pushes can fail transiently)
+        content_type = mime or "application/octet-stream"
+        last_exc: Optional[Exception] = None
+        for attempt in range(2):
+            try:
+                r2.upload_file(r2_key, assembled, content_type)
+                last_exc = None
+                break
+            except Exception as ex:
+                last_exc = ex
+                logger.warning(
+                    "chunked complete: R2 attempt %s failed uploadId=%s file=%s error=%s",
+                    attempt + 1, upload_id, filename, ex,
+                )
+        if last_exc is not None:
+            raise RuntimeError(f"R2 upload failed: {last_exc}")
+        pushed_r2_key = r2_key
+        url_path = r2.build_public_url(r2_key)
+
+        file_id, is_image = _insert_resource_file(
+            cur, resource_id, filename, mime, r2_key, url_path, size, assembled, do_wm
+        )
+        if is_image:
+            _auto_set_cover_if_needed(cur, resource_id, file_id)
+        conn.commit()
+        m["completed"] = True
+        _write_manifest(sess_dir, m)
+        logger.info(
+            "chunked complete: uploadId=%s fileId=%s resourceId=%s file=%s size=%s",
+            upload_id, file_id, resource_id, filename, size,
+        )
+        return {
+            "ok": True,
+            "files": [
+                {
+                    "id": file_id,
+                    "originalName": filename,
+                    "size": size,
+                    "mime": mime,
+                    "urlPath": url_path,
+                }
+            ],
+        }
+    except Exception as ex:
+        logger.exception(
+            "uploads_complete failed: uploadId=%s file=%s size=%s error=%s",
+            upload_id, filename, size, ex,
+        )
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        if pushed_r2_key:
+            try:
+                r2.delete_object(pushed_r2_key)
+            except Exception:
+                pass
+        return JSONResponse(status_code=400, content={"error": "上传失败"})
+    finally:
+        try:
+            assembled.unlink(missing_ok=True)
+        except Exception:
+            pass
+        shutil.rmtree(sess_dir, ignore_errors=True)
 
 
 @router.post("/api/watermark/check")

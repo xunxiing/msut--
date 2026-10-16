@@ -88,6 +88,7 @@
       </div>
       <template #footer>
         <div class="sheet-footer">
+          <el-button type="danger" plain :disabled="resourceSheet.saving" @click="removeResource">删除作品</el-button>
           <el-button @click="resourceSheet.visible = false">取消</el-button>
           <el-button type="primary" :loading="resourceSheet.saving" @click="saveResource">保存</el-button>
         </div>
@@ -117,6 +118,7 @@
       </div>
       <template #footer>
         <div class="sheet-footer">
+          <el-button v-if="!tutorialSheet.isCreating" type="danger" plain :disabled="tutorialSheet.loading" @click="removeTutorial">删除教程</el-button>
           <el-button @click="tutorialSheet.visible = false">取消</el-button>
           <el-button type="primary" :loading="tutorialSheet.loading" @click="submitTutorial">保存</el-button>
         </div>
@@ -129,13 +131,13 @@
 import { onMounted, reactive, ref, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  listMyResources, updateResourceMeta,
-  setResourceCover, listResourceImages,
+  listMyResources, updateResourceMeta, deleteResource,
+  setResourceCover, listResourceImages, uploadFilesMixed,
   type MyResourceItem, type ResourceFile,
 } from '../api/resources'
 import { http } from '../api/http'
 import {
-  createTutorial, getTutorial, listMyTutorials, updateTutorial,
+  createTutorial, getTutorial, listMyTutorials, updateTutorial, deleteTutorial,
   type MyTutorialItem,
 } from '../api/tutorials'
 import ResourceEditor from '../components/ResourceEditor.vue'
@@ -196,10 +198,9 @@ async function saveResource() {
     if (resourceSheet.hasNewFiles && editorRef.value) {
       const newFiles = editorRef.value.getNewFiles()
       if (newFiles.length) {
-        const fd = new FormData()
-        fd.append('resourceId', String(resourceSheet.id))
-        for (const f of newFiles) { const raw = (f as any).raw; if (raw) fd.append('files', raw) }
-        await http.post('/files/upload', fd)
+        const raws: File[] = []
+        for (const f of newFiles) { const raw = (f as any).raw; if (raw) raws.push(raw) }
+        if (raws.length) await uploadFilesMixed(resourceSheet.id, raws)
       }
     }
     if (resourceSheet.hasNewImages && editorRef.value) {
@@ -235,6 +236,19 @@ async function setCover(fileId: number) {
     resourceSheet.coverFileId = res.coverFileId ?? null
     ElMessage.success('封面已更新')
   } catch (e: any) { ElMessage.error(e?.response?.data?.error || '设置失败') }
+}
+
+async function removeResource() {
+  if (!resourceSheet.id) return
+  try { await ElMessageBox.confirm('确定删除这个存档吗？所有文件都会被删除，无法恢复。', '提示', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }) } catch { return }
+  resourceSheet.saving = true
+  try {
+    await deleteResource(resourceSheet.id)
+    ElMessage.success('已删除')
+    resourceSheet.visible = false
+    await fetchResources()
+  } catch (e: any) { ElMessage.error(e?.response?.data?.error || '删除失败') }
+  finally { resourceSheet.saving = false }
 }
 
 // ---- Tutorial sheet ----
@@ -284,6 +298,19 @@ async function submitTutorial() {
       await fetchTutorials()
     }
   } catch (e: any) { ElMessage.error(e?.response?.data?.error || '保存失败') }
+  finally { tutorialSheet.loading = false }
+}
+
+async function removeTutorial() {
+  if (!tutorialSheet.id) return
+  try { await ElMessageBox.confirm('确定删除这个教程吗？删除后无法恢复。', '提示', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }) } catch { return }
+  tutorialSheet.loading = true
+  try {
+    await deleteTutorial(tutorialSheet.id)
+    ElMessage.success('已删除')
+    tutorialSheet.visible = false
+    await fetchTutorials()
+  } catch (e: any) { ElMessage.error(e?.response?.data?.error || '删除失败') }
   finally { tutorialSheet.loading = false }
 }
 

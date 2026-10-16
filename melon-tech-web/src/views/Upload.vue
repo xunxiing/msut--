@@ -98,7 +98,7 @@
         </el-card>
 
         <el-button type="primary" @click="onSubmit" :loading="submitting" size="large" round class="submit-btn">
-          {{ submitting ? '上传中…' : '发布作品' }}
+          {{ submitting ? (uploadPct > 0 ? `上传中 ${uploadPct}%` : '提交中…') : '发布作品' }}
         </el-button>
         <el-button @click="$router.back()" size="large" round plain class="cancel-btn">取消</el-button>
       </div>
@@ -126,7 +126,7 @@ import { ref, computed, onBeforeUnmount } from 'vue'
 import { onBeforeRouteLeave, useRouter } from 'vue-router'
 import type { FormInstance, FormRules, UploadInstance, UploadUserFile } from 'element-plus'
 import { ElMessage } from 'element-plus'
-import { createResource, optimizeContent, classifyResource } from '../api/resources'
+import { createResource, optimizeContent, classifyResource, uploadFileResumable, RESUMABLE_THRESHOLD } from '../api/resources'
 import { http } from '../api/http'
 import { UploadFilled, MagicStick, Plus, Picture, CircleCheckFilled } from '@element-plus/icons-vue'
 
@@ -153,6 +153,8 @@ const slug = ref('')
 const shareUrl = ref('')
 // 已创建但文件上传失败的作品 ID；重试时直接复用，避免重复建作品
 const createdResourceId = ref(0)
+// 分块上传进度（0-100，0 表示无进行中的传输）
+const uploadPct = ref(0)
 
 const coverPreview = computed(() => {
   const first = coverFileList.value[0]
@@ -204,14 +206,29 @@ async function onSubmit() {
     }
     const resourceId = createdResourceId.value
 
-    const fd = new FormData()
-    fd.append('resourceId', String(resourceId))
-    fd.append('saveWatermark', String(saveWatermark.value))
+    const raws: File[] = []
     for (const f of fileList.value) {
-      const raw = (f as any).raw
-      if (raw) fd.append('files', raw)
+      const raw = (f as any).raw as File | undefined
+      if (raw) raws.push(raw)
     }
-    await http.post('/files/upload', fd)
+    uploadPct.value = 1
+    const small: File[] = []
+    const large: File[] = []
+    for (const f of raws) (f.size > RESUMABLE_THRESHOLD ? large : small).push(f)
+    if (small.length) {
+      const fd = new FormData()
+      fd.append('resourceId', String(resourceId))
+      fd.append('saveWatermark', String(saveWatermark.value))
+      for (const f of small) fd.append('files', f)
+      await http.post('/files/upload', fd)
+    }
+    for (const f of large) {
+      await uploadFileResumable(resourceId, f, {
+        saveWatermark: saveWatermark.value,
+        onProgress: (pct) => { uploadPct.value = pct },
+      })
+    }
+    uploadPct.value = 0
 
     if (coverFileList.value.length) {
       const cfd = new FormData()

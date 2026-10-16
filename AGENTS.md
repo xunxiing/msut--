@@ -38,6 +38,11 @@ Additional tool routes (non-breaking additions):
   - `GET /api/notifications/unread` → latest notifications for bell preview (`total` is unread count)
   - `POST /api/notifications/read-all` → mark all notifications as read
 - Watermark check (anonymous): `POST /api/watermark/check` with multipart `file` (`.melsave`/`.zip`). Returns `{ watermark, length, embedded, matches: [{ fileId, resourceId, resourceSlug, resourceTitle, originalName, urlPath }] }`.
+- Chunked / resumable uploads (authenticated; for large files, avoids CF 100s request timeout):
+  - `POST /api/uploads/init` with JSON `{ resourceId, filename, mime, size, saveWatermark?, resumeKey? }` → `{ uploadId, chunkSize, chunkCount, received }`. Max 50MB per file, 4MB per chunk, 5 active sessions per user, 24h session TTL. If `resumeKey` (client-generated `name:size:lastModified`) matches an existing incomplete session of the same user/file, the session is resumed and `received` lists already-uploaded chunk indices.
+  - `POST /api/uploads/{uploadId}/chunk?index=N` — raw `application/octet-stream` body (exact chunk size required); idempotent; returns `{ received }`.
+  - `POST /api/uploads/{uploadId}/complete` — assembles chunks, pushes the object to R2, inserts the `resource_files` row (with optional watermark), auto-sets cover for first image; response mirrors `/api/files/upload`: `{ ok, files: [{ id, originalName, size, mime, urlPath }] }`.
+  - Sessions live on local disk under the system temp dir (`msut_upload_sessions/<uploadId>/manifest.json` + `<index>.part`); no DB table involved.
 - Tutorial management (authenticated, per-user):
  - `GET /api/my/tutorials` → `{ items: [{ id, slug, title, description, created_at, updated_at }] }`
  - `PATCH /api/tutorials/:id` → update title/description/content of a tutorial owned by the current user, and refresh its embeddings for RAG

@@ -300,6 +300,12 @@ MSUT 主站是一个基于 FastAPI 构建的文件共享和资源管理平台，
 
 针对大文件（移动端 / 弱网环境）的断点续传上传，分 4MB 块串行传输；每块独立请求，失败只需重传缺的块。前端对 >4MB 的文件自动走此通道。
 
+#### 预签名直传（浏览器 → R2 单跳，默认大文件通道）
+
+- **获取预签名 URL**: `POST /api/uploads/presign`，JSON `{ filename, mime, size }` → `{ key, url, headers, expiresIn }`。签名锁死 `Content-Type` 与 `Cache-Control`（immutable 1 年），浏览器 PUT 时必须原样携带，否则 403。单文件 ≤ 50MB，URL 15 分钟有效。
+- **确认入库**: `POST /api/uploads/commit`，JSON `{ resourceId, key, filename, mime, size, saveWatermark }` → 服务端 `head_object` 校验存在与大小后写入 `resource_files`（首图自动设封面；`saveWatermark` + `.melsave`/`.zip` 时后台任务下载并提取水印）。响应同 `/api/files/upload`。key 必须是 `uploads/` 下一级路径。
+- 桶已配置 CORS（允许 `web.msut.top` 与本地开发源发起 PUT）。前端直传失败自动回退分块续传。
+
 #### 初始化上传会话
 
 - **路径**: `POST /api/uploads/init`

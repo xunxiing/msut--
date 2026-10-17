@@ -950,6 +950,183 @@ async def uploads_complete(request: Request, upload_id: str):
         shutil.rmtree(sess_dir, ignore_errors=True)
 
 
+# ================= Presigned direct-to-R2 uploads =================
+# Flow: browser asks for a presigned PUT url -> PUTs the file straight to R2
+# (single cross-border hop, real progress bar, no tunnel relay) -> then calls
+# /commit, where the server verifies the object with head_object and inserts
+# the resource_files row. Falls back to the legacy/chunked paths on failure.
+
+
+@router.post("/api/uploads/presign")
+async def uploads_presign(request: Request):
+    uid = _require_user_id(request)
+    if uid is None:
+        return JSONResponse(status_code=401, content={"error": "请先登录"})
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    filename = str(body.get("filename") or "").strip()
+    mime = str(body.get("mime") or "") or "application/octet-stream"
+    size = int(body.get("size") or 0)
+    if not filename:
+        return JSONResponse(status_code=400, content={"error": "文件名不能为空"})
+    if size <= 0 or size > MAX_FILE_SIZE:
+        return JSONResponse(
+            status_code=400, content={"error": "文件大小超出限制（50MB）"}
+        )
+    ext = Path(filename).suffix.lower() or ""
+    stored_name = f"{now_ms()}-{nanoid()}{ext}"
+    r2_key = f"uploads/{stored_name}"
+    try:
+        url = r2.presign_put(r2_key, mime, expires=900)
+    except Exception as ex:
+        logger.exception("presign failed: name=%s error=%s", filename, ex)
+        return JSONResponse(
+            status_code=500, content={"error": "获取上传链接失败，请重试"}
+        )
+    return {
+        "key": r2_key,
+        "url": url,
+        "headers": {
+            "Content-Type": mime,
+            "Cache-Control": "public, max-age=31536000, immutable",
+        },
+        "expiresIn": 900,
+    }
+
+
+def _wm_background_task(file_id: int, r2_key: str) -> None:
+    """BackgroundTasks job: download an R2 object and backfill its watermark."""
+    conn = None
+    tmp = None
+    try:
+        tmp = TEMP_DIR / f"wm_{now_ms()}_{nanoid()}"
+        if not r2.download_to_file(r2_key, tmp):
+            logger.warning("wm background: download failed fileId=%s", file_id)
+            return
+        raw_seq, embedded = extract_sequence_from_melsave(str(tmp))
+        seq_canon = canonicalize([str(x) for x in raw_seq])
+        wm_u64 = int(fnv1a64(seq_canon))
+        wm_i64 = _u64_to_i64(wm_u64)
+        emb_i64 = _u64_to_i64(int(embedded)) if embedded is not None else None
+        conn = get_connection()
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO file_watermarks (file_id, watermark_u64, seq_len, embedded_watermark)
+            VALUES (?, ?, ?, ?)
+            """,
+            (file_id, wm_i64, int(len(seq_canon)), emb_i64),
+        )
+        conn.commit()
+        logger.info(
+            "wm background: saved fileId=%s wm=%s len=%s embedded=%s",
+            file_id, wm_i64, len(seq_canon), emb_i64,
+        )
+    except Exception as ex:
+        logger.exception("wm background failed: fileId=%s error=%s", file_id, ex)
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        if tmp is not None:
+            try:
+                tmp.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+
+@router.post("/api/uploads/commit")
+async def uploads_commit(request: Request, background_tasks: BackgroundTasks):
+    uid = _require_user_id(request)
+    if uid is None:
+        return JSONResponse(status_code=401, content={"error": "请先登录"})
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    rid = int(body.get("resourceId") or 0)
+    uid2, err = _require_owner(request, rid)
+    if err is not None:
+        if uid2 is None:
+            return JSONResponse(status_code=401, content={"error": err})
+        return JSONResponse(status_code=403, content={"error": err})
+    key = str(body.get("key") or "")
+    filename = str(body.get("filename") or "").strip()
+    mime = str(body.get("mime") or "") or None
+    save_wm = parse_bool(body.get("saveWatermark"), False)
+    if not rid or not key or not filename:
+        return JSONResponse(status_code=400, content={"error": "参数不完整"})
+    if not key.startswith("uploads/") or "/" in key[len("uploads/"):]:
+        return JSONResponse(status_code=400, content={"error": "非法的对象路径"})
+    stored_name = key[len("uploads/"):]
+    # Verify the object actually landed in R2 (and get the real size).
+    head = r2.head_object(key)
+    if head is None:
+        return JSONResponse(
+            status_code=400, content={"error": "文件尚未上传完成，请重试"}
+        )
+    real_size = int(head.get("ContentLength") or 0)
+    if real_size <= 0:
+        return JSONResponse(status_code=400, content={"error": "上传的文件为空"})
+    url_path = r2.build_public_url(key)
+    conn = None
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
+        file_id, is_image = _insert_resource_file(
+            cur,
+            rid,
+            filename,
+            mime,
+            key,
+            url_path,
+            real_size,
+            TEMP_DIR / "nonexistent",  # no local temp file for direct uploads
+            False,  # watermark handled via background task below
+        )
+        suffix = Path(filename).suffix.lower()
+        if save_wm and suffix in {".melsave", ".zip"}:
+            background_tasks.add_task(_wm_background_task, file_id, key)
+        if is_image:
+            _auto_set_cover_if_needed(cur, rid, file_id)
+        conn.commit()
+        logger.info(
+            "uploads_commit ok: resourceId=%s fileId=%s key=%s size=%s wm=%s",
+            rid, file_id, key, real_size, save_wm,
+        )
+        return {
+            "ok": True,
+            "files": [
+                {
+                    "id": file_id,
+                    "originalName": filename,
+                    "size": real_size,
+                    "mime": mime,
+                    "urlPath": url_path,
+                }
+            ],
+        }
+    except Exception as ex:
+        logger.exception(
+            "uploads_commit failed: resourceId=%s key=%s error=%s", rid, key, ex
+        )
+        if conn is not None:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        return JSONResponse(status_code=400, content={"error": "上传失败"})
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @router.post("/api/watermark/check")
 async def check_watermark(file: UploadFile = File(...)):
     # Accept one .melsave (or .zip) and return computed watermark and DB matches

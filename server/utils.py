@@ -29,8 +29,13 @@ def from_env(v: Optional[str]) -> str:
     return (v or "").strip().lower()
 
 
-def parse_bool(v: Optional[str], fallback: bool) -> bool:
-    s = from_env(v)
+def parse_bool(v, fallback: bool) -> bool:
+    # Accepts env strings, JSON bools and ints (JSON body fields).
+    if isinstance(v, bool):
+        return v
+    if v is None:
+        return fallback
+    s = from_env(str(v))
     if s in {"1", "true", "yes", "on", "y"}:
         return True
     if s in {"0", "false", "no", "off", "n", ""}:

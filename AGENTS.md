@@ -43,6 +43,10 @@ Additional tool routes (non-breaking additions):
   - `POST /api/uploads/{uploadId}/chunk?index=N` — raw `application/octet-stream` body (exact chunk size required); idempotent; returns `{ received }`.
   - `POST /api/uploads/{uploadId}/complete` — assembles chunks, pushes the object to R2, inserts the `resource_files` row (with optional watermark), auto-sets cover for first image; response mirrors `/api/files/upload`: `{ ok, files: [{ id, originalName, size, mime, urlPath }] }`.
   - Sessions live on local disk under the system temp dir (`msut_upload_sessions/<uploadId>/manifest.json` + `<index>.part`); no DB table involved.
+- Presigned direct-to-R2 uploads (authenticated; default path for files >4MB, single cross-border hop, real browser progress; falls back to chunked upload on failure):
+  - `POST /api/uploads/presign` with JSON `{ filename, mime, size }` → `{ key, url, headers, expiresIn }`. The presigned PUT URL locks `Content-Type` + `Cache-Control` (immutable 1y) via SigV4; browser must send exactly those headers. Max 50MB, 15min expiry.
+  - `POST /api/uploads/commit` with JSON `{ resourceId, key, filename, mime, size, saveWatermark? }` → verifies via `head_object` (existence + size match), inserts the `resource_files` row, auto-sets cover for first image, schedules watermark extraction as a background task (downloads the object from R2 to temp when `saveWatermark` + `.melsave`/`.zip`). Response mirrors `/api/files/upload`. Keys must be under `uploads/` and single-level.
+  - Bucket CORS (allows browser PUT from `web.msut.top` + local dev origins, headers `content-type`/`cache-control`) is configured on the R2 bucket via `put_bucket_cors`.
 - Tutorial management (authenticated, per-user):
  - `GET /api/my/tutorials` → `{ items: [{ id, slug, title, description, created_at, updated_at }] }`
  - `PATCH /api/tutorials/:id` → update title/description/content of a tutorial owned by the current user, and refresh its embeddings for RAG

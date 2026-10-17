@@ -107,6 +107,48 @@ def get_presigned_download_url(
     return url
 
 
+def presign_put(
+    key: str,
+    content_type: str,
+    expires: int = 900,
+    cache_control: str = "public, max-age=31536000, immutable",
+) -> str:
+    """Presign a browser-direct PUT upload.
+
+    The client MUST send the exact Content-Type / Cache-Control headers
+    returned alongside the URL or the signature check fails.
+    """
+    client = _get_client()
+    params = {
+        "Bucket": R2_BUCKET,
+        "Key": key,
+        "ContentType": content_type,
+        "CacheControl": cache_control,
+    }
+    url = client.generate_presigned_url("put_object", Params=params, ExpiresIn=expires)
+    return url
+
+
+def head_object(key: str) -> Optional[dict]:
+    """Return object metadata dict, or None if the object does not exist."""
+    client = _get_client()
+    try:
+        return client.head_object(Bucket=R2_BUCKET, Key=key)
+    except Exception:
+        return None
+
+
+def download_to_file(key: str, dest_path: Path) -> bool:
+    """Download an object to a local file. Returns success."""
+    client = _get_client()
+    try:
+        client.download_file(R2_BUCKET, key, str(dest_path))
+        return True
+    except Exception as ex:
+        logger.error("R2 download failed: key=%s error=%s", key, ex)
+        return False
+
+
 def delete_object(key: str):
     client = _get_client()
     client.delete_object(Bucket=R2_BUCKET, Key=key)

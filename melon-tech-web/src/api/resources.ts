@@ -1,3 +1,4 @@
+import axios from "axios"
 import { http } from "./http"
 
 export type ResourceFile = {
@@ -137,8 +138,55 @@ export async function uploadFileResumable(
   }
 }
 
+// Browser-direct upload to R2 via a presigned URL: single cross-border hop,
+// real progress bar, no server relay. On failure (e.g. CORS-blocked WebView)
+// the caller falls back to the chunked path.
+export async function uploadFileDirect(
+  resourceId: number,
+  file: File,
+  opts: ResumableUploadOpts = {},
+) {
+  const mime = file.type || "application/octet-stream"
+  const { data: pre } = await http.post("/uploads/presign", {
+    filename: file.name,
+    mime,
+    size: file.size,
+  })
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await axios.put(pre.url, file, {
+        headers: pre.headers,
+        onUploadProgress: (ev: any) => {
+          const pct = Math.min(
+            99,
+            Math.round(((ev.loaded || 0) / (ev.total || file.size)) * 100),
+          )
+          opts.onProgress?.(pct)
+        },
+      })
+      break
+    } catch (e) {
+      if (attempt >= 3) throw e
+      await new Promise((r) => setTimeout(r, 1000 * attempt))
+    }
+  }
+  const { data } = await http.post("/uploads/commit", {
+    resourceId,
+    key: pre.key,
+    filename: file.name,
+    mime,
+    size: file.size,
+    saveWatermark: !!opts.saveWatermark,
+  })
+  opts.onProgress?.(100)
+  return data as {
+    ok: boolean
+    files: { id: number; originalName: string; size: number; mime: string | null; urlPath: string }[]
+  }
+}
+
 // Upload a mixed batch: small files in one legacy request, large files via
-// the chunked/resumable API with per-file progress.
+// presigned direct-to-R2 upload (chunked/resumable as fallback).
 export async function uploadFilesMixed(
   resourceId: number,
   files: File[],
@@ -148,7 +196,14 @@ export async function uploadFilesMixed(
   const large: File[] = []
   for (const f of files) (f.size > RESUMABLE_THRESHOLD ? large : small).push(f)
   if (small.length) await uploadFiles(resourceId, small)
-  for (const f of large) await uploadFileResumable(resourceId, f, opts)
+  for (const f of large) {
+    try {
+      await uploadFileDirect(resourceId, f, opts)
+    } catch {
+      // Direct PUT failed (CORS / expired signature) -> resumable chunks
+      await uploadFileResumable(resourceId, f, opts)
+    }
+  }
 }
 
 export async function listMyResources() {

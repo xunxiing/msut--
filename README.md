@@ -205,6 +205,11 @@ Agent LLM 相关（用于智能对话 + 代码生成）：
 - `POST /api/uploads/{uploadId}/chunk?index=N` - 上传单个 4MB 分块（原始二进制体，幂等）
 - `POST /api/uploads/{uploadId}/complete` - 拼装、推 R2、入库，响应结构同 `/api/files/upload`
 
+预签名直传（>4MB 默认通道，浏览器直连 R2 单跳；详见 `API文档.md`）：
+
+- `POST /api/uploads/presign` - 生成预签名 PUT URL（签名锁定 Content-Type + Cache-Control，15 分钟有效）
+- `POST /api/uploads/commit` - head_object 校验后入库（首图自动设封面；水印后台提取）；key 须为 `uploads/` 下一级
+
 资源图片 / 封面管理（新增，保持兼容，不影响旧接口）：
 
 - `POST /api/resources/:id/images/upload` - 为指定资源上传一批图片文件（仅资源作者，最多 10 个，单文件 50MB，自动写入 `resource_files`）。

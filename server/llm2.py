@@ -23,7 +23,7 @@ _PRESET_TAGS = [
 ]
 
 
-def _chat(messages: list, max_tokens: int = 256) -> Optional[str]:
+def _chat(messages: list, max_tokens: int = 256, timeout: int = 60) -> Optional[str]:
     if not _LLM2_BASE or not _LLM2_KEY:
         return None
     try:
@@ -36,7 +36,7 @@ def _chat(messages: list, max_tokens: int = 256) -> Optional[str]:
                 "max_tokens": max_tokens,
                 "temperature": 0.3,
             },
-            timeout=60,
+            timeout=timeout,
         )
         r.raise_for_status()
         data = r.json()
@@ -52,7 +52,7 @@ def classify_resource(title: str, description: str = "") -> List[str]:
     raw = _chat([
         {"role": "system", "content": _SYSTEM_PROMPT},
         {"role": "user", "content": user_msg},
-    ])
+    ], timeout=20)
     if not raw:
         return []
     try:

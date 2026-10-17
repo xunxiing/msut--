@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from fastapi import APIRouter, File, Form, Query, Request, UploadFile, Body
+from fastapi import APIRouter, BackgroundTasks, File, Form, Query, Request, UploadFile, Body
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 
 from .auth import get_current_user
@@ -200,9 +200,37 @@ def _auto_set_cover_if_needed(cur, resourceId: int, first_image_id: int) -> None
         )
 
 
+def _classify_resource_task(rid: int, title: str, description: str) -> None:
+    """Background LLM auto-tagging (runs in a worker thread).
+
+    Only fills tags when the resource has none, so it never clobbers
+    tags the user persisted via POST /api/resources/:id/classify.
+    """
+    try:
+        from .llm2 import classify_resource, tags_to_json
+
+        new_tags = classify_resource(title, description)
+        if new_tags:
+            conn = get_connection()
+            try:
+                cur = conn.execute(
+                    "UPDATE resources SET tags = ? WHERE id = ? "
+                    "AND (tags IS NULL OR tags = '' OR tags = '[]')",
+                    (tags_to_json(new_tags), rid),
+                )
+                conn.commit()
+                if cur.rowcount:
+                    logger.info("background classify: rid=%s tags=%s", rid, new_tags)
+            finally:
+                conn.close()
+    except Exception:
+        logger.exception("background classify failed: rid=%s", rid)
+
+
 @router.post("/api/resources")
 async def create_resource(
     request: Request,
+    background_tasks: BackgroundTasks,
     title: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
     usage: Optional[str] = Form(None),
@@ -235,22 +263,18 @@ async def create_resource(
         (slug, title, description or "", usage or "", uid),
     )
     conn.commit()
+    conn.close()
     rid = int(info.lastrowid)
-    try:
-        from .llm2 import classify_resource, tags_to_json, tags_from_json
-        tags = classify_resource(title, description or "")
-        if tags:
-            conn.execute("UPDATE resources SET tags = ? WHERE id = ?", (tags_to_json(tags), rid))
-            conn.commit()
-    except Exception:
-        tags = []
+    # LLM auto-tagging runs in the background so the create response
+    # (and the whole event loop) is not blocked by the slow LLM call.
+    background_tasks.add_task(_classify_resource_task, rid, title, description or "")
     return {
         "id": rid,
         "slug": slug,
         "title": title,
         "description": description or "",
         "usage": usage or "",
-        "tags": tags or [],
+        "tags": [],
         "shareUrl": _share_url(slug),
     }
 
@@ -1552,8 +1576,12 @@ async def optimize_resource_content(request: Request):
     if not title:
         return JSONResponse(status_code=400, content={"error": "标题不能为空"})
     from .llm2 import optimize_content, tags_to_json
-    result = optimize_content(title, description, usage)
+    from starlette.concurrency import run_in_threadpool
+    # Run the blocking LLM call in a worker thread so the event loop
+    # (and every other user) keeps working while this request waits.
+    result = await run_in_threadpool(optimize_content, title, description, usage)
     if result.get("tags") and resource_id:
+        conn = None
         try:
             rid = int(resource_id)
             conn = get_connection()
@@ -1561,6 +1589,9 @@ async def optimize_resource_content(request: Request):
             conn.commit()
         except Exception:
             pass
+        finally:
+            if conn is not None:
+                conn.close()
     return result
 
 
@@ -1579,9 +1610,14 @@ async def classify_resource_endpoint(request: Request, rid: int):
     if int(row["created_by"] or 0) != uid:
         return JSONResponse(status_code=403, content={"error": "无权操作"})
     from .llm2 import classify_resource, tags_to_json
-    tags = classify_resource(row["title"], row["description"] or "")
+    from starlette.concurrency import run_in_threadpool
+    # Do not block the event loop while the LLM call runs.
+    tags = await run_in_threadpool(
+        classify_resource, row["title"], row["description"] or ""
+    )
     conn.execute("UPDATE resources SET tags = ? WHERE id = ?", (tags_to_json(tags), rid))
     conn.commit()
+    conn.close()
     return {"tags": tags}
 
 

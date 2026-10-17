@@ -1247,6 +1247,56 @@ def delete_resource(request: Request, rid: int):
     return {"ok": True}
 
 
+@router.delete("/api/files/{fid}")
+def delete_file(request: Request, fid: int):
+    """删除作品中的单个文件（仅作品作者）。前端抽屉里的"删除文件"按钮调用。"""
+    uid = _require_user_id(request)
+    if uid is None:
+        return JSONResponse(status_code=401, content={"error": "未登录"})
+    conn = get_connection()
+    cur = conn.cursor()
+    f = cur.execute(
+        """
+        SELECT f.id, f.resource_id, f.stored_name, r.created_by, r.cover_file_id
+        FROM resource_files f
+        JOIN resources r ON r.id = f.resource_id
+        WHERE f.id = ?
+        """,
+        (fid,),
+    ).fetchone()
+    if not f:
+        return JSONResponse(status_code=404, content={"error": "文件不存在"})
+    if int(f["created_by"] or 0) != uid:
+        return JSONResponse(
+            status_code=403, content={"error": "无法操作其他用户的文件"}
+        )
+    # 若被删文件是封面，先清空封面引用
+    if f["cover_file_id"] is not None and int(f["cover_file_id"]) == fid:
+        cur.execute(
+            "UPDATE resources SET cover_file_id = NULL WHERE id = ?",
+            (f["resource_id"],),
+        )
+    cur.execute("DELETE FROM resource_files WHERE id = ?", (fid,))
+    conn.commit()
+    stored = f["stored_name"] or ""
+    try:
+        if "/" in stored:
+            r2.delete_object(stored)
+        elif stored:
+            path = UPLOAD_DIR / stored
+            if path.exists():
+                path.unlink()
+    except Exception:
+        logger.warning("delete_file: cleanup failed for %s", stored)
+    logger.info(
+        "delete_file: fileId=%s resourceId=%s by uid=%s",
+        fid,
+        f["resource_id"],
+        uid,
+    )
+    return {"ok": True}
+
+
 # Early alias to ensure static '/api/resources/likes' matches before dynamic '/api/resources/{slug}'.
 # This delegates to the canonical handler defined later in this file.
 @router.get("/api/resources/likes")

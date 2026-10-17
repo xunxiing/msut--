@@ -197,6 +197,7 @@ Agent LLM 相关（用于智能对话 + 代码生成）：
   - 字段名：`files`（最多 10 个文件，单文件最大 50MB）
   - 可选表单字段：`saveWatermark`（布尔），用于对 `.melsave` / `.zip` 进行水印提取并入库
 - `GET /api/files/:id/download` - 下载文件，`Content-Disposition` 采用 UTF-8 百分号编码文件名
+- `DELETE /api/files/:id` - 删除单个文件（仅作者；若为封面则自动清空 `cover_file_id`；级联水印记录；移除 R2 对象）
 
 分块上传 / 断点续传（大文件推荐，详见 `API文档.md`）：
 

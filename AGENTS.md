@@ -15,7 +15,7 @@ Scope: This AGENTS.md applies to the entire repository.
   - Auth: `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`
   - Protected ping: `GET /api/private/ping`
   - Resources: `GET /api/resources`, `POST /api/resources`, `GET /api/resources/:slug`, `PATCH /api/resources/:id`, `DELETE /api/resources/:id`
-- Files: `POST /api/files/upload`, `GET /api/files/:id/download`
+- Files: `POST /api/files/upload`, `GET /api/files/:id/download`, `DELETE /api/files/:id` (owner-only single-file delete; clears `cover_file_id` if the deleted file is the cover; cascades the watermark row; removes the R2 object).
   - Upload accepts multipart field `files` (<=10, 50MB each). Optional form field `saveWatermark` (boolean) enables extracting a watermark from `.melsave` uploads and persisting it for later checks.
 - Error shape must be `{ error: string }` (not `{ detail: ... }`).
 - Cookie name must remain `token`. Use `utils.cookie_kwargs()` to preserve `SameSite`/`Secure` parity with env flags.

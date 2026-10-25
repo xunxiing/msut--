@@ -120,6 +120,65 @@ def private_ping(request: Request):
     return {"pong": True}
 
 
+@app.get("/robots.txt")
+def get_robots_txt():
+    body = (
+        "User-agent: *\n"
+        "Allow: /\n"
+        "Disallow: /dashboard\n"
+        "Disallow: /my/\n"
+        "Disallow: /m/my/\n"
+        "Disallow: /upload\n"
+        "Disallow: /api/\n\n"
+        "Sitemap: https://web.msut.top/sitemap.xml\n"
+    )
+    return Response(content=body, media_type="text/plain; charset=utf-8")
+
+
+@app.get("/sitemap.xml")
+def get_sitemap_xml():
+    base_url = "https://web.msut.top"
+    urls = [
+        {"loc": f"{base_url}/", "changefreq": "daily", "priority": "1.0"},
+        {"loc": f"{base_url}/resources", "changefreq": "daily", "priority": "0.9"},
+        {"loc": f"{base_url}/tutorials", "changefreq": "weekly", "priority": "0.8"},
+        {"loc": f"{base_url}/tutorials/library", "changefreq": "weekly", "priority": "0.8"},
+        {"loc": f"{base_url}/dsl", "changefreq": "monthly", "priority": "0.7"},
+        {"loc": f"{base_url}/watermark", "changefreq": "monthly", "priority": "0.7"},
+        {"loc": f"{base_url}/about", "changefreq": "monthly", "priority": "0.5"},
+    ]
+    try:
+        from .db import get_connection
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT slug, created_at FROM resources ORDER BY id DESC LIMIT 5000")
+        for row in cur.fetchall():
+            slug = row["slug"]
+            created = row["created_at"]
+            lastmod = created.split(" ")[0] if created else None
+            item = {"loc": f"{base_url}/share/{slug}", "changefreq": "weekly", "priority": "0.8"}
+            if lastmod:
+                item["lastmod"] = lastmod
+            urls.append(item)
+    except Exception as e:
+        logging.getLogger("msut.app").warning("Failed to load resources for sitemap: %s", e)
+
+    xml_lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+    ]
+    for u in urls:
+        xml_lines.append("  <url>")
+        xml_lines.append(f"    <loc>{u['loc']}</loc>")
+        if "lastmod" in u:
+            xml_lines.append(f"    <lastmod>{u['lastmod']}</lastmod>")
+        xml_lines.append(f"    <changefreq>{u['changefreq']}</changefreq>")
+        xml_lines.append(f"    <priority>{u['priority']}</priority>")
+        xml_lines.append("  </url>")
+    xml_lines.append("</urlset>")
+    return Response(content="\n".join(xml_lines), media_type="application/xml; charset=utf-8")
+
+
 class SPAStaticFiles(StaticFiles):
     """StaticFiles subclass that falls back to index.html for SPA routing."""
 

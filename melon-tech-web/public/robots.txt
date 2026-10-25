@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /my/
+Disallow: /m/my/
+Disallow: /upload
+Disallow: /api/
+
+Sitemap: https://web.msut.top/sitemap.xml

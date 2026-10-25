@@ -18,11 +18,12 @@
       </button>
 
       <el-menu-item index="/" class="brand">🍉 甜瓜联合科技</el-menu-item>
-      <el-menu-item index="/about" class="nav-item">关于</el-menu-item>
-      <el-menu-item index="/dsl" class="nav-item">DSL 工具</el-menu-item>
-      <el-menu-item index="/tutorials" class="nav-item">教程中心 <span class="ai-badge">AI+</span></el-menu-item>
-      <el-menu-item index="/watermark" class="nav-item">水印检测</el-menu-item>
+      <el-menu-item index="/daily" class="nav-item">🔥 每日推荐</el-menu-item>
       <el-menu-item index="/resources" class="nav-item">文件库</el-menu-item>
+      <el-menu-item index="/tutorials" class="nav-item">教程中心 <span class="ai-badge">AI+</span></el-menu-item>
+      <el-menu-item index="/dsl" class="nav-item">DSL 工具</el-menu-item>
+      <el-menu-item index="/watermark" class="nav-item">水印检测</el-menu-item>
+      <el-menu-item index="/about" class="nav-item">关于</el-menu-item>
       <el-menu-item v-if="auth.user" index="/dashboard" class="nav-item">设置</el-menu-item>
       <el-menu-item v-if="auth.user" index="/my/resources" class="nav-item">作品管理</el-menu-item>
       <el-menu-item v-if="auth.user" index="/upload" class="nav-item">上传文件</el-menu-item>
@@ -88,7 +89,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, type Component } from 'vue'
 import { useAuth } from './stores/auth'
 import { useRouter } from 'vue-router'
-import { House, InfoFilled, Connection, Watermelon, Folder, DataAnalysis, Collection, Upload, User, EditPen, SwitchButton } from '@element-plus/icons-vue'
+import { House, InfoFilled, Connection, Watermelon, Folder, DataAnalysis, Collection, Upload, User, EditPen, SwitchButton, Star } from '@element-plus/icons-vue'
 import NotificationBell from './components/NotificationBell.vue'
 
 
@@ -126,11 +127,12 @@ type MenuItem = { label: string; icon?: Component; path?: string; key?: string; 
 
 const commonItems = computed<MenuItem[]>(() => [
   { label: '首页', icon: House, path: '/' },
-  { label: '关于', icon: InfoFilled, path: '/about' },
-  { label: 'DSL 工具', icon: Connection, path: '/dsl' },
-  { label: '教程中心', icon: Collection, path: '/tutorials', badge: 'AI+' },
-  { label: '水印检测', icon: Watermelon, path: '/watermark' },
+  { label: '每日推荐', icon: Star, path: '/daily', badge: 'HOT' },
   { label: '文件库', icon: Folder, path: '/resources' },
+  { label: '教程中心', icon: Collection, path: '/tutorials', badge: 'AI+' },
+  { label: 'DSL 工具', icon: Connection, path: '/dsl' },
+  { label: '水印检测', icon: Watermelon, path: '/watermark' },
+  { label: '关于', icon: InfoFilled, path: '/about' },
 ])
 
 const myItems = computed<MenuItem[]>(() => {

@@ -12,6 +12,9 @@ const routes: RouteRecordRaw[] = [
   { path: '/register', name: 'register', meta: { title: '注册' }, component: () => import('../views/Register.vue') },
   { path: '/tutorials', name: 'tutorials', meta: { title: '教程问答' }, component: () => import('../views/TutorialRAG.vue') },
   { path: '/tutorials/library', name: 'tutorials-library', meta: { title: '教程知识库' }, component: () => import('../views/TutorialLibrary.vue') },
+  { path: '/daily', name: 'daily-featured', meta: { title: '每日精选推荐' }, component: () => import('../views/DailyFeatured.vue') },
+  { path: '/daily/manage', name: 'daily-manage', meta: { title: '每日推荐管理' }, component: () => import('../views/DailyAdmin.vue') },
+
   { path: '/resources', name: 'resources', meta: { title: '免费模组库' }, component: () => import('../views/ResourceList.vue') },
   { path: '/m/resources', name: 'resources-mobile', meta: { title: '免费模组库' }, component: () => import('../views/ResourceListMobile.vue') },
   { path: '/external', name: 'external-resource', meta: { title: '站外资源' }, component: () => import('../views/ExternalResourceDetail.vue') },

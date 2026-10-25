@@ -36,6 +36,18 @@
           </el-text>
         </div>
         <div class="stream-right">
+          <el-select
+            v-model="sortMode"
+            size="small"
+            style="width: 130px; margin-right: 12px;"
+            @change="handleSortChange"
+          >
+            <el-option label="最新发布" value="latest" />
+            <el-option label="🔥 热门飙升" value="hot" />
+            <el-option label="⭐ 最多点赞" value="likes" />
+            <el-option label="📥 最多下载" value="downloads" />
+            <el-option label="🎲 每日轮播" value="daily" />
+          </el-select>
           <el-text class="muted-text">{{ combinedPageSize }}/页</el-text>
         </div>
       </div>
@@ -149,6 +161,12 @@ const router = useRouter()
 
 const queryDraft = ref('')
 const query = ref('')
+const sortMode = ref<'latest' | 'hot' | 'likes' | 'downloads' | 'daily'>('latest')
+
+function handleSortChange() {
+  combinedPage.value = 1
+  refreshAll()
+}
 
 const combinedPage = ref(1)
 const combinedPageSize = 15
@@ -210,7 +228,21 @@ const combinedAll = computed<CombinedItem[]>(() => {
   for (const f of externalFiltered.value) {
     out.push({ source: 'external', key: `e:${getExternalFileId(f)}`, ts: parseDate(f.date || ''), external: f })
   }
-  out.sort((a, b) => b.ts - a.ts || a.key.localeCompare(b.key, 'zh-Hans-CN'))
+  if (sortMode.value === 'latest') {
+    out.sort((a, b) => b.ts - a.ts || a.key.localeCompare(b.key, 'zh-Hans-CN'))
+  } else if (sortMode.value === 'likes') {
+    out.sort((a, b) => {
+      const la = a.source === 'internal' ? (likesMap.value[a.internal.id]?.likes || a.internal.likes || 0) : 0
+      const lb = b.source === 'internal' ? (likesMap.value[b.internal.id]?.likes || b.internal.likes || 0) : 0
+      return lb - la || b.ts - a.ts
+    })
+  } else if (sortMode.value === 'downloads') {
+    out.sort((a, b) => {
+      const da = a.source === 'internal' ? (a.internal.downloadCount || (a.internal as any).download_count || 0) : 0
+      const db = b.source === 'internal' ? (b.internal.downloadCount || (b.internal as any).download_count || 0) : 0
+      return db - da || b.ts - a.ts
+    })
+  }
   return out
 })
 
@@ -291,7 +323,7 @@ async function refreshInternal() {
     let p = 1
     let t = 0
     while (true) {
-      const data: any = await listResources({ q: query.value || undefined, page: p, pageSize: reqPageSize })
+      const data: any = await listResources({ q: query.value || undefined, page: p, pageSize: reqPageSize, sort: sortMode.value })
       const chunk = (data?.items || []) as ResourceItem[]
       if (p === 1) t = Number(data?.total || 0)
       all.push(...chunk)

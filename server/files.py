@@ -5,7 +5,10 @@ import shutil
 import tempfile
 import logging
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict, Any
+import math
+import hashlib
+from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, BackgroundTasks, File, Form, Query, Request, UploadFile, Body
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
@@ -1587,6 +1590,208 @@ def unlike_file(request: Request, fid: int):
     return {"liked": False, "likes": int(total)}
 
 
+def _get_daily_admin_password() -> str:
+    return os.getenv("DAILY_ADMIN_PASSWORD", "msut-daily-admin-666").strip()
+
+
+def _calc_daily_score(date_str: str, resource_id: int, has_cover: bool, desc_len: int, files_count: int, likes: int, downloads: int) -> float:
+    # 每日伪随机种子轮播（Daily Seeded Shuffle + Quality Filter）
+    # DailyScore = Hash(DateString + ResourceID) (mod 1000) * QualityWeight
+    raw_key = f"{date_str}:{resource_id}"
+    h = int(hashlib.sha256(raw_key.encode("utf-8")).hexdigest()[:8], 16) % 1000
+    qw = 1.0
+    if has_cover:
+        qw *= 1.5
+    if desc_len > 20:
+        qw *= 1.2
+    if files_count > 0:
+        qw *= 1.3
+    pop_bonus = 1.0 + 0.1 * math.log10(1 + likes * 2 + downloads)
+    return float((h + 1) * qw * pop_bonus)
+
+
+@router.get("/api/resources/daily")
+def get_daily_recommendations(date: Optional[str] = Query(default=None)):
+    now_bj = datetime.now(timezone(timedelta(hours=8)))
+    date_str = date.strip() if date and re.match(r"^\d{4}-\d{2}-\d{2}$", date.strip()) else now_bj.strftime("%Y-%m-%d")
+    
+    conn = get_connection()
+    cur = conn.cursor()
+    
+    override = cur.execute(
+        "SELECT hero_resource_id, picked_ids FROM daily_recommendations_override WHERE date = ?",
+        (date_str,),
+    ).fetchone()
+    
+    is_manual = False
+    override_hero_id = None
+    override_picked_ids: List[int] = []
+    if override:
+        is_manual = True
+        override_hero_id = override["hero_resource_id"]
+        try:
+            override_picked_ids = [int(x) for x in json.loads(override["picked_ids"] or "[]")]
+        except Exception:
+            override_picked_ids = []
+
+    rows = cur.execute(
+        """
+        SELECT
+          r.id,
+          r.slug,
+          r.title,
+          r.description,
+          r.created_at,
+          r.cover_file_id,
+          r.tags,
+          r.download_count,
+          u.username AS author_username,
+          u.avatar_url AS author_avatar,
+          cf.url_path AS cover_url_path,
+          (SELECT COUNT(1) FROM resource_likes rl WHERE rl.resource_id = r.id) AS likes_count,
+          (SELECT COUNT(1) FROM resource_comments rc WHERE rc.resource_id = r.id) AS comments_count,
+          (SELECT COUNT(1) FROM resource_files rf WHERE rf.resource_id = r.id) AS files_count
+        FROM resources r
+        LEFT JOIN users u ON u.id = r.created_by
+        LEFT JOIN resource_files cf ON cf.id = r.cover_file_id
+        ORDER BY r.id DESC
+        """
+    ).fetchall()
+
+    if not rows:
+        return {
+            "date": date_str,
+            "is_manual": False,
+            "hero": None,
+            "picks": [],
+            "total_candidates": 0,
+        }
+
+    resources_map: Dict[int, dict] = {}
+    scored_items = []
+    for row in rows:
+        d = dict(row)
+        rid = d["id"]
+        cover_file_id = d.pop("cover_file_id", None)
+        cover_url_path = d.pop("cover_url_path", None)
+        d["coverFileId"] = int(cover_file_id) if cover_file_id is not None else None
+        d["coverUrlPath"] = cover_url_path
+        d["author_avatar"] = d.pop("author_avatar", None) or ""
+        d["tags"] = tags_from_json(d.pop("tags", None))
+        d["likes"] = int(d.pop("likes_count", 0) or 0)
+        d["commentsCount"] = int(d.pop("comments_count", 0) or 0)
+        files_count = int(d.pop("files_count", 0) or 0)
+        d["filesCount"] = files_count
+        d["downloadCount"] = int(d.get("download_count") or 0)
+        d["shareUrl"] = _share_url(d["slug"])
+        
+        has_cover = bool(d["coverUrlPath"])
+        desc_len = len(d["description"] or "")
+        score = _calc_daily_score(
+            date_str,
+            rid,
+            has_cover=has_cover,
+            desc_len=desc_len,
+            files_count=files_count,
+            likes=d["likes"],
+            downloads=d["downloadCount"],
+        )
+        d["dailyScore"] = round(score, 2)
+        resources_map[rid] = d
+        scored_items.append((score, rid))
+
+    scored_items.sort(key=lambda x: x[0], reverse=True)
+    algo_sorted_ids = [x[1] for x in scored_items]
+
+    hero_item = None
+    if override_hero_id and override_hero_id in resources_map:
+        hero_item = resources_map[override_hero_id]
+    elif algo_sorted_ids:
+        hero_item = resources_map[algo_sorted_ids[0]]
+
+    hero_id = hero_item["id"] if hero_item else None
+    picks_ids: List[int] = []
+    
+    for pid in override_picked_ids:
+        if pid in resources_map and pid != hero_id and pid not in picks_ids:
+            picks_ids.append(pid)
+
+    for aid in algo_sorted_ids:
+        if aid != hero_id and aid not in picks_ids:
+            picks_ids.append(aid)
+        if len(picks_ids) >= 12:
+            break
+
+    picks_items = [resources_map[pid] for pid in picks_ids]
+
+    return {
+        "date": date_str,
+        "is_manual": is_manual,
+        "hero": hero_item,
+        "picks": picks_items,
+        "total_candidates": len(resources_map),
+    }
+
+
+@router.post("/api/resources/daily/admin/verify")
+def verify_daily_admin(payload: dict = Body(...)):
+    pwd = str(payload.get("password") or "").strip()
+    expected = _get_daily_admin_password()
+    if not expected or pwd != expected:
+        return JSONResponse(status_code=401, content={"error": "管理密码错误"})
+    return {"ok": True}
+
+
+@router.post("/api/resources/daily/admin/override")
+def override_daily_recommendation(payload: dict = Body(...)):
+    pwd = str(payload.get("password") or "").strip()
+    expected = _get_daily_admin_password()
+    if not expected or pwd != expected:
+        return JSONResponse(status_code=401, content={"error": "管理密码错误"})
+    
+    date_str = str(payload.get("date") or "").strip()
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", date_str):
+        return JSONResponse(status_code=400, content={"error": "无效的日期格式 (YYYY-MM-DD)"})
+    
+    hero_id = payload.get("hero_id")
+    hero_id = int(hero_id) if hero_id is not None and str(hero_id).isdigit() else None
+    
+    picked_ids = payload.get("picked_ids") or []
+    if not isinstance(picked_ids, list):
+        picked_ids = []
+    picked_ids_clean = [int(x) for x in picked_ids if str(x).isdigit()]
+    
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO daily_recommendations_override (date, hero_resource_id, picked_ids, updated_at)
+        VALUES (?, ?, ?, datetime('now'))
+        ON CONFLICT(date) DO UPDATE SET
+          hero_resource_id = excluded.hero_resource_id,
+          picked_ids = excluded.picked_ids,
+          updated_at = datetime('now')
+        """,
+        (date_str, hero_id, json.dumps(picked_ids_clean)),
+    )
+    conn.commit()
+    return {"ok": True, "message": f"已成功更新 {date_str} 的推荐配置"}
+
+
+@router.delete("/api/resources/daily/admin/override")
+def reset_daily_recommendation(date: str = Query(...), password: str = Query(default="")):
+    expected = _get_daily_admin_password()
+    if not expected or password.strip() != expected:
+        return JSONResponse(status_code=401, content={"error": "管理密码错误"})
+    
+    date_str = date.strip()
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM daily_recommendations_override WHERE date = ?", (date_str,))
+    conn.commit()
+    return {"ok": True, "message": f"已恢复 {date_str} 的算法自动推荐"}
+
+
 @router.get("/api/resources/{slug}")
 def get_resource(slug: str):
     conn = get_connection()
@@ -1643,6 +1848,7 @@ def list_resources(
     q: str = Query(default=""),
     page: int = Query(default=1),
     pageSize: int = Query(default=12),
+    sort: str = Query(default="latest"),
 ):
     q = (q or "").strip()
     page = max(1, int(page or 1))
@@ -1660,6 +1866,21 @@ def list_resources(
     total = cur.execute(
         f"SELECT COUNT(1) as c FROM resources r {where}", tuple(args)
     ).fetchone()["c"]
+    sort_mode = (sort or "latest").lower().strip()
+    if sort_mode == "likes":
+        order_clause = "(SELECT COUNT(1) FROM resource_likes rl WHERE rl.resource_id = r.id) DESC, r.id DESC"
+    elif sort_mode == "downloads":
+        order_clause = "r.download_count DESC, r.id DESC"
+    elif sort_mode == "hot":
+        # Time-decay score: (likes*2 + downloads + 1) / (age_in_hours + 2)^1.2
+        order_clause = "((SELECT COUNT(1) FROM resource_likes rl WHERE rl.resource_id = r.id) * 2.0 + r.download_count * 1.0 + 1.0) / (MAX(0.1, (julianday('now') - julianday(r.created_at)) * 24.0) + 2.0) DESC, r.id DESC"
+    elif sort_mode == "daily":
+        now_bj = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d")
+        # In SQL, use hash-like pseudo random by day
+        order_clause = f"abs(r.id * 31 + cast(strftime('%d', 'now') as integer) * 17) % 1000 DESC, r.id DESC"
+    else:
+        order_clause = "r.id DESC"
+
     items = cur.execute(
         f"""
         SELECT
@@ -1673,12 +1894,13 @@ def list_resources(
           r.download_count,
           u.username AS author_username,
           u.avatar_url AS author_avatar,
-          cf.url_path AS cover_url_path
+          cf.url_path AS cover_url_path,
+          (SELECT COUNT(1) FROM resource_likes rl WHERE rl.resource_id = r.id) AS likes_count
         FROM resources r
         LEFT JOIN users u ON u.id = r.created_by
         LEFT JOIN resource_files cf ON cf.id = r.cover_file_id
         {where}
-        ORDER BY r.id DESC
+        ORDER BY {order_clause}
         LIMIT ? OFFSET ?
         """,
         (*args, page_size, offset),
@@ -1693,6 +1915,7 @@ def list_resources(
         d["coverUrlPath"] = cover_url_path
         d["author_avatar"] = d.pop("author_avatar", None) or ""
         d["tags"] = tags_from_json(d.pop("tags", None))
+        d["likes"] = int(d.pop("likes_count", 0) or 0)
         items_out.append(d)
     return {"items": items_out, "page": page, "pageSize": page_size, "total": total}
 

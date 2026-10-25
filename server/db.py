@@ -265,6 +265,15 @@ def run_migrations(conn: Optional[sqlite3.Connection] = None) -> None:
             END;
 
             -- 教程分块向量，用于语义检索 / RAG
+            -- 每日推荐手动覆盖表
+            CREATE TABLE IF NOT EXISTS daily_recommendations_override (
+              date TEXT PRIMARY KEY,
+              hero_resource_id INTEGER,
+              picked_ids TEXT NOT NULL DEFAULT '[]',
+              updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+              FOREIGN KEY (hero_resource_id) REFERENCES resources(id) ON DELETE SET NULL
+            );
+
             CREATE TABLE IF NOT EXISTS tutorial_embeddings (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
               tutorial_id INTEGER NOT NULL,

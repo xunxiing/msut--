@@ -26,6 +26,10 @@ export type ResourceItem = {
   coverUrlPath?: string | null
   tags?: string[]
   shareUrl: string
+  likes?: number
+  downloadCount?: number
+  download_count?: number
+  dailyScore?: number
 }
 
 export type MyResourceItem = ResourceItem
@@ -52,7 +56,7 @@ export type ResourceImagesResponse = {
   coverFileId?: number | null
 }
 
-export async function listResources(params: { q?: string; page?: number; pageSize?: number } = {}) {
+export async function listResources(params: { q?: string; page?: number; pageSize?: number; sort?: string } = {}) {
   const { data } = await http.get("/resources", { params })
   return data
 }
@@ -241,4 +245,37 @@ export type CreatorStats = {
 export async function getCreatorStats(username: string) {
   const { data } = await http.get(`/creators/${username}/stats`)
   return data as CreatorStats
+}
+
+export type DailyRecommendationResponse = {
+  date: string
+  is_manual: boolean
+  hero: ResourceItem | null
+  picks: ResourceItem[]
+  total_candidates: number
+}
+
+export async function getDailyRecommendations(date?: string): Promise<DailyRecommendationResponse> {
+  const { data } = await http.get('/resources/daily', { params: { date } })
+  return data
+}
+
+export async function verifyDailyAdminPassword(password: string): Promise<{ ok: boolean }> {
+  const { data } = await http.post('/resources/daily/admin/verify', { password })
+  return data
+}
+
+export async function overrideDailyRecommendations(payload: {
+  date: string
+  hero_id?: number | null
+  picked_ids: number[]
+  password: string
+}): Promise<{ ok: boolean; message: string }> {
+  const { data } = await http.post('/resources/daily/admin/override', payload)
+  return data
+}
+
+export async function resetDailyRecommendations(date: string, password: string): Promise<{ ok: boolean; message: string }> {
+  const { data } = await http.delete('/resources/daily/admin/override', { params: { date, password } })
+  return data
 }

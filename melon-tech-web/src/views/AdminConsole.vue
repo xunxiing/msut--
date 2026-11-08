@@ -688,7 +688,7 @@ const router = useRouter()
 const isLoggedIn = ref(false)
 const passwordInput = ref('')
 const loggingIn = ref(false)
-const currentAdminPath = ref(import.meta.env.VITE_ADMIN_PATH || '/msut-manage-console')
+const currentAdminPath = ref((window as any).__MSUT_ADMIN_PATH__ || import.meta.env.VITE_ADMIN_PATH || '/7f4c9a12')
 
 const activeTab = ref('dashboard')
 const refreshing = ref(false)

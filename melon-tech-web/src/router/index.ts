@@ -1,6 +1,18 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuth } from '../stores/auth'
 
+export function getAdminPath(): string {
+  if (typeof window !== 'undefined') {
+    const injected = (window as any).__MSUT_ADMIN_PATH__
+    if (injected && typeof injected === 'string' && injected.startsWith('/')) {
+      return injected.trim()
+    }
+  }
+  return (import.meta.env.VITE_ADMIN_PATH || '/7f4c9a12').trim()
+}
+
+const adminPath = getAdminPath()
+
 const routes: RouteRecordRaw[] = [
   { path: '/', name: 'home', meta: { title: '首页' }, component: () => import('../views/Home.vue') },
   { path: '/m', name: 'home-mobile', meta: { title: '首页' }, component: () => import('../views/HomeMobile.vue') },
@@ -13,8 +25,10 @@ const routes: RouteRecordRaw[] = [
   { path: '/tutorials', name: 'tutorials', meta: { title: '教程问答' }, component: () => import('../views/TutorialRAG.vue') },
   { path: '/tutorials/library', name: 'tutorials-library', meta: { title: '教程知识库' }, component: () => import('../views/TutorialLibrary.vue') },
   { path: '/daily', name: 'daily-featured', meta: { title: '每日精选推荐' }, component: () => import('../views/DailyFeatured.vue') },
-  // 动态读取 .env 中配置的专属隐蔽管理后台路径
-  { path: (import.meta.env.VITE_ADMIN_PATH || '/msut-manage-console').trim(), name: 'admin-console', meta: { title: '管理控制中台' }, component: () => import('../views/AdminConsole.vue') },
+  // 动态读取 .env 中配置的专属隐蔽管理后台路径（优先读取后端运行时注入的 window.__MSUT_ADMIN_PATH__）
+  { path: adminPath, name: 'admin-console', meta: { title: '管理控制中台' }, component: () => import('../views/AdminConsole.vue') },
+  ...(adminPath !== '/7f4c9a12' ? [{ path: '/7f4c9a12', redirect: adminPath }] : []),
+  ...(adminPath !== '/msut-manage-console' ? [{ path: '/msut-manage-console', redirect: adminPath }] : []),
   { path: '/daily/manage', redirect: '/' },
 
   { path: '/resources', name: 'resources', meta: { title: '免费模组库' }, component: () => import('../views/ResourceList.vue') },
@@ -34,6 +48,20 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
+  const currentAdmin = getAdminPath()
+  // 确保任意动态配置的 adminPath 都能精准匹配到 AdminConsole 组件
+  if (to.path === currentAdmin && to.name !== 'admin-console') {
+    if (!router.hasRoute('admin-console-runtime')) {
+      router.addRoute({
+        path: currentAdmin,
+        name: 'admin-console-runtime',
+        meta: { title: '管理控制中台' },
+        component: () => import('../views/AdminConsole.vue'),
+      })
+    }
+    return { path: to.fullPath, replace: true }
+  }
+
   const auth = useAuth()
   if (auth.user === null) {
     // 首次进入或刷新后尝试同步会话

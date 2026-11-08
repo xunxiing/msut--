@@ -181,26 +181,65 @@ def get_sitemap_xml():
     return Response(content="\n".join(xml_lines), media_type="application/xml; charset=utf-8")
 
 
-class SPAStaticFiles(StaticFiles):
-    """StaticFiles subclass that falls back to index.html for SPA routing."""
-
-    async def get_response(self, path: str, scope):
-        try:
-            response = await super().get_response(path, scope)
-        except (StarletteHTTPException, Exception):
-            response = await super().get_response("index.html", scope)
-        # Vite hashed assets are immutable -> long cache; index.html and everything else -> no-cache
-        # Note: Starlette's get_path() normpaths the path, so separators are OS-native on Windows.
-        if path.replace("\\", "/").startswith("assets/"):
-            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
-        else:
-            response.headers["Cache-Control"] = "no-cache"
-        return response
-
-
 frontend_dist = BASE_DIR / "melon-tech-web" / "dist"
 if not frontend_dist.exists():
     frontend_dist = BASE_DIR / "web" / "dist"
+
+
+def _render_index_html(extra_head: str = "") -> Response:
+    index_file = frontend_dist / "index.html"
+    if not index_file.exists():
+        index_file = BASE_DIR / "melon-tech-web" / "index.html"
+    if not index_file.exists():
+        return Response("index.html not found", status_code=404)
+    content = index_file.read_text(encoding="utf-8")
+
+    admin_path = os.getenv("ADMIN_PATH", os.getenv("VITE_ADMIN_PATH", "/7f4c9a12")).strip()
+    script_tag = f'<script>window.__MSUT_ADMIN_PATH__ = "{admin_path}";</script>'
+
+    if "</head>" in content:
+        content = content.replace("</head>", f"    {script_tag}\n{extra_head}\n  </head>")
+    else:
+        content = f"{script_tag}\n" + content
+
+    return Response(
+        content=content,
+        media_type="text/html; charset=utf-8",
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+    )
+
+
+@app.get("/api/admin/config/path")
+def get_admin_config_path():
+    admin_path = os.getenv("ADMIN_PATH", os.getenv("VITE_ADMIN_PATH", "/7f4c9a12")).strip()
+    return {"adminPath": admin_path}
+
+
+class SPAStaticFiles(StaticFiles):
+    """StaticFiles subclass that falls back to index.html with dynamic runtime config injection."""
+
+    def file_response(self, full_path: str, stat_result: os.stat_result, scope) -> Response:
+        norm = full_path.replace("\\", "/")
+        if norm.endswith("/index.html"):
+            return _render_index_html()
+        return super().file_response(full_path, stat_result, scope)
+
+    async def get_response(self, path: str, scope):
+        norm_path = path.replace("\\", "/").strip("/")
+        if norm_path == "index.html" or not norm_path:
+            return _render_index_html()
+        try:
+            response = await super().get_response(path, scope)
+        except (StarletteHTTPException, Exception):
+            response = _render_index_html()
+
+        if norm_path.startswith("assets/"):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        else:
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        return response
+
+
 if frontend_dist.exists():
     app.mount(
         "/",

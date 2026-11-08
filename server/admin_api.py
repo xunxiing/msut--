@@ -27,7 +27,7 @@ def _get_admin_password() -> str:
     pwd = os.getenv("ADMIN_PASSWORD", "").strip()
     if not pwd:
         pwd = os.getenv("DAILY_ADMIN_PASSWORD", "").strip()
-    return pwd or "msut-admin-sec-8888"
+    return pwd or "d8a2f30b91e47c5d601a"
 
 
 def _get_jwt_secret() -> str:
@@ -92,7 +92,7 @@ def admin_login(payload: dict = Body(...)):
         return JSONResponse(status_code=401, content={"error": "管理员口令错误"})
 
     token = make_admin_token()
-    admin_path = os.getenv("ADMIN_PATH", os.getenv("VITE_ADMIN_PATH", "/msut-manage-console")).strip()
+    admin_path = os.getenv("ADMIN_PATH", os.getenv("VITE_ADMIN_PATH", "/7f4c9a12")).strip()
     return {
         "ok": True,
         "token": token,
@@ -105,7 +105,7 @@ def admin_login(payload: dict = Body(...)):
 def admin_check(request: Request):
     if not is_admin(request):
         return JSONResponse(status_code=401, content={"error": "未登录或登录已失效"})
-    admin_path = os.getenv("ADMIN_PATH", os.getenv("VITE_ADMIN_PATH", "/msut-manage-console")).strip()
+    admin_path = os.getenv("ADMIN_PATH", os.getenv("VITE_ADMIN_PATH", "/7f4c9a12")).strip()
     return {"ok": True, "adminPath": admin_path}
 
 
@@ -197,7 +197,7 @@ def get_admin_stats(request: Request):
         "ragModel": os.getenv("RAG_LLM_MODEL", ""),
         "agentModel": os.getenv("AGENT_MODEL", ""),
         "httpsEnabled": os.getenv("HTTPS_ENABLED", "false").lower() in ("true", "1", "yes"),
-        "adminPath": os.getenv("ADMIN_PATH", os.getenv("VITE_ADMIN_PATH", "/msut-manage-console")).strip(),
+        "adminPath": os.getenv("ADMIN_PATH", os.getenv("VITE_ADMIN_PATH", "/7f4c9a12")).strip(),
     }
 
     return {

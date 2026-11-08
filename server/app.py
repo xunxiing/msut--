@@ -50,6 +50,7 @@ from .tutorials import router as tutorials_router
 from .comments import router as comments_router
 from .notifications_api import router as notifications_router
 from .lua_sandbox import router as lua_router
+from .admin_api import router as admin_router
 
 
 app = FastAPI()
@@ -110,6 +111,7 @@ app.include_router(tutorials_router)
 app.include_router(comments_router)
 app.include_router(notifications_router)
 app.include_router(lua_router)
+app.include_router(admin_router)
 
 
 @app.get("/api/private/ping")

@@ -13,7 +13,9 @@ const routes: RouteRecordRaw[] = [
   { path: '/tutorials', name: 'tutorials', meta: { title: '教程问答' }, component: () => import('../views/TutorialRAG.vue') },
   { path: '/tutorials/library', name: 'tutorials-library', meta: { title: '教程知识库' }, component: () => import('../views/TutorialLibrary.vue') },
   { path: '/daily', name: 'daily-featured', meta: { title: '每日精选推荐' }, component: () => import('../views/DailyFeatured.vue') },
-  { path: '/daily/manage', name: 'daily-manage', meta: { title: '每日推荐管理' }, component: () => import('../views/DailyAdmin.vue') },
+  // 动态读取 .env 中配置的专属隐蔽管理后台路径
+  { path: (import.meta.env.VITE_ADMIN_PATH || '/msut-manage-console').trim(), name: 'admin-console', meta: { title: '管理控制中台' }, component: () => import('../views/AdminConsole.vue') },
+  { path: '/daily/manage', redirect: '/' },
 
   { path: '/resources', name: 'resources', meta: { title: '免费模组库' }, component: () => import('../views/ResourceList.vue') },
   { path: '/m/resources', name: 'resources-mobile', meta: { title: '免费模组库' }, component: () => import('../views/ResourceListMobile.vue') },
